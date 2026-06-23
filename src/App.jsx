@@ -51,7 +51,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function App() {
   const [auth, setAuth] = useState(() => getStoredAuth());
-  const isMobileExperiment = window.location.pathname.startsWith('/mobile');
+  const isMobileExperiment = isMobileExperimentPath(window.location);
 
   if (!auth) {
     return <LoginScreen isMobileExperiment={isMobileExperiment} onAuthenticated={setAuth} />;
@@ -61,6 +61,13 @@ export function App() {
     clearStoredAuth();
     setAuth(null);
   }} />;
+}
+
+
+function isMobileExperimentPath(location) {
+  const pathSegments = location.pathname.split('/').filter(Boolean);
+  const hashPath = location.hash.replace(/^#/, '').replace(/^\//, '');
+  return pathSegments.includes('mobile') || hashPath.split('/').filter(Boolean)[0] === 'mobile';
 }
 
 function LoginScreen({ isMobileExperiment = false, onAuthenticated }) {
