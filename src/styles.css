@@ -233,19 +233,19 @@ textarea:focus {
 
 .panel-shell {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 240px 1fr;
   height: 100vh;
   overflow: hidden;
 }
 
 .sidebar {
-  padding: 24px;
+  padding: 20px 16px;
   border-right: 1px solid var(--line);
   background: #fbfcf8;
 }
 
 .sidebar-brand {
-  margin-bottom: 34px;
+  margin-bottom: 28px;
 }
 
 .sidebar-brand div {
@@ -261,7 +261,7 @@ textarea:focus {
 .nav-group {
   display: grid;
   gap: 7px;
-  margin-bottom: 22px;
+  margin-bottom: 18px;
 }
 
 .nav-group p {
@@ -275,11 +275,11 @@ textarea:focus {
   width: 100%;
   border: 0;
   border-radius: 10px;
-  padding: 11px 12px;
+  padding: 10px 12px;
   background: transparent;
   color: #4d584f;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   text-align: left;
 }
@@ -297,7 +297,7 @@ textarea:focus {
 .content {
   height: 100vh;
   overflow: hidden;
-  padding: 32px;
+  padding: 22px 26px 26px;
   min-width: 0;
 }
 
@@ -349,7 +349,7 @@ textarea:focus {
 
 .calendar-page {
   display: grid;
-  gap: 18px;
+  gap: 12px;
   height: 100%;
   min-height: 0;
   grid-template-rows: auto auto minmax(0, 1fr);
@@ -357,21 +357,21 @@ textarea:focus {
 
 .calendar-topbar {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
 }
 
 .calendar-topbar h1 {
   margin: 0;
-  font-size: clamp(32px, 4vw, 48px);
+  font-size: clamp(30px, 3.4vw, 44px);
   font-weight: 700;
   letter-spacing: -0.04em;
 }
 
 .calendar-topbar p {
   max-width: 520px;
-  margin: 8px 0 0;
+  margin: 5px 0 0;
   color: var(--muted);
   line-height: 1.5;
 }
@@ -380,6 +380,8 @@ textarea:focus {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .user-chip {
@@ -491,13 +493,39 @@ textarea:focus {
   font-weight: 650;
 }
 
+.summary-toggle-button {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 0 13px;
+  background: var(--surface);
+  color: #526052;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.summary-toggle-button.selected {
+  border-color: rgba(40, 99, 69, 0.2);
+  background: #edf4e5;
+  color: var(--green);
+}
+
 .calendar-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 330px;
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) 290px;
+  gap: 14px;
   align-items: stretch;
   height: 100%;
   min-height: 0;
+}
+
+.calendar-layout.summary-collapsed {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .calendar-main-panel,
@@ -782,7 +810,7 @@ textarea:focus {
   position: relative;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
-  gap: 14px;
+  gap: 12px;
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -806,11 +834,11 @@ textarea:focus {
 
 .week-day-header {
   display: grid;
-  gap: 5px;
+  gap: 8px;
   width: 100%;
   border: 0;
-  border-radius: 12px;
-  padding: 12px;
+  border-radius: 18px;
+  padding: 18px 18px 14px;
   background: #f8faf5;
   cursor: pointer;
   text-align: left;
@@ -825,14 +853,15 @@ textarea:focus {
 
 .week-day-header strong {
   color: var(--ink);
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
+  letter-spacing: -0.03em;
 }
 
-.week-day-header small,
-.week-day-metrics {
-  color: var(--muted);
-  font-size: 12px;
+.week-day-header small {
+  color: #526052;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .occupancy-bar {
@@ -852,15 +881,39 @@ textarea:focus {
 .week-day-metrics {
   display: grid;
   gap: 4px;
+  color: #6d756e;
+  line-height: 1.25;
+}
+
+.week-day-metrics span,
+.week-day-metrics em {
+  margin: 0;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
 .week-court-list {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   gap: 14px;
   min-height: 0;
   overflow: auto;
-  padding-right: 2px;
+  padding: 12px 2px 52px 0;
+  scrollbar-gutter: stable;
+}
+
+.week-day-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border-top: 1px solid rgba(223, 229, 216, 0.86);
+  border-bottom: 1px solid rgba(223, 229, 216, 0.92);
 }
 
 .week-court {
@@ -868,11 +921,17 @@ textarea:focus {
   gap: 7px;
 }
 
+.week-court + .week-court {
+  margin-top: 4px;
+  border-top: 1px solid rgba(223, 229, 216, 0.78);
+  padding-top: 13px;
+}
+
 .week-court p {
   margin: 0;
   color: #778176;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .week-court button {
@@ -889,6 +948,43 @@ textarea:focus {
     border-color 140ms ease,
     box-shadow 140ms ease,
     transform 140ms ease;
+}
+
+.week-scroll-more-indicator {
+  position: absolute;
+  left: 50%;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid rgba(39, 104, 174, 0.14);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(237, 245, 255, 0.96);
+  box-shadow: 0 12px 26px rgba(22, 59, 102, 0.12);
+  color: #1f5f9d;
+  font-size: 10px;
+  font-weight: 650;
+  pointer-events: none;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.week-scroll-more-indicator.above {
+  top: 8px;
+}
+
+.week-scroll-more-indicator.below {
+  bottom: 12px;
+}
+
+.week-scroll-more-indicator.above svg {
+  transform: rotate(-90deg);
+}
+
+.week-scroll-more-indicator.below svg {
+  transform: rotate(90deg);
 }
 
 .week-court button:hover,
@@ -917,26 +1013,17 @@ textarea:focus {
 }
 
 .availability-gap {
-  display: grid;
-  gap: 1px;
+  display: block;
   width: 100%;
   border: 1px dashed rgba(119, 129, 118, 0.16);
-  border-radius: 10px;
-  padding: 7px 9px;
+  border-radius: 8px;
+  padding: 7px 8px;
   background: rgba(248, 250, 245, 0.56);
   color: #8a9388;
 }
 
-.availability-gap span {
-  color: #8a9588;
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
 .availability-gap strong {
-  color: #7c867b;
+  color: #8a9388;
   font-size: 11px;
   font-weight: 500;
   white-space: nowrap;
@@ -1044,7 +1131,7 @@ textarea:focus {
   margin-top: auto;
   border: 0;
   border-radius: 10px;
-  padding: 10px;
+  padding: 14px 10px 10px;
   background: #f2f6ec;
   color: var(--green);
   cursor: pointer;
@@ -1057,8 +1144,8 @@ textarea:focus {
   top: 24px;
   display: grid;
   align-content: start;
-  gap: 18px;
-  padding: 22px;
+  gap: 16px;
+  padding: 18px;
   height: 100%;
   max-height: 100%;
   overflow: auto;
@@ -1074,14 +1161,14 @@ textarea:focus {
 
 .calendar-detail h2 {
   margin: 0;
-  font-size: 25px;
+  font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.03em;
 }
 
 .calendar-detail dl {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   margin: 0;
 }
 
@@ -1089,7 +1176,7 @@ textarea:focus {
   display: grid;
   gap: 3px;
   border-bottom: 1px solid var(--line);
-  padding-bottom: 10px;
+  padding-bottom: 9px;
 }
 
 .calendar-detail dt {
@@ -1100,14 +1187,14 @@ textarea:focus {
 .calendar-detail dd {
   margin: 0;
   color: #344238;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
 .detail-actions {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .detail-actions button {
@@ -1115,7 +1202,7 @@ textarea:focus {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 42px;
+  min-height: 40px;
   border: 1px solid var(--line);
   border-radius: 11px;
   background: #f8faf5;
@@ -1198,13 +1285,7 @@ textarea:focus {
   cursor: pointer;
 }
 
-.desktop-view-toggle {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 12px;
-}
-
-.desktop-view-toggle button {
+.desktop-view-toggle-button {
   min-height: 34px;
   border: 1px solid var(--line);
   border-radius: 999px;

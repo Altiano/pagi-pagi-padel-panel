@@ -202,6 +202,7 @@ function PanelShell({ auth, isMobileRoute = false, onLogout }) {
       isMobileApp={mobileView.isMobileApp}
       mitraId={mitraId}
       onLogout={onLogout}
+      onUseMobileView={() => mobileView.setPreference('mobile')}
     />
   ) : (
     <PlaceholderPage
@@ -229,11 +230,6 @@ function PanelShell({ auth, isMobileRoute = false, onLogout }) {
           <DesktopSidebar activeNav={activeNav} onChangeNav={setActiveNav} />
 
           <section className="content">
-            <div className="desktop-view-toggle">
-              <button onClick={() => mobileView.setPreference('mobile')} type="button">
-                Mobile app view
-              </button>
-            </div>
             {content}
           </section>
         </>
@@ -390,7 +386,7 @@ function PlaceholderPage({ activeNav, displayName, meState, onLogout }) {
   );
 }
 
-function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout }) {
+function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout, onUseMobileView }) {
   const [view, setView] = useState(() => (isMobileApp ? 'day' : 'week'));
   const [selectedDate, setSelectedDate] = useState(() => toDateInputValue(new Date()));
   const [refreshKey, setRefreshKey] = useState(0);
@@ -400,12 +396,14 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout }) {
   const [placeholderStatus, setPlaceholderStatus] = useState({ state: 'idle', message: '' });
   const [hiddenAboveCount, setHiddenAboveCount] = useState(0);
   const [hiddenBelowCount, setHiddenBelowCount] = useState(0);
+  const [showSummaryPanel, setShowSummaryPanel] = useState(false);
   const calendarPanelRef = useRef(null);
 
   const weekDays = getWeekDays(selectedDate);
   const activeBookings = state.bookingsByDate[selectedDate] || [];
-  const selectedDaySummary = summarizeDay(activeBookings, state.openHour);
-  const weekSummary = summarizeWeek(weekDays, state.bookingsByDate, state.openHour);
+  const selectedDaySummary = summarizeDay(activeBookings, state.openHour, state.courts.length);
+  const weekSummary = summarizeWeek(weekDays, state.bookingsByDate, state.openHour, state.courts.length);
+  const showDetailPanel = !isMobileApp && (selectedBooking || showSummaryPanel);
 
   useEffect(() => {
     if (isMobileApp) setView('day');
@@ -528,6 +526,11 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout }) {
           <p>{view === 'day' ? 'Manage daily court bookings and availability.' : 'Plan weekly occupancy and jump into daily operations.'}</p>
         </div>
         <div className="topbar-actions">
+          {!isMobileApp && onUseMobileView ? (
+            <button className="desktop-view-toggle-button" onClick={onUseMobileView} type="button">
+              Mobile app view
+            </button>
+          ) : null}
           <span className="user-chip">{displayName}</span>
           <button className="logout-button" onClick={onLogout} type="button">
             <LogOut size={17} />
@@ -567,8 +570,21 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout }) {
           <Plus size={16} />
           Placeholder
         </button>
+        {!isMobileApp ? (
+          <button
+            className={`summary-toggle-button ${showSummaryPanel ? 'selected' : ''}`}
+            onClick={() => setShowSummaryPanel((current) => !current)}
+            type="button"
+          >
+            <ClipboardList size={15} />
+            Summary
+          </button>
+        ) : null}
         <div className="open-hours">
-          Open {state.openHour?.open_hours || '06:00'} - {state.openHour?.close_hours || '24:00'}
+          Open: {formatAvailabilityRange(
+            parseTimeToMinutes(state.openHour?.open_hours || '06:00'),
+            parseTimeToMinutes(state.openHour?.close_hours || '24:00'),
+          )}
         </div>
       </section>
 
@@ -579,7 +595,7 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout }) {
         </div>
       ) : null}
 
-      <section className="calendar-layout">
+      <section className={`calendar-layout ${showDetailPanel ? '' : 'summary-collapsed'}`}>
         <div className="calendar-main-panel">
           <div className="calendar-scroll-area" ref={calendarPanelRef}>
             {state.loading ? (
@@ -640,16 +656,18 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout }) {
             </div>
           ) : null}
         </div>
-        <CalendarDetailPanel
-          booking={isMobileApp ? null : selectedBooking}
-          selectedDate={selectedDate}
-          selectedDaySummary={selectedDaySummary}
-          view={view}
-          weekSummary={weekSummary}
-          onDeletePlaceholder={deletePlaceholder}
-          onEditPlaceholder={openEditPlaceholder}
-          onOpenDay={() => setView('day')}
-        />
+        {showDetailPanel ? (
+          <CalendarDetailPanel
+            booking={selectedBooking}
+            selectedDate={selectedDate}
+            selectedDaySummary={selectedDaySummary}
+            view={view}
+            weekSummary={weekSummary}
+            onDeletePlaceholder={deletePlaceholder}
+            onEditPlaceholder={openEditPlaceholder}
+            onOpenDay={() => setView('day')}
+          />
+        ) : null}
       </section>
       {isMobileApp ? (
         <button className="mobile-placeholder-fab" onClick={openCreatePlaceholder} type="button">
@@ -752,7 +770,7 @@ function MobileWeekCalendar({ bookingsByDate, courts, openHour, selectedDate, we
     <div className="mobile-week-list">
       {weekDays.map((date) => {
         const bookings = bookingsByDate[date] || [];
-        const summary = summarizeDay(bookings, openHour);
+        const summary = summarizeDay(bookings, openHour, courts.length);
         return (
           <article className={`mobile-week-row ${date === selectedDate ? 'selected' : ''}`} key={date}>
             <button className="mobile-week-summary" onClick={() => onSelectDate(date)} type="button">
@@ -883,54 +901,109 @@ function WeekCalendar({ bookingsByDate, courts, openHour, selectedDate, weekDays
     <div className="week-calendar">
       {weekDays.map((date) => {
         const bookings = bookingsByDate[date] || [];
-        const summary = summarizeDay(bookings, openHour);
         return (
-          <article className={`week-day ${date === selectedDate ? 'selected' : ''}`} key={date}>
-            <button className="week-day-header" onClick={() => onSelectDate(date)} type="button">
-              <span>{formatWeekday(date)}</span>
-              <strong>{formatDayNumber(date)}</strong>
-              <small>{bookings.length} bookings</small>
-              <div className="occupancy-bar">
-                <span style={{ width: `${summary.occupancy}%` }} />
-              </div>
-            </button>
-            <div className="week-day-metrics">
-              <span>{summary.bookedHours.toFixed(1)}h booked</span>
-              <span>{formatCurrency(summary.revenue)}</span>
-            </div>
-            <div className="week-court-list">
-              {courts.map((court) => {
-                const courtBookings = bookings.filter((booking) => booking.court_id === court.id);
-                const timelineEntries = buildCourtTimelineEntries(courtBookings, openHour);
-                return (
-                  <div className="week-court" key={court.id}>
-                    <p>{court.name}</p>
-                    {timelineEntries.length ? timelineEntries.map((entry) => (
-                      entry.type === 'availability' ? (
-                        <span className="availability-gap" key={entry.id}>
-                          <span>Available</span>
-                          <strong>{entry.label}</strong>
-                        </span>
-                      ) : (
-                        <button className={getBookingTone(entry.booking)} key={entry.booking.id} onClick={() => onSelectBooking(entry.booking)} type="button">
-                          <span>{getStartLabel(entry.booking)}</span>
-                          <strong>{entry.booking.booking_owner || entry.booking.name}</strong>
-                          {entry.booking.is_placeholder ? <small>Placeholder</small> : null}
-                        </button>
-                      )
-                    )) : <span className="empty-slot">Available</span>}
-                  </div>
-                );
-              })}
-            </div>
-            <button className="open-day-link" onClick={() => {
-              onSelectDate(date);
-              onSwitchDay();
-            }} type="button">Open day view</button>
-          </article>
+          <WeekDayColumn
+            bookings={bookings}
+            courts={courts}
+            date={date}
+            isSelected={date === selectedDate}
+            key={date}
+            openHour={openHour}
+            onSelectBooking={onSelectBooking}
+            onSelectDate={onSelectDate}
+            onSwitchDay={onSwitchDay}
+          />
         );
       })}
     </div>
+  );
+}
+
+function WeekDayColumn({ bookings, courts, date, isSelected, openHour, onSelectBooking, onSelectDate, onSwitchDay }) {
+  const [hiddenCounts, setHiddenCounts] = useState({ above: 0, below: 0 });
+  const courtListRef = useRef(null);
+  const summary = summarizeDay(bookings, openHour, courts.length);
+  const bookingLabel = `${bookings.length} booking${bookings.length === 1 ? '' : 's'}`;
+
+  useEffect(() => {
+    const list = courtListRef.current;
+    if (!list) return undefined;
+
+    const updateHiddenBookings = () => {
+      const listRect = list.getBoundingClientRect();
+      const bookingButtons = Array.from(list.querySelectorAll('.week-booking-card'));
+      const above = bookingButtons.filter((button) => button.getBoundingClientRect().bottom < listRect.top + 8);
+      const below = bookingButtons.filter((button) => button.getBoundingClientRect().top > listRect.bottom - 8);
+      setHiddenCounts({ above: above.length, below: below.length });
+    };
+
+    updateHiddenBookings();
+    list.addEventListener('scroll', updateHiddenBookings, { passive: true });
+    window.addEventListener('resize', updateHiddenBookings);
+
+    return () => {
+      list.removeEventListener('scroll', updateHiddenBookings);
+      window.removeEventListener('resize', updateHiddenBookings);
+    };
+  }, [bookings, courts, openHour]);
+
+  return (
+    <article className={`week-day ${isSelected ? 'selected' : ''}`}>
+      <button className="week-day-header" onClick={() => onSelectDate(date)} type="button">
+        <span>{formatWeekday(date)}</span>
+        <strong>{formatDayNumber(date)}</strong>
+        <small>{bookingLabel}</small>
+        <div className="occupancy-bar">
+          <span style={{ width: `${summary.occupancy}%` }} />
+        </div>
+      </button>
+      <div className="week-day-metrics">
+        <span>{summary.bookedHours.toFixed(1)}h booked</span>
+        <em>{formatCurrency(summary.revenue)}</em>
+      </div>
+      <div className="week-day-body">
+        <div className="week-court-list" ref={courtListRef}>
+          {courts.map((court) => {
+            const courtBookings = bookings.filter((booking) => booking.court_id === court.id);
+            const timelineEntries = buildCourtTimelineEntries(courtBookings, openHour);
+            return (
+              <div className="week-court" key={court.id}>
+                <p>{court.name}</p>
+                {timelineEntries.length ? timelineEntries.map((entry) => (
+                  entry.type === 'availability' ? (
+                    <span className="availability-gap" key={entry.id}>
+                      <strong>{entry.label}</strong>
+                    </span>
+                  ) : (
+                    <button className={`week-booking-card ${getBookingTone(entry.booking)}`} key={entry.booking.id} onClick={() => onSelectBooking(entry.booking)} type="button">
+                      <span>{getStartLabel(entry.booking)}</span>
+                      <strong>{entry.booking.booking_owner || entry.booking.name}</strong>
+                      {entry.booking.is_placeholder ? <small>Placeholder</small> : null}
+                    </button>
+                  )
+                )) : <span className="empty-slot">Available</span>}
+              </div>
+            );
+          })}
+        </div>
+        {hiddenCounts.above > 0 ? (
+          <div className="week-scroll-more-indicator above">
+            <span>{hiddenCounts.above} booking{hiddenCounts.above > 1 ? 's' : ''} above</span>
+            <ChevronRight size={14} />
+          </div>
+        ) : null}
+        {hiddenCounts.below > 0 ? (
+          <div className="week-scroll-more-indicator below">
+            <span>{hiddenCounts.below} more below</span>
+            <ChevronRight size={14} />
+          </div>
+        ) : null}
+      </div>
+      <button className="open-day-link" onClick={() => {
+        onSelectDate(date);
+        onSwitchDay();
+      }} type="button">Open day view</button>
+    </article>
   );
 }
 
@@ -1282,6 +1355,17 @@ function formatCurrency(value) {
   return new Intl.NumberFormat('id-ID', { currency: 'IDR', maximumFractionDigits: 0, style: 'currency' }).format(Number(value || 0));
 }
 
+function formatCompactCurrency(value) {
+  const amount = Number(value || 0);
+  if (!amount) return 'Rp 0';
+  return new Intl.NumberFormat('id-ID', {
+    currency: 'IDR',
+    maximumFractionDigits: 1,
+    notation: 'compact',
+    style: 'currency',
+  }).format(amount);
+}
+
 function parseTimeToMinutes(value) {
   const normalized = String(value || '00:00').replace('.', ':');
   const [hour, minute = '0'] = normalized.split(':').map(Number);
@@ -1406,20 +1490,21 @@ function buildHours(openHour) {
   return hours;
 }
 
-function summarizeDay(bookings, openHour) {
+function summarizeDay(bookings, openHour, courtCount = 1) {
   const openMinutes = parseTimeToMinutes(openHour?.close_hours || '24:00') - parseTimeToMinutes(openHour?.open_hours || '06:00');
   const bookedMinutes = bookings.reduce((sum, booking) => sum + Number(booking.duration || getDurationMinutes(booking)), 0);
   const revenue = bookings.reduce((sum, booking) => sum + Number(booking.price || 0), 0);
+  const capacityMinutes = openMinutes * Math.max(Number(courtCount) || 1, 1);
   return {
     bookedHours: bookedMinutes / 60,
     bookingCount: bookings.length,
-    occupancy: Math.min(openMinutes ? (bookedMinutes / openMinutes) * 100 : 0, 100),
+    occupancy: Math.min(capacityMinutes ? (bookedMinutes / capacityMinutes) * 100 : 0, 100),
     revenue,
   };
 }
 
-function summarizeWeek(weekDays, bookingsByDate, openHour) {
-  const summaries = weekDays.map((date) => ({ date, ...summarizeDay(bookingsByDate[date] || [], openHour) }));
+function summarizeWeek(weekDays, bookingsByDate, openHour, courtCount = 1) {
+  const summaries = weekDays.map((date) => ({ date, ...summarizeDay(bookingsByDate[date] || [], openHour, courtCount) }));
   const totalBookings = summaries.reduce((sum, day) => sum + day.bookingCount, 0);
   const bookedHours = summaries.reduce((sum, day) => sum + day.bookedHours, 0);
   const revenue = summaries.reduce((sum, day) => sum + day.revenue, 0);
