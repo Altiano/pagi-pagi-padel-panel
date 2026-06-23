@@ -36,7 +36,7 @@ jobs:
 
       - name: Build
         env:
-          VITE_API_BASE_URL: ${{ secrets.PANEL_API_ORIGIN }}
+          VITE_API_BASE_URL: ${{ secrets.PANEL_PROXY_ORIGIN }}
           VITE_BASE_PATH: /pagi-pagi-padel-panel/
         run: pnpm build
 
