@@ -989,6 +989,539 @@ input:focus {
   font-weight: 650;
 }
 
+.desktop-view-toggle {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.desktop-view-toggle button {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 12px;
+  background: var(--surface);
+  color: var(--green);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.panel-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel-label-row button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #f8faf5;
+  color: var(--green);
+  cursor: pointer;
+}
+
+.mobile-app.panel-shell {
+  display: block;
+  min-height: 100dvh;
+  height: auto;
+  overflow: visible;
+  padding-bottom: calc(78px + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, #fbfcf8 0, var(--bg) 230px);
+}
+
+.mobile-app-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+  border-bottom: 1px solid rgba(223, 229, 216, 0.82);
+  background: rgba(251, 252, 248, 0.96);
+  backdrop-filter: blur(18px);
+}
+
+.mobile-brand {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.mobile-brand .brand-mark {
+  flex: 0 0 auto;
+}
+
+.mobile-brand div {
+  display: grid;
+  min-width: 0;
+}
+
+.mobile-brand strong {
+  overflow: hidden;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-brand span:not(.brand-mark) {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mobile-header-actions button {
+  display: inline-grid;
+  min-height: 38px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 12px;
+  background: var(--surface);
+  color: var(--green);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.mobile-header-actions button[aria-label] {
+  width: 38px;
+  padding: 0;
+  color: var(--ink);
+}
+
+.mobile-app-content {
+  padding: 18px 14px 0;
+}
+
+.mobile-bottom-nav {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 35;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 2px;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(223, 229, 216, 0.9);
+  background: rgba(251, 252, 248, 0.96);
+  box-shadow: 0 -16px 40px rgba(23, 33, 27, 0.08);
+  backdrop-filter: blur(18px);
+}
+
+.mobile-bottom-nav button {
+  display: grid;
+  min-width: 0;
+  min-height: 54px;
+  place-items: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: #717b70;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.mobile-bottom-nav button.active {
+  background: var(--surface-strong);
+  color: var(--green);
+}
+
+.mobile-calendar-page {
+  display: block;
+  height: auto;
+}
+
+.mobile-calendar-page .calendar-topbar {
+  display: block;
+  margin-bottom: 14px;
+}
+
+.mobile-calendar-page .calendar-topbar h1 {
+  font-size: 36px;
+  line-height: 1;
+}
+
+.mobile-calendar-page .calendar-topbar p {
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+.mobile-calendar-page .topbar-actions {
+  display: none;
+}
+
+.mobile-calendar-page .calendar-toolbar {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 10px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.mobile-calendar-page .segmented-control,
+.mobile-calendar-page .date-controls,
+.mobile-calendar-page .calendar-filters {
+  width: 100%;
+}
+
+.mobile-calendar-page .segmented-control {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mobile-calendar-page .segmented-control button,
+.mobile-calendar-page .date-controls button,
+.mobile-calendar-page .calendar-filters button,
+.mobile-calendar-page .calendar-filters span {
+  min-height: 42px;
+}
+
+.mobile-calendar-page .date-controls {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 42px 72px;
+}
+
+.mobile-calendar-page .date-controls input {
+  width: 100%;
+  min-width: 0;
+  text-align: center;
+}
+
+.mobile-calendar-page .calendar-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr 42px;
+}
+
+.mobile-calendar-page .open-hours {
+  margin-left: 0;
+  text-align: center;
+}
+
+.mobile-calendar-page .calendar-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  height: auto;
+}
+
+.mobile-calendar-page .calendar-main-panel {
+  min-height: 0;
+  height: auto;
+  overflow: visible;
+}
+
+.mobile-calendar-page .calendar-main-panel::after,
+.mobile-calendar-page .scroll-more-indicator {
+  display: none;
+}
+
+.mobile-calendar-page .calendar-scroll-area {
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+.mobile-calendar-page .calendar-detail {
+  position: static;
+  height: auto;
+  max-height: none;
+  border-radius: 18px;
+}
+
+.mobile-agenda {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.mobile-agenda-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 4px;
+}
+
+.mobile-agenda-heading span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.mobile-agenda-heading strong {
+  color: var(--green);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.mobile-court-agenda {
+  display: grid;
+  gap: 8px;
+}
+
+.mobile-court-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 2px 0;
+}
+
+.mobile-court-heading strong {
+  font-size: 15px;
+  letter-spacing: -0.02em;
+}
+
+.mobile-court-heading span {
+  color: #8a9387;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.mobile-agenda-list {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fbfcf8;
+}
+
+.mobile-booking-row,
+.mobile-availability-row {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 66px;
+  border: 0;
+  border-bottom: 1px solid rgba(223, 229, 216, 0.78);
+  padding: 12px;
+  background: var(--booking-bg, var(--surface));
+  color: var(--ink);
+  text-align: left;
+}
+
+.mobile-booking-row {
+  cursor: pointer;
+}
+
+.mobile-booking-row.selected {
+  box-shadow: inset 3px 0 0 var(--green);
+}
+
+.mobile-booking-row:last-child,
+.mobile-availability-row:last-child {
+  border-bottom: 0;
+}
+
+.mobile-booking-time,
+.mobile-availability-row span {
+  color: var(--booking-accent, var(--green));
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.mobile-booking-main {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.mobile-booking-main strong {
+  overflow: hidden;
+  color: var(--booking-ink, var(--ink));
+  font-size: 14px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-booking-main small {
+  overflow: hidden;
+  color: var(--booking-muted, var(--muted));
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-payment-pill {
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: var(--booking-pill, rgba(204, 225, 95, 0.45));
+  color: var(--booking-ink, var(--green-deep));
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.mobile-availability-row {
+  background: rgba(248, 250, 245, 0.7);
+}
+
+.mobile-availability-row strong {
+  justify-self: end;
+  color: #788176;
+  font-size: 13px;
+}
+
+.mobile-week-list {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.mobile-week-row {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fbfcf8;
+}
+
+.mobile-week-row.selected {
+  border-color: rgba(40, 99, 69, 0.26);
+  background: #fff;
+}
+
+.mobile-week-summary {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  padding: 14px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.mobile-week-summary > span:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.mobile-week-summary > span:first-child strong {
+  color: var(--green);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.mobile-week-summary > span:first-child small {
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 750;
+}
+
+.mobile-week-stats {
+  display: grid;
+  gap: 2px;
+}
+
+.mobile-week-stats strong {
+  font-size: 14px;
+}
+
+.mobile-week-stats small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.mobile-week-summary .occupancy-bar {
+  grid-column: 1 / -1;
+}
+
+.mobile-week-detail {
+  display: grid;
+  gap: 10px;
+  padding: 0 14px 14px;
+}
+
+.mobile-week-court {
+  display: grid;
+  gap: 7px;
+}
+
+.mobile-week-court > span {
+  color: #778176;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.mobile-week-court button,
+.mobile-week-court small {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-height: 42px;
+  border: 1px solid var(--booking-border, rgba(40, 99, 69, 0.14));
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: var(--booking-bg, #eff6ea);
+  color: var(--booking-ink, #304433);
+  cursor: pointer;
+  text-align: left;
+}
+
+.mobile-week-court button strong {
+  color: var(--booking-accent, var(--green));
+  font-size: 12px;
+}
+
+.mobile-week-court button span {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-week-court small {
+  display: block;
+  border-style: dashed;
+  color: #8a9388;
+  cursor: default;
+  font-size: 12px;
+}
+
+.mobile-detail-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: grid;
+  align-items: end;
+  padding-top: 80px;
+  background: rgba(23, 33, 27, 0.28);
+}
+
+.mobile-detail-backdrop .calendar-detail {
+  width: 100%;
+  max-height: min(78dvh, 680px);
+  border-radius: 24px 24px 0 0;
+  overflow: auto;
+  box-shadow: 0 -24px 60px rgba(23, 33, 27, 0.22);
+}
+
 @media (max-width: 900px) {
   .panel-shell {
     grid-template-columns: 1fr;
@@ -1068,208 +1601,5 @@ input:focus {
   .topbar-actions {
     flex-direction: column;
     align-items: stretch;
-  }
-}
-
-/* Mobile-friendly experiment: scoped to /mobile so the default path stays untouched. */
-.mobile-experiment.panel-shell {
-  height: auto;
-  min-height: 100dvh;
-  overflow: visible;
-}
-
-.mobile-experiment .experiment-banner,
-.mobile-login .experiment-banner {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  grid-column: 1 / -1;
-  padding: 10px 16px;
-  background: var(--green-deep);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-align: center;
-  text-transform: uppercase;
-}
-
-@media (max-width: 760px) {
-  .mobile-experiment.panel-shell {
-    display: block;
-    background: linear-gradient(180deg, #fbfcf8 0, var(--bg) 220px);
-  }
-
-  .mobile-experiment .sidebar {
-    position: sticky;
-    top: 36px;
-    z-index: 15;
-    padding: 14px 14px 10px;
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-    background: rgba(251, 252, 248, 0.96);
-    backdrop-filter: blur(16px);
-  }
-
-  .mobile-experiment .sidebar-brand {
-    margin-bottom: 12px;
-  }
-
-  .mobile-experiment .sidebar-brand strong {
-    font-size: 15px;
-  }
-
-  .mobile-experiment .sidebar nav {
-    display: flex;
-    gap: 10px;
-    overflow-x: auto;
-    padding-bottom: 4px;
-    scroll-snap-type: x mandatory;
-  }
-
-  .mobile-experiment .nav-group {
-    display: flex;
-    flex: 0 0 auto;
-    gap: 8px;
-    margin: 0;
-  }
-
-  .mobile-experiment .nav-group p {
-    display: none;
-  }
-
-  .mobile-experiment .nav-group button {
-    width: auto;
-    min-height: 40px;
-    padding: 0 12px;
-    border: 1px solid var(--line);
-    background: var(--surface);
-    box-shadow: 0 8px 18px rgba(23, 33, 27, 0.06);
-    scroll-snap-align: start;
-    white-space: nowrap;
-  }
-
-  .mobile-experiment .content {
-    height: auto;
-    min-height: calc(100dvh - 132px);
-    overflow: visible;
-    padding: 18px 14px 28px;
-  }
-
-  .mobile-experiment .calendar-page {
-    display: block;
-    height: auto;
-  }
-
-  .mobile-experiment .calendar-topbar,
-  .mobile-experiment .topbar {
-    flex-direction: column;
-    gap: 14px;
-    margin-bottom: 16px;
-  }
-
-  .mobile-experiment .calendar-topbar h1,
-  .mobile-experiment .topbar h1 {
-    font-size: 34px;
-  }
-
-  .mobile-experiment .topbar-actions,
-  .mobile-experiment .calendar-toolbar,
-  .mobile-experiment .date-controls,
-  .mobile-experiment .calendar-filters {
-    width: 100%;
-  }
-
-  .mobile-experiment .topbar-actions {
-    display: grid;
-    grid-template-columns: 1fr auto;
-  }
-
-  .mobile-experiment .calendar-toolbar {
-    display: grid;
-    gap: 10px;
-    margin-bottom: 14px;
-    padding: 10px;
-  }
-
-  .mobile-experiment .segmented-control,
-  .mobile-experiment .date-controls,
-  .mobile-experiment .calendar-filters {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .mobile-experiment .date-controls {
-    grid-template-columns: 42px 1fr 42px 78px;
-  }
-
-  .mobile-experiment .date-controls input {
-    width: 100%;
-  }
-
-  .mobile-experiment .calendar-filters {
-    grid-template-columns: 1fr 1fr 42px;
-  }
-
-  .mobile-experiment .open-hours {
-    margin-left: 0;
-    text-align: center;
-  }
-
-  .mobile-experiment .calendar-layout {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 14px;
-    height: auto;
-  }
-
-  .mobile-experiment .calendar-main-panel {
-    min-height: 68dvh;
-  }
-
-  .mobile-experiment .calendar-scroll-area {
-    max-height: 68dvh;
-  }
-
-  .mobile-experiment .day-calendar {
-    min-width: 720px;
-  }
-
-  .mobile-experiment .day-calendar-header,
-  .mobile-experiment .day-calendar-grid {
-    grid-template-columns: 88px repeat(var(--court-count, 2), minmax(172px, 1fr));
-  }
-
-  .mobile-experiment .day-calendar-header > div {
-    padding: 12px 10px;
-  }
-
-  .mobile-experiment .week-calendar {
-    display: flex;
-    gap: 10px;
-    height: auto;
-    min-height: 0;
-    padding: 10px;
-    background: transparent;
-    scroll-snap-type: x mandatory;
-  }
-
-  .mobile-experiment .week-day {
-    flex: 0 0 82vw;
-    min-height: 560px;
-    border: 1px solid var(--line);
-    border-radius: 16px;
-    overflow: hidden;
-    scroll-snap-align: center;
-  }
-
-  .mobile-experiment .calendar-detail {
-    position: static;
-    max-height: none;
-    border-radius: 16px;
-  }
-
-  .mobile-experiment .handoff-grid {
-    grid-template-columns: 1fr;
   }
 }

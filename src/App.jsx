@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   Sparkles,
   Users,
+  X,
 } from 'lucide-react';
 import { clearStoredAuth, getStoredAuth, login } from './api/auth.js';
 import { apiRequest } from './api/client.js';
@@ -48,31 +49,42 @@ const navGroups = [
 
 const FALLBACK_MITRA_ID = 'a074e244-76c0-4587-9dff-0c7833f0bfa3';
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MOBILE_VIEW_STORAGE_KEY = 'ppp-panel-view-mode';
+const MOBILE_MEDIA_QUERY = '(max-width: 760px)';
+
+const mobileNavItems = [
+  { label: 'Dashboard', icon: LayoutDashboard, nav: 'Dashboard' },
+  { label: 'Calendar', icon: CalendarDays, nav: 'Calendar' },
+  { label: 'Service', icon: ClipboardList, nav: 'Court Prices' },
+  { label: 'Customers', icon: Users, nav: 'Customers' },
+  { label: 'Setting', icon: Settings, nav: 'Setting' },
+];
 
 export function App() {
   const [auth, setAuth] = useState(() => getStoredAuth());
-  const isMobileExperiment = isMobileExperimentPath(window.location);
+  const isMobileRoute = isMobileViewPath(window.location);
 
   if (!auth) {
-    return <LoginScreen isMobileExperiment={isMobileExperiment} onAuthenticated={setAuth} />;
+    return <LoginScreen isMobileRoute={isMobileRoute} onAuthenticated={setAuth} />;
   }
 
-  return <PanelShell auth={auth} isMobileExperiment={isMobileExperiment} onLogout={() => {
+  return <PanelShell auth={auth} isMobileRoute={isMobileRoute} onLogout={() => {
     clearStoredAuth();
     setAuth(null);
   }} />;
 }
 
 
-function isMobileExperimentPath(location) {
+function isMobileViewPath(location) {
   const pathSegments = location.pathname.split('/').filter(Boolean);
   const hashPath = location.hash.replace(/^#/, '').replace(/^\//, '');
   return pathSegments.includes('mobile') || hashPath.split('/').filter(Boolean)[0] === 'mobile';
 }
 
-function LoginScreen({ isMobileExperiment = false, onAuthenticated }) {
+function LoginScreen({ isMobileRoute = false, onAuthenticated }) {
   const [form, setForm] = useState({ username: '', password: '', remember: false });
   const [status, setStatus] = useState({ state: 'idle', message: '' });
+  const mobileView = usePreferredMobileView(isMobileRoute);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -88,10 +100,7 @@ function LoginScreen({ isMobileExperiment = false, onAuthenticated }) {
   }
 
   return (
-    <main className={`login-page ${isMobileExperiment ? 'mobile-experiment mobile-login' : ''}`}>
-      {isMobileExperiment ? (
-        <div className="experiment-banner">Mobile experiment · /mobile</div>
-      ) : null}
+    <main className={`login-page ${mobileView.isMobileApp ? 'mobile-app mobile-login' : ''}`}>
       <section className="login-panel" aria-label="Sign in">
         <div className="login-card">
           <div className="form-heading">
@@ -154,9 +163,10 @@ function LoginScreen({ isMobileExperiment = false, onAuthenticated }) {
   );
 }
 
-function PanelShell({ auth, isMobileExperiment = false, onLogout }) {
+function PanelShell({ auth, isMobileRoute = false, onLogout }) {
   const [meState, setMeState] = useState({ loading: true, data: null, error: '' });
   const [activeNav, setActiveNav] = useState('Calendar');
+  const mobileView = usePreferredMobileView(isMobileRoute);
 
   useEffect(() => {
     let active = true;
@@ -175,57 +185,164 @@ function PanelShell({ auth, isMobileExperiment = false, onLogout }) {
 
   const displayName = meState.data?.data?.name || meState.data?.name || auth.username || 'Owner';
   const mitraId = findMitraId(meState.data) || FALLBACK_MITRA_ID;
+  const shellClassName = `panel-shell ${mobileView.isMobileApp ? 'mobile-app' : ''}`;
+
+  const content = activeNav === 'Calendar' ? (
+    <CalendarPage
+      displayName={displayName}
+      isMobileApp={mobileView.isMobileApp}
+      mitraId={mitraId}
+      onLogout={onLogout}
+    />
+  ) : (
+    <PlaceholderPage
+      activeNav={activeNav}
+      displayName={displayName}
+      meState={meState}
+      onLogout={onLogout}
+    />
+  );
 
   return (
-    <main className={`panel-shell ${isMobileExperiment ? 'mobile-experiment' : ''}`}>
-      {isMobileExperiment ? (
-        <div className="experiment-banner">Mobile-friendly experiment · live at /mobile</div>
-      ) : null}
-      <aside className="sidebar">
-        <div className="sidebar-brand">
+    <main className={shellClassName}>
+      {mobileView.isMobileApp ? (
+        <MobileAppShell
+          activeNav={activeNav}
+          displayName={displayName}
+          onChangeNav={setActiveNav}
+          onLogout={onLogout}
+          onUseDesktopView={() => mobileView.setPreference('desktop')}
+        >
+          {content}
+        </MobileAppShell>
+      ) : (
+        <>
+          <DesktopSidebar activeNav={activeNav} onChangeNav={setActiveNav} />
+
+          <section className="content">
+            <div className="desktop-view-toggle">
+              <button onClick={() => mobileView.setPreference('mobile')} type="button">
+                Mobile app view
+              </button>
+            </div>
+            {content}
+          </section>
+        </>
+      )}
+    </main>
+  );
+}
+
+function usePreferredMobileView(isMobileRoute) {
+  const [isSmallScreen, setIsSmallScreen] = useState(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return false;
+    return window.matchMedia(MOBILE_MEDIA_QUERY).matches;
+  });
+  const [preference, setPreferenceState] = useState(() => {
+    if (typeof window === 'undefined') return 'auto';
+    return window.localStorage.getItem(MOBILE_VIEW_STORAGE_KEY) || (isMobileRoute ? 'mobile' : 'auto');
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
+    const query = window.matchMedia(MOBILE_MEDIA_QUERY);
+    const update = () => setIsSmallScreen(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+
+  function setPreference(nextPreference) {
+    setPreferenceState(nextPreference);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(MOBILE_VIEW_STORAGE_KEY, nextPreference);
+    }
+  }
+
+  return {
+    isMobileApp: preference === 'mobile' || (preference !== 'desktop' && isSmallScreen),
+    preference,
+    setPreference,
+  };
+}
+
+function DesktopSidebar({ activeNav, onChangeNav }) {
+  return (
+    <aside className="sidebar">
+      <div className="sidebar-brand">
+        <span className="brand-mark small">PP</span>
+        <div>
+          <strong>pagipagipadel</strong>
+          <span>Club panel</span>
+        </div>
+      </div>
+
+      <nav>
+        {navGroups.map((group) => (
+          <div className="nav-group" key={group.label}>
+            <p>{group.label}</p>
+            {group.items.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  className={activeNav === item.label ? 'active' : ''}
+                  key={item.label}
+                  onClick={() => onChangeNav(item.label)}
+                  type="button"
+                >
+                  <Icon size={17} />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </nav>
+    </aside>
+  );
+}
+
+function MobileAppShell({ activeNav, children, displayName, onChangeNav, onLogout, onUseDesktopView }) {
+  return (
+    <>
+      <header className="mobile-app-header">
+        <div className="mobile-brand">
           <span className="brand-mark small">PP</span>
           <div>
             <strong>pagipagipadel</strong>
-            <span>Club panel</span>
+            <span>{displayName}</span>
           </div>
         </div>
+        <div className="mobile-header-actions">
+          <button onClick={onUseDesktopView} type="button">Desktop</button>
+          <button aria-label="Logout" onClick={onLogout} type="button">
+            <LogOut size={17} />
+          </button>
+        </div>
+      </header>
 
-        <nav>
-          {navGroups.map((group) => (
-            <div className="nav-group" key={group.label}>
-              <p>{group.label}</p>
-              {group.items.map((item, index) => {
-                const Icon = item.icon;
-                return (
-                  <button
-                    className={activeNav === item.label ? 'active' : ''}
-                    key={item.label}
-                    onClick={() => setActiveNav(item.label)}
-                    type="button"
-                  >
-                    <Icon size={17} />
-                    {item.label}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-        </nav>
-      </aside>
-
-      <section className="content">
-        {activeNav === 'Calendar' ? (
-          <CalendarPage displayName={displayName} mitraId={mitraId} onLogout={onLogout} />
-        ) : (
-          <PlaceholderPage
-            activeNav={activeNav}
-            displayName={displayName}
-            meState={meState}
-            onLogout={onLogout}
-          />
-        )}
+      <section className="mobile-app-content">
+        {children}
       </section>
-    </main>
+
+      <nav className="mobile-bottom-nav" aria-label="Primary">
+        {mobileNavItems.map((item) => {
+          const Icon = item.icon;
+          const selected = activeNav === item.nav || (item.nav === 'Court Prices' && ['Court Prices', 'Event', 'Coach', 'Add On'].includes(activeNav));
+          return (
+            <button
+              className={selected ? 'active' : ''}
+              key={item.label}
+              onClick={() => onChangeNav(item.nav)}
+              type="button"
+            >
+              <Icon size={18} />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+    </>
   );
 }
 
@@ -264,8 +381,8 @@ function PlaceholderPage({ activeNav, displayName, meState, onLogout }) {
   );
 }
 
-function CalendarPage({ displayName, mitraId, onLogout }) {
-  const [view, setView] = useState('week');
+function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout }) {
+  const [view, setView] = useState(() => (isMobileApp ? 'day' : 'week'));
   const [selectedDate, setSelectedDate] = useState(() => toDateInputValue(new Date()));
   const [refreshKey, setRefreshKey] = useState(0);
   const [state, setState] = useState({ loading: true, error: '', courts: [], openHour: null, bookingsByDate: {} });
@@ -278,6 +395,10 @@ function CalendarPage({ displayName, mitraId, onLogout }) {
   const activeBookings = state.bookingsByDate[selectedDate] || [];
   const selectedDaySummary = summarizeDay(activeBookings, state.openHour);
   const weekSummary = summarizeWeek(weekDays, state.bookingsByDate, state.openHour);
+
+  useEffect(() => {
+    if (isMobileApp) setView('day');
+  }, [isMobileApp]);
 
   useEffect(() => {
     let active = true;
@@ -333,7 +454,7 @@ function CalendarPage({ displayName, mitraId, onLogout }) {
   }
 
   return (
-    <div className={`calendar-page ${view}-mode`}>
+    <div className={`calendar-page ${view}-mode ${isMobileApp ? 'mobile-calendar-page' : ''}`}>
       <header className="calendar-topbar">
         <div>
           <h1>Calendar</h1>
@@ -392,6 +513,26 @@ function CalendarPage({ displayName, mitraId, onLogout }) {
           <div className="calendar-scroll-area" ref={calendarPanelRef}>
             {state.loading ? (
               <div className="calendar-loading">Loading calendar...</div>
+            ) : isMobileApp && view === 'day' ? (
+              <MobileDayAgenda
+                bookings={activeBookings}
+                courts={state.courts}
+                openHour={state.openHour}
+                selectedBooking={selectedBooking}
+                selectedDate={selectedDate}
+                onSelectBooking={setSelectedBooking}
+              />
+            ) : isMobileApp && view === 'week' ? (
+              <MobileWeekCalendar
+                bookingsByDate={state.bookingsByDate}
+                courts={state.courts}
+                openHour={state.openHour}
+                selectedDate={selectedDate}
+                weekDays={weekDays}
+                onSelectBooking={setSelectedBooking}
+                onSelectDate={setSelectedDate}
+                onSwitchDay={() => setView('day')}
+              />
             ) : view === 'day' ? (
               <DayCalendar
                 bookings={activeBookings}
@@ -428,7 +569,7 @@ function CalendarPage({ displayName, mitraId, onLogout }) {
           ) : null}
         </div>
         <CalendarDetailPanel
-          booking={selectedBooking}
+          booking={isMobileApp ? null : selectedBooking}
           selectedDate={selectedDate}
           selectedDaySummary={selectedDaySummary}
           view={view}
@@ -436,6 +577,124 @@ function CalendarPage({ displayName, mitraId, onLogout }) {
           onOpenDay={() => setView('day')}
         />
       </section>
+      {isMobileApp && selectedBooking ? (
+        <div className="mobile-detail-backdrop" onClick={() => setSelectedBooking(null)}>
+          <div onClick={(event) => event.stopPropagation()}>
+            <CalendarDetailPanel
+              booking={selectedBooking}
+              selectedDate={selectedDate}
+              selectedDaySummary={selectedDaySummary}
+              view={view}
+              weekSummary={weekSummary}
+              onClose={() => setSelectedBooking(null)}
+              onOpenDay={() => setView('day')}
+            />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MobileDayAgenda({ bookings, courts, openHour, selectedBooking, selectedDate, onSelectBooking }) {
+  const courtBookings = courts.length ? courts.map((court) => ({
+    court,
+    entries: buildCourtTimelineEntries(bookings.filter((booking) => booking.court_id === court.id), openHour),
+  })) : [{ court: { id: 'all', name: 'All courts' }, entries: buildCourtTimelineEntries(bookings, openHour) }];
+
+  return (
+    <div className="mobile-agenda">
+      <div className="mobile-agenda-heading">
+        <span>{formatLongDate(selectedDate)}</span>
+        <strong>{bookings.length} booking{bookings.length === 1 ? '' : 's'}</strong>
+      </div>
+
+      {courtBookings.map(({ court, entries }) => (
+        <section className="mobile-court-agenda" key={court.id}>
+          <div className="mobile-court-heading">
+            <strong>{court.name}</strong>
+            <span>{entries.filter((entry) => entry.type === 'booking').length} bookings</span>
+          </div>
+
+          <div className="mobile-agenda-list">
+            {entries.length ? entries.map((entry) => (
+              entry.type === 'availability' ? (
+                <div className="mobile-availability-row" key={entry.id}>
+                  <span>{entry.label}</span>
+                  <strong>Available</strong>
+                </div>
+              ) : (
+                <button
+                  className={`mobile-booking-row ${getBookingTone(entry.booking)} ${selectedBooking?.id === entry.booking.id ? 'selected' : ''}`}
+                  key={entry.booking.id}
+                  onClick={() => onSelectBooking(entry.booking)}
+                  type="button"
+                >
+                  <span className="mobile-booking-time">{entry.booking.time || getStartLabel(entry.booking)}</span>
+                  <span className="mobile-booking-main">
+                    <strong>{entry.booking.booking_owner || entry.booking.name}</strong>
+                    <small>{entry.booking.booking_type || entry.booking.type || 'booking'} · {formatCurrency(entry.booking.price)}</small>
+                  </span>
+                  <span className="mobile-payment-pill">{entry.booking.booking_paid ? 'Paid' : 'Unpaid'}</span>
+                </button>
+              )
+            )) : (
+              <div className="mobile-availability-row">
+                <span>{formatAvailabilityRange(parseTimeToMinutes(openHour?.open_hours || '06:00'), parseTimeToMinutes(openHour?.close_hours || '24:00'))}</span>
+                <strong>Available</strong>
+              </div>
+            )}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function MobileWeekCalendar({ bookingsByDate, courts, openHour, selectedDate, weekDays, onSelectBooking, onSelectDate, onSwitchDay }) {
+  return (
+    <div className="mobile-week-list">
+      {weekDays.map((date) => {
+        const bookings = bookingsByDate[date] || [];
+        const summary = summarizeDay(bookings, openHour);
+        return (
+          <article className={`mobile-week-row ${date === selectedDate ? 'selected' : ''}`} key={date}>
+            <button className="mobile-week-summary" onClick={() => onSelectDate(date)} type="button">
+              <span>
+                <strong>{formatWeekday(date)}</strong>
+                <small>{formatDayNumber(date)}</small>
+              </span>
+              <span className="mobile-week-stats">
+                <strong>{bookings.length} bookings</strong>
+                <small>{summary.bookedHours.toFixed(1)}h · {formatCurrency(summary.revenue)}</small>
+              </span>
+              <span className="occupancy-bar">
+                <span style={{ width: `${summary.occupancy}%` }} />
+              </span>
+            </button>
+
+            {date === selectedDate ? (
+              <div className="mobile-week-detail">
+                {courts.slice(0, 4).map((court) => {
+                  const courtBookings = bookings.filter((booking) => booking.court_id === court.id);
+                  return (
+                    <div className="mobile-week-court" key={court.id}>
+                      <span>{court.name}</span>
+                      {courtBookings.length ? courtBookings.slice(0, 2).map((booking) => (
+                        <button className={getBookingTone(booking)} key={booking.id} onClick={() => onSelectBooking(booking)} type="button">
+                          <strong>{getStartLabel(booking)}</strong>
+                          <span>{booking.booking_owner || booking.name}</span>
+                        </button>
+                      )) : <small>Available</small>}
+                    </div>
+                  );
+                })}
+                <button className="open-day-link" onClick={onSwitchDay} type="button">Open day view</button>
+              </div>
+            ) : null}
+          </article>
+        );
+      })}
     </div>
   );
 }
@@ -547,11 +806,18 @@ function WeekCalendar({ bookingsByDate, courts, openHour, selectedDate, weekDays
   );
 }
 
-function CalendarDetailPanel({ booking, selectedDate, selectedDaySummary, view, weekSummary, onOpenDay }) {
+function CalendarDetailPanel({ booking, selectedDate, selectedDaySummary, view, weekSummary, onClose, onOpenDay }) {
   if (booking) {
     return (
       <aside className="calendar-detail">
-        <span className="panel-label">Booking detail</span>
+        <div className="panel-label-row">
+          <span className="panel-label">Booking detail</span>
+          {onClose ? (
+            <button aria-label="Close booking detail" onClick={onClose} type="button">
+              <X size={16} />
+            </button>
+          ) : null}
+        </div>
         <h2>{booking.booking_owner || booking.name}</h2>
         <dl>
           <div><dt>Court</dt><dd>{booking.court_name || booking.court_id}</dd></div>
