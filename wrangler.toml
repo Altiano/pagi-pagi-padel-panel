@@ -8,4 +8,4 @@ ALLOWED_ORIGINS = "http://127.0.0.1:5173,https://altiano.github.io"
 [[d1_databases]]
 binding = "PLACEHOLDER_DB"
 database_name = "pagi-pagi-padel-placeholders"
-database_id = "replace-with-cloudflare-d1-database-id"
+database_id = "951f3e0f-e274-4e6f-8500-9e1f0ea856c9"

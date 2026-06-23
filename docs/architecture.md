@@ -11,14 +11,14 @@ Pagi Pagi Padel Panel is a React + Vite admin frontend. It is currently compact 
 5. `PanelShell` loads `/api/auth/me`, derives the display name and `mitraId`, and renders the active screen.
 6. Calendar is the only fully wired screen today. Other navigation items render placeholders.
 
-Placeholder bookings are the first local wrapper-only data model. They are stored in Cloudflare D1 through the Worker and merged into Calendar responses on the frontend. They deliberately do not call Court Site until a future confirmation/payment flow is implemented.
+Placeholder bookings are the first wrapper-owned data model. They are stored in Cloudflare D1 through the Worker and merged into Calendar responses on the frontend. They deliberately do not call the upstream booking API until a future confirmation/payment flow is implemented.
 
 ## API Flow
 
 - `src/api/config.js` builds request URLs.
 - `src/api/client.js` wraps `fetch`, adds `Accept` and `Authorization` headers, reads JSON/text bodies, and clears auth on `401`.
 - `src/api/auth.js` handles login and localStorage persistence.
-- `vite.config.js` proxies local `/api` requests to `PANEL_API_ORIGIN`.
+- `vite.config.js` can proxy local `/api` requests to `PANEL_API_ORIGIN`, but the normal local setup uses `VITE_API_BASE_URL` to call the deployed Worker.
 
 ## Calendar Flow
 

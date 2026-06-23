@@ -9,7 +9,7 @@ This app provides the browser UI for managing Pagi Pagi Padel admin workflows. I
 - Login with panel credentials.
 - Authenticated session storage in the browser.
 - A wired Calendar screen with day/week views, court bookings, booking details, and summary metrics.
-- Local placeholder bookings for tentative holds before payment or upstream Court Site confirmation.
+- D1-backed placeholder bookings for tentative holds before payment or upstream confirmation.
 - Placeholder screens for Dashboard, Court Prices, Event, Coach, Add On, Customers, and Setting.
 
 For AI-agent onboarding, start with `AGENTS.md`, then read `docs/architecture.md`, `docs/api.md`, and `docs/visual-reference.md`.
@@ -18,12 +18,12 @@ For AI-agent onboarding, start with `AGENTS.md`, then read `docs/architecture.md
 
 ```sh
 pnpm install
-PANEL_API_ORIGIN=https://panel.courtside.id pnpm dev
+pnpm dev
 ```
 
 Open the Vite dev URL printed by the terminal, usually `http://localhost:5173`.
 
-`pnpm dev` by itself uses the default proxy target `http://127.0.0.1:8787`. Use that only when you are also running the local Worker proxy on port `8787`; otherwise login/API calls will fail with `ECONNREFUSED`.
+For this workspace, `.env.local` points Vite at the deployed Worker so local testing uses the same D1-backed placeholder storage as production.
 
 ## Commands
 
@@ -38,23 +38,23 @@ pnpm preview
 
 ## Environment
 
-The dev server proxies `/api/*` to the configured panel API origin, so the browser can call the existing backend through same-origin local requests.
+The app should normally call the deployed Worker through `VITE_API_BASE_URL`. The Worker proxies ordinary `/api/*` requests to the upstream service and stores `/api/placeholder-bookings` in D1.
 
 ```sh
-PANEL_API_ORIGIN=https://panel.courtside.id
-VITE_API_BASE_URL=
+VITE_API_BASE_URL=<worker-origin>
 VITE_BASE_PATH=/
 ```
 
-- `PANEL_API_ORIGIN`: backend target used by the Vite proxy during local development. Use `https://panel.courtside.id` for normal local login/API testing, or `http://127.0.0.1:8787` when testing through a local Worker proxy.
-- `VITE_API_BASE_URL`: API origin used by built/static deployments. Leave empty when same-origin or local proxy requests should be used.
+- `VITE_API_BASE_URL`: Worker origin used by local and static deployments.
+- `PANEL_API_ORIGIN`: optional backend target used only when running through the Vite dev proxy.
+- `VITE_USE_LOCAL_PLACEHOLDERS`: optional escape hatch for browser-local placeholder storage. Leave unset for D1-backed testing.
 - `VITE_BASE_PATH`: base path for static deployments.
 
 ## Worker And D1
 
-The Worker proxies ordinary `/api/*` requests to the configured upstream service. `/api/placeholder-bookings` is handled locally by the Worker and stored in Cloudflare D1, so tentative holds stay inside this wrapper until a future confirmed-booking flow sends data to Court Site.
+The Worker proxies ordinary `/api/*` requests to the configured upstream service. `/api/placeholder-bookings` is handled locally by the Worker and stored in Cloudflare D1, so tentative holds stay inside this wrapper until a future confirmed-booking flow sends data upstream.
 
-Create a free D1 database and replace the `database_id` in `wrangler.toml` before deploying the Worker:
+The current `wrangler.toml` is bound to the project D1 database. To create a new database for another environment:
 
 ```sh
 wrangler d1 create pagi-pagi-padel-placeholders
@@ -97,14 +97,13 @@ This app can be deployed as a static Vite bundle. The GitHub Actions workflow bu
 
 ```sh
 VITE_BASE_PATH=/pagi-pagi-padel-panel/
-VITE_API_BASE_URL=<panel-api-origin>
+VITE_API_BASE_URL=<worker-origin>
 ```
 
-The static UI will load from GitHub Pages, but authenticated API calls still depend on the panel API allowing browser requests from the Pages origin. If the backend does not allow that CORS origin, keep using the local Vite proxy or add a small API proxy for production.
+The static UI loads from GitHub Pages and calls the Worker origin configured in the `PANEL_PROXY_ORIGIN` repository secret.
 
 ## Troubleshooting
 
-- If local login/API calls fail with `ECONNREFUSED 127.0.0.1:8787`, restart Vite with `PANEL_API_ORIGIN=https://panel.courtside.id pnpm dev`.
-- If API calls fail locally for another reason, check `PANEL_API_ORIGIN` and confirm the backend is reachable from the machine running Vite.
-- If API calls fail after static deployment, check `VITE_API_BASE_URL` and backend CORS configuration.
+- If local login/API calls fail, check `.env.local` and confirm `VITE_API_BASE_URL` points at the deployed Worker.
+- If API calls fail after static deployment, check the `PANEL_PROXY_ORIGIN` GitHub secret and Worker deployment status.
 - If login succeeds but later requests fail with `401`, stored auth is cleared by `src/api/client.js` and the user should sign in again.

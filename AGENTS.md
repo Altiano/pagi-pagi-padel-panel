@@ -6,13 +6,13 @@ This repo is intended to be easy for AI agents and human maintainers to modify. 
 
 - Pagi Pagi Padel Panel is a React 19 + Vite frontend for the Pagi Pagi Padel admin panel.
 - The app currently implements authentication plus the Calendar screen. Other navigation items are placeholders.
-- Local development calls `/api/*` through the Vite dev-server proxy. Static deployments call the configured API origin directly through `VITE_API_BASE_URL`.
+- Local development and static deployments normally call the deployed Worker through `VITE_API_BASE_URL`. The Worker proxies upstream API calls and stores placeholder bookings in D1.
 
 ## Commands
 
 ```sh
 pnpm install
-PANEL_API_ORIGIN=https://panel.courtside.id pnpm dev
+pnpm dev
 pnpm build
 pnpm preview
 ```
@@ -25,6 +25,7 @@ Use `pnpm build` as the default verification command after code changes.
 - `src/api/auth.js`: Login, token persistence, and auth clearing.
 - `src/api/client.js`: Authenticated API request wrapper.
 - `src/api/config.js`: API URL builder using `VITE_API_BASE_URL`.
+- `src/api/placeholders.js`: Optional browser-local placeholder storage escape hatch.
 - `src/styles.css`: Global styles for the login screen, shell, and calendar.
 - `vite.config.js`: Vite config, base path, and local `/api` proxy.
 - `docs/architecture.md`: Higher-level architecture and data-flow notes.
@@ -34,14 +35,15 @@ Use `pnpm build` as the default verification command after code changes.
 
 ## Environment
 
-- `PANEL_API_ORIGIN`: Backend target for the local Vite proxy. Use `https://panel.courtside.id` for normal local login/API testing. The Vite default is `http://127.0.0.1:8787`, which only works when a local Worker proxy is also running.
-- `VITE_API_BASE_URL`: API origin for browser requests in built/static deployments. Leave empty for same-origin or proxied local requests.
+- `VITE_API_BASE_URL`: Worker origin for browser requests in local and built/static deployments.
+- `PANEL_API_ORIGIN`: Optional backend target for the local Vite proxy.
+- `VITE_USE_LOCAL_PLACEHOLDERS`: Optional browser-local placeholder storage escape hatch. Leave unset for D1-backed testing.
 - `VITE_BASE_PATH`: Vite base path for static deployments, for example `/pagi-pagi-padel-panel/`.
 
 ## Current Architecture Notes
 
 - `App.jsx` is intentionally still a single large file from the initial build. It is acceptable to split it when adding meaningful functionality or tests.
-- Calendar data is loaded in `loadCalendarData`, which fetches courts, open hours, and one schedule response per weekday.
+- Calendar data is loaded in `loadCalendarData`, which fetches courts, open hours, one schedule response per weekday, and D1-backed placeholder bookings.
 - Authentication is stored in localStorage under `panel.auth` plus Nuxt-compatible keys used for parity checks.
 - A `401` response clears stored auth in `apiRequest`.
 

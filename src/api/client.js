@@ -1,7 +1,12 @@
 import { clearStoredAuth, getStoredAuth } from './auth.js';
-import { buildApiUrl } from './config.js';
+import { buildApiUrl, buildPlaceholderApiUrl, hasPlaceholderApi, shouldUseLocalPlaceholders } from './config.js';
+import { isPlaceholderRequest, localPlaceholderRequest } from './placeholders.js';
 
 export async function apiRequest(path, options = {}) {
+  if (isPlaceholderRequest(path) && shouldUseLocalPlaceholders()) {
+    return localPlaceholderRequest(path, options);
+  }
+
   const auth = getStoredAuth();
   const headers = new Headers(options.headers || {});
   headers.set('Accept', 'application/json, text/plain, */*');
@@ -14,7 +19,8 @@ export async function apiRequest(path, options = {}) {
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(buildApiUrl(path), { ...options, headers });
+  const requestUrl = isPlaceholderRequest(path) ? buildPlaceholderApiUrl(path) : buildApiUrl(path);
+  const response = await fetch(requestUrl, { ...options, headers });
   const payload = await readBody(response);
 
   if (response.status === 401) {

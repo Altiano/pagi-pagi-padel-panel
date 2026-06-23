@@ -6,15 +6,14 @@ This frontend talks to the existing Pagi Pagi Padel panel API. The notes below d
 
 Local development:
 
-- Browser calls `/api/*`.
-- Vite proxies those requests to `PANEL_API_ORIGIN`.
-- Use `PANEL_API_ORIGIN=https://panel.courtside.id` for normal local login/API testing.
-- The Vite default proxy target is `http://127.0.0.1:8787`, which only works when the local Worker proxy is also running. If it is not running, login fails with `ECONNREFUSED 127.0.0.1:8787`.
+- Browser calls the Worker configured by `VITE_API_BASE_URL`.
+- The Worker proxies ordinary `/api/*` requests upstream.
+- The Worker stores `/api/placeholder-bookings` rows in Cloudflare D1.
 
 Static deployment:
 
 - Browser calls `VITE_API_BASE_URL` plus the request path.
-- Backend must allow CORS from the deployed frontend origin.
+- GitHub Pages uses the `PANEL_PROXY_ORIGIN` repository secret for `VITE_API_BASE_URL`.
 
 ## Authentication
 
@@ -149,9 +148,9 @@ Important booking fields used by the UI:
 
 `loadCalendarData` attaches `court_name` to each booking by matching `court_id` to the court list.
 
-## Local Placeholder Bookings
+## Placeholder Bookings
 
-Placeholder bookings are stored by this wrapper and are not sent to the upstream Court Site API. They are intended for tentative holds while staff negotiate or wait for payment.
+Placeholder bookings are stored by this wrapper and are not sent to the upstream API. They are intended for tentative holds while staff negotiate or wait for payment.
 
 The Worker handles these routes locally before proxying other `/api/*` requests upstream:
 
@@ -186,7 +185,7 @@ Stored fields:
 }
 ```
 
-The frontend maps these rows into booking-like calendar entries with `is_placeholder: true`, `booking_type: "placeholder"`, and an amber dashed visual treatment. `confirmed_booking_id` is reserved for a future flow that creates a real Court Site booking after payment.
+The frontend maps these rows into booking-like calendar entries with `is_placeholder: true`, `booking_type: "placeholder"`, and an amber dashed visual treatment. `confirmed_booking_id` is reserved for a future flow that creates a real upstream booking after payment.
 
 ## Error Handling
 
