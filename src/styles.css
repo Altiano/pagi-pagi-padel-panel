@@ -1070,3 +1070,206 @@ input:focus {
     align-items: stretch;
   }
 }
+
+/* Mobile-friendly experiment: scoped to /mobile so the default path stays untouched. */
+.mobile-experiment.panel-shell {
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
+}
+
+.mobile-experiment .experiment-banner,
+.mobile-login .experiment-banner {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  grid-column: 1 / -1;
+  padding: 10px 16px;
+  background: var(--green-deep);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+@media (max-width: 760px) {
+  .mobile-experiment.panel-shell {
+    display: block;
+    background: linear-gradient(180deg, #fbfcf8 0, var(--bg) 220px);
+  }
+
+  .mobile-experiment .sidebar {
+    position: sticky;
+    top: 36px;
+    z-index: 15;
+    padding: 14px 14px 10px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    background: rgba(251, 252, 248, 0.96);
+    backdrop-filter: blur(16px);
+  }
+
+  .mobile-experiment .sidebar-brand {
+    margin-bottom: 12px;
+  }
+
+  .mobile-experiment .sidebar-brand strong {
+    font-size: 15px;
+  }
+
+  .mobile-experiment .sidebar nav {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scroll-snap-type: x mandatory;
+  }
+
+  .mobile-experiment .nav-group {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 8px;
+    margin: 0;
+  }
+
+  .mobile-experiment .nav-group p {
+    display: none;
+  }
+
+  .mobile-experiment .nav-group button {
+    width: auto;
+    min-height: 40px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    box-shadow: 0 8px 18px rgba(23, 33, 27, 0.06);
+    scroll-snap-align: start;
+    white-space: nowrap;
+  }
+
+  .mobile-experiment .content {
+    height: auto;
+    min-height: calc(100dvh - 132px);
+    overflow: visible;
+    padding: 18px 14px 28px;
+  }
+
+  .mobile-experiment .calendar-page {
+    display: block;
+    height: auto;
+  }
+
+  .mobile-experiment .calendar-topbar,
+  .mobile-experiment .topbar {
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+
+  .mobile-experiment .calendar-topbar h1,
+  .mobile-experiment .topbar h1 {
+    font-size: 34px;
+  }
+
+  .mobile-experiment .topbar-actions,
+  .mobile-experiment .calendar-toolbar,
+  .mobile-experiment .date-controls,
+  .mobile-experiment .calendar-filters {
+    width: 100%;
+  }
+
+  .mobile-experiment .topbar-actions {
+    display: grid;
+    grid-template-columns: 1fr auto;
+  }
+
+  .mobile-experiment .calendar-toolbar {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding: 10px;
+  }
+
+  .mobile-experiment .segmented-control,
+  .mobile-experiment .date-controls,
+  .mobile-experiment .calendar-filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mobile-experiment .date-controls {
+    grid-template-columns: 42px 1fr 42px 78px;
+  }
+
+  .mobile-experiment .date-controls input {
+    width: 100%;
+  }
+
+  .mobile-experiment .calendar-filters {
+    grid-template-columns: 1fr 1fr 42px;
+  }
+
+  .mobile-experiment .open-hours {
+    margin-left: 0;
+    text-align: center;
+  }
+
+  .mobile-experiment .calendar-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+    height: auto;
+  }
+
+  .mobile-experiment .calendar-main-panel {
+    min-height: 68dvh;
+  }
+
+  .mobile-experiment .calendar-scroll-area {
+    max-height: 68dvh;
+  }
+
+  .mobile-experiment .day-calendar {
+    min-width: 720px;
+  }
+
+  .mobile-experiment .day-calendar-header,
+  .mobile-experiment .day-calendar-grid {
+    grid-template-columns: 88px repeat(var(--court-count, 2), minmax(172px, 1fr));
+  }
+
+  .mobile-experiment .day-calendar-header > div {
+    padding: 12px 10px;
+  }
+
+  .mobile-experiment .week-calendar {
+    display: flex;
+    gap: 10px;
+    height: auto;
+    min-height: 0;
+    padding: 10px;
+    background: transparent;
+    scroll-snap-type: x mandatory;
+  }
+
+  .mobile-experiment .week-day {
+    flex: 0 0 82vw;
+    min-height: 560px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    overflow: hidden;
+    scroll-snap-align: center;
+  }
+
+  .mobile-experiment .calendar-detail {
+    position: static;
+    max-height: none;
+    border-radius: 16px;
+  }
+
+  .mobile-experiment .handoff-grid {
+    grid-template-columns: 1fr;
+  }
+}
