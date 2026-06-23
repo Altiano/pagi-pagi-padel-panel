@@ -18,14 +18,15 @@ The goal is not to copy every pixel. The goal is to keep new mockups aligned wit
 | State | Desktop | Mobile |
 | --- | --- | --- |
 | Login | `docs/visual-reference/login-desktop.jpg` | `docs/visual-reference/login-mobile.jpg` |
-| Authenticated Calendar | `docs/visual-reference/panel-calendar-desktop.jpg` | `docs/visual-reference/panel-calendar-mobile.jpg` |
+| Calendar - Week view | `docs/visual-reference/panel-calendar-week-desktop.png` | `docs/visual-reference/panel-calendar-mobile.jpg` |
+| Calendar - Day view | `docs/visual-reference/panel-calendar-day-desktop.png` | Not captured |
 
 ## Capture Notes
 
-- Captured from the live Vite app at `http://localhost:5173/`.
-- Desktop viewport: `1280x720`.
+- Captured from the live Vite app at `http://localhost:5173/` or `http://127.0.0.1:5173/`.
+- Desktop screenshots use the active Chrome viewport from the authenticated local app.
 - Mobile viewport: `390x844`.
-- Authenticated Calendar screenshots use seeded local browser auth for visual-reference purposes.
+- Authenticated Calendar screenshots use local browser auth for visual-reference purposes.
 - If the backend is unavailable during capture, the Calendar reference may show an API error state. That is still useful for layout, typography, spacing, colors, sidebar, toolbar, and panel styling.
 
 ## When To Update
