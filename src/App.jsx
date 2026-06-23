@@ -10,10 +10,13 @@ import {
   LayoutDashboard,
   LockKeyhole,
   LogOut,
+  Pencil,
+  Plus,
   RefreshCw,
   Settings,
   ShieldCheck,
   Sparkles,
+  Trash2,
   Users,
   X,
 } from 'lucide-react';
@@ -51,6 +54,12 @@ const FALLBACK_MITRA_ID = 'a074e244-76c0-4587-9dff-0c7833f0bfa3';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MOBILE_VIEW_STORAGE_KEY = 'ppp-panel-view-mode';
 const MOBILE_MEDIA_QUERY = '(max-width: 760px)';
+const PLACEHOLDER_STATUSES = [
+  { label: 'Negotiating', value: 'negotiating' },
+  { label: 'Awaiting payment', value: 'awaiting_payment' },
+  { label: 'Ready to confirm', value: 'ready_to_confirm' },
+  { label: 'Cancelled', value: 'cancelled' },
+];
 
 const mobileNavItems = [
   { label: 'Dashboard', icon: LayoutDashboard, nav: 'Dashboard' },
@@ -387,6 +396,8 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout }) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [state, setState] = useState({ loading: true, error: '', courts: [], openHour: null, bookingsByDate: {} });
   const [selectedBooking, setSelectedBooking] = useState(null);
+  const [placeholderEditor, setPlaceholderEditor] = useState({ mode: 'closed', booking: null });
+  const [placeholderStatus, setPlaceholderStatus] = useState({ state: 'idle', message: '' });
   const [hiddenAboveCount, setHiddenAboveCount] = useState(0);
   const [hiddenBelowCount, setHiddenBelowCount] = useState(0);
   const calendarPanelRef = useRef(null);
@@ -428,9 +439,12 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout }) {
 
     const updateHiddenBookings = () => {
       const panelRect = panel.getBoundingClientRect();
+      const headerRect = panel.querySelector('.day-calendar-header')?.getBoundingClientRect();
+      const visibleTop = Math.max(panelRect.top, headerRect?.bottom || panelRect.top);
+      const visibleBottom = panelRect.bottom - 24;
       const blocks = Array.from(panel.querySelectorAll('.booking-block'));
-      const above = blocks.filter((block) => block.getBoundingClientRect().bottom < panelRect.top + 24);
-      const below = blocks.filter((block) => block.getBoundingClientRect().top > panelRect.bottom - 24);
+      const above = blocks.filter((block) => block.getBoundingClientRect().bottom < visibleTop + 8);
+      const below = blocks.filter((block) => block.getBoundingClientRect().top > visibleBottom);
       setHiddenAboveCount(above.length);
       setHiddenBelowCount(below.length);
     };
@@ -451,6 +465,59 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout }) {
 
   function moveWeek(weeks) {
     setSelectedDate((current) => shiftDate(current, weeks * 7));
+  }
+
+  function openCreatePlaceholder(draft = null) {
+    setPlaceholderStatus({ state: 'idle', message: '' });
+    setPlaceholderEditor({ mode: 'create', booking: null, draft });
+  }
+
+  function openEditPlaceholder(booking) {
+    setPlaceholderStatus({ state: 'idle', message: '' });
+    setPlaceholderEditor({ mode: 'edit', booking });
+  }
+
+  async function savePlaceholder(form) {
+    setPlaceholderStatus({ state: 'loading', message: 'Saving placeholder...' });
+    const court = state.courts.find((item) => item.id === form.court_id);
+    const payload = {
+      ...form,
+      mitra_id: mitraId,
+      court_name: court?.name || form.court_name || '',
+      estimated_price: Number(form.estimated_price || 0),
+    };
+    const editingId = placeholderEditor.mode === 'edit' ? placeholderEditor.booking?.placeholder_id || placeholderEditor.booking?.id : null;
+    const saved = await apiRequest(editingId ? `/api/placeholder-bookings/${editingId}` : '/api/placeholder-bookings', {
+      method: editingId ? 'PUT' : 'POST',
+      body: JSON.stringify(payload),
+    });
+    setPlaceholderStatus({ state: 'success', message: 'Placeholder saved.' });
+    setPlaceholderEditor({ mode: 'closed', booking: null });
+    setRefreshKey((current) => current + 1);
+    if (saved?.data) setSelectedBooking(normalizePlaceholderBooking(saved.data));
+  }
+
+  async function deletePlaceholder(booking) {
+    const id = booking?.placeholder_id || booking?.id;
+    if (!id) return;
+    setPlaceholderStatus({ state: 'loading', message: 'Deleting placeholder...' });
+    await apiRequest(`/api/placeholder-bookings/${id}`, { method: 'DELETE' });
+    setPlaceholderStatus({ state: 'success', message: 'Placeholder deleted.' });
+    setSelectedBooking(null);
+    setRefreshKey((current) => current + 1);
+  }
+
+  function findPlaceholderConflicts(form) {
+    const bookings = state.bookingsByDate[form.date] || [];
+    const candidate = {
+      court_id: form.court_id,
+      time: `${form.start_time}-${form.end_time}`,
+    };
+    const editingId = placeholderEditor.booking?.id;
+    return bookings.filter((booking) => {
+      if (booking.id === editingId || booking.placeholder_id === editingId) return false;
+      return booking.court_id === candidate.court_id && bookingsOverlap(candidate, booking);
+    });
   }
 
   return (
@@ -496,6 +563,10 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout }) {
             <RefreshCw size={15} />
           </button>
         </div>
+        <button className="placeholder-create-button" onClick={openCreatePlaceholder} type="button">
+          <Plus size={16} />
+          Placeholder
+        </button>
         <div className="open-hours">
           Open {state.openHour?.open_hours || '06:00'} - {state.openHour?.close_hours || '24:00'}
         </div>
@@ -540,6 +611,7 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout }) {
                 openHour={state.openHour}
                 selectedBooking={selectedBooking}
                 selectedDate={selectedDate}
+                onCreatePlaceholder={openCreatePlaceholder}
                 onSelectBooking={setSelectedBooking}
               />
             ) : (
@@ -574,9 +646,31 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout }) {
           selectedDaySummary={selectedDaySummary}
           view={view}
           weekSummary={weekSummary}
+          onDeletePlaceholder={deletePlaceholder}
+          onEditPlaceholder={openEditPlaceholder}
           onOpenDay={() => setView('day')}
         />
       </section>
+      {isMobileApp ? (
+        <button className="mobile-placeholder-fab" onClick={openCreatePlaceholder} type="button">
+          <Plus size={20} />
+        </button>
+      ) : null}
+      {placeholderEditor.mode !== 'closed' ? (
+        <PlaceholderBookingEditor
+          booking={placeholderEditor.booking}
+          conflicts={findPlaceholderConflicts}
+          courts={state.courts}
+          defaultDate={selectedDate}
+          defaultName={displayName}
+          draft={placeholderEditor.draft}
+          isSaving={placeholderStatus.state === 'loading'}
+          mode={placeholderEditor.mode}
+          openHour={state.openHour}
+          onClose={() => setPlaceholderEditor({ mode: 'closed', booking: null })}
+          onSave={savePlaceholder}
+        />
+      ) : null}
       {isMobileApp && selectedBooking ? (
         <div className="mobile-detail-backdrop" onClick={() => setSelectedBooking(null)}>
           <div onClick={(event) => event.stopPropagation()}>
@@ -587,6 +681,8 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout }) {
               view={view}
               weekSummary={weekSummary}
               onClose={() => setSelectedBooking(null)}
+              onDeletePlaceholder={deletePlaceholder}
+              onEditPlaceholder={openEditPlaceholder}
               onOpenDay={() => setView('day')}
             />
           </div>
@@ -633,9 +729,9 @@ function MobileDayAgenda({ bookings, courts, openHour, selectedBooking, selected
                   <span className="mobile-booking-time">{entry.booking.time || getStartLabel(entry.booking)}</span>
                   <span className="mobile-booking-main">
                     <strong>{entry.booking.booking_owner || entry.booking.name}</strong>
-                    <small>{entry.booking.booking_type || entry.booking.type || 'booking'} · {formatCurrency(entry.booking.price)}</small>
+                    <small>{getBookingMeta(entry.booking)}</small>
                   </span>
-                  <span className="mobile-payment-pill">{entry.booking.booking_paid ? 'Paid' : 'Unpaid'}</span>
+                  <span className="mobile-payment-pill">{entry.booking.is_placeholder ? 'Placeholder' : entry.booking.booking_paid ? 'Paid' : 'Unpaid'}</span>
                 </button>
               )
             )) : (
@@ -699,12 +795,13 @@ function MobileWeekCalendar({ bookingsByDate, courts, openHour, selectedDate, we
   );
 }
 
-function DayCalendar({ bookings, courts, openHour, selectedBooking, selectedDate, onSelectBooking }) {
+function DayCalendar({ bookings, courts, openHour, selectedBooking, selectedDate, onCreatePlaceholder, onSelectBooking }) {
   const hours = buildHours(openHour);
   const intervalCount = Math.max(hours.length - 1, 1);
   const startMinutes = parseTimeToMinutes(openHour?.open_hours || '06:00');
   const endMinutes = parseTimeToMinutes(openHour?.close_hours || '24:00');
   const totalMinutes = Math.max(endMinutes - startMinutes, 60);
+  const slotMinutes = buildSlotMinutes(startMinutes, endMinutes);
 
   return (
     <div className="day-calendar">
@@ -727,6 +824,36 @@ function DayCalendar({ bookings, courts, openHour, selectedBooking, selectedDate
         {courts.map((court) => (
           <div className="court-lane" key={court.id}>
             {hours.slice(0, -1).map((hour) => <span className="hour-line" key={hour} />)}
+            {slotMinutes.map((minutes) => {
+              const slotBooking = {
+                court_id: court.id,
+                  time: `${formatTimeInput(minutes)}-${formatTimeInput(Math.min(minutes + 60, endMinutes))}`,
+              };
+              const isAvailable = !bookings.some((booking) => booking.court_id === court.id && bookingsOverlap(slotBooking, booking));
+              if (!isAvailable) return null;
+              return (
+                <button
+                  aria-label={`Create placeholder for ${court.name} at ${formatTimeInput(minutes)}`}
+                  className="day-slot-button"
+                  key={`${court.id}-${minutes}`}
+                  onClick={() => onCreatePlaceholder?.({
+                    court_id: court.id,
+                    court_name: court.name,
+                    date: selectedDate,
+                    start_time: formatTimeInput(minutes),
+                    end_time: formatTimeInput(Math.min(minutes + 60, endMinutes)),
+                  })}
+                  style={{
+                    top: `${((minutes - startMinutes) / totalMinutes) * 100}%`,
+                    height: `${(60 / totalMinutes) * 100}%`,
+                  }}
+                  title={`Create placeholder at ${formatTimeInput(minutes)}`}
+                  type="button"
+                >
+                  <span>+</span>
+                </button>
+              );
+            })}
             {bookings.filter((booking) => booking.court_id === court.id).map((booking) => {
               const position = getBookingPosition(booking, startMinutes, totalMinutes);
               return (
@@ -739,8 +866,8 @@ function DayCalendar({ bookings, courts, openHour, selectedBooking, selectedDate
                 >
                   <strong>{booking.booking_owner || booking.name}</strong>
                   <span>{booking.time}</span>
-                  <small>{formatCurrency(booking.price)} · {booking.booking_type || 'booking'}</small>
-                  {booking.notes ? <em>Notes</em> : null}
+                  <small>{getBookingMeta(booking)}</small>
+                  {booking.is_placeholder ? <em>Placeholder</em> : booking.notes ? <em>Notes</em> : null}
                 </button>
               );
             })}
@@ -788,6 +915,7 @@ function WeekCalendar({ bookingsByDate, courts, openHour, selectedDate, weekDays
                         <button className={getBookingTone(entry.booking)} key={entry.booking.id} onClick={() => onSelectBooking(entry.booking)} type="button">
                           <span>{getStartLabel(entry.booking)}</span>
                           <strong>{entry.booking.booking_owner || entry.booking.name}</strong>
+                          {entry.booking.is_placeholder ? <small>Placeholder</small> : null}
                         </button>
                       )
                     )) : <span className="empty-slot">Available</span>}
@@ -806,12 +934,13 @@ function WeekCalendar({ bookingsByDate, courts, openHour, selectedDate, weekDays
   );
 }
 
-function CalendarDetailPanel({ booking, selectedDate, selectedDaySummary, view, weekSummary, onClose, onOpenDay }) {
+function CalendarDetailPanel({ booking, selectedDate, selectedDaySummary, view, weekSummary, onClose, onDeletePlaceholder, onEditPlaceholder, onOpenDay }) {
   if (booking) {
+    const isPlaceholder = booking.is_placeholder;
     return (
       <aside className="calendar-detail">
         <div className="panel-label-row">
-          <span className="panel-label">Booking detail</span>
+          <span className="panel-label">{isPlaceholder ? 'Placeholder booking' : 'Booking detail'}</span>
           {onClose ? (
             <button aria-label="Close booking detail" onClick={onClose} type="button">
               <X size={16} />
@@ -821,18 +950,35 @@ function CalendarDetailPanel({ booking, selectedDate, selectedDaySummary, view, 
         <h2>{booking.booking_owner || booking.name}</h2>
         <dl>
           <div><dt>Court</dt><dd>{booking.court_name || booking.court_id}</dd></div>
+          {isPlaceholder ? <div><dt>Date</dt><dd>{formatLongDate(booking.date)}</dd></div> : null}
           <div><dt>Time</dt><dd>{booking.time}</dd></div>
           <div><dt>Duration</dt><dd>{booking.duration || getDurationMinutes(booking)} min</dd></div>
-          <div><dt>Type</dt><dd>{booking.booking_type || booking.type}</dd></div>
-          <div><dt>Payment</dt><dd>{booking.booking_paid ? 'Paid' : 'Unpaid'}</dd></div>
+          <div><dt>Type</dt><dd>{isPlaceholder ? 'Local placeholder' : booking.booking_type || booking.type}</dd></div>
+          <div><dt>Payment</dt><dd>{isPlaceholder ? formatStatus(booking.status) : booking.booking_paid ? 'Paid' : 'Unpaid'}</dd></div>
           <div><dt>Price</dt><dd>{formatCurrency(booking.price)}</dd></div>
+          {isPlaceholder ? <div><dt>Contact</dt><dd>{booking.customer_contact || '-'}</dd></div> : null}
           <div><dt>Notes</dt><dd>{booking.notes || 'No notes'}</dd></div>
-          <div><dt>Transaction ID</dt><dd>{booking.trans_id || '-'}</dd></div>
+          {isPlaceholder ? (
+            <>
+              <div><dt>Created by</dt><dd>{booking.created_by_name || '-'}</dd></div>
+              <div><dt>Updated by</dt><dd>{booking.updated_by_name || '-'}</dd></div>
+            </>
+          ) : (
+            <div><dt>Transaction ID</dt><dd>{booking.trans_id || '-'}</dd></div>
+          )}
         </dl>
-        <div className="detail-actions">
-          <button type="button"><ExternalLink size={15} /> View transaction</button>
-          <button onClick={() => copyText(booking.trans_id)} type="button"><Copy size={15} /> Copy ID</button>
-        </div>
+        {isPlaceholder ? (
+          <div className="detail-actions">
+            <button onClick={() => onEditPlaceholder?.(booking)} type="button"><Pencil size={15} /> Edit placeholder</button>
+            <button disabled type="button"><ExternalLink size={15} /> Mark paid & confirm</button>
+            <button className="danger-action" onClick={() => onDeletePlaceholder?.(booking)} type="button"><Trash2 size={15} /> Delete</button>
+          </div>
+        ) : (
+          <div className="detail-actions">
+            <button type="button"><ExternalLink size={15} /> View transaction</button>
+            <button onClick={() => copyText(booking.trans_id)} type="button"><Copy size={15} /> Copy ID</button>
+          </div>
+        )}
       </aside>
     );
   }
@@ -856,20 +1002,139 @@ function CalendarDetailPanel({ booking, selectedDate, selectedDaySummary, view, 
   );
 }
 
+function PlaceholderBookingEditor({ booking, conflicts, courts, defaultDate, defaultName, draft, isSaving, mode, openHour, onClose, onSave }) {
+  const [form, setForm] = useState(() => buildPlaceholderForm({ booking, courts, defaultDate, defaultName, draft, openHour }));
+  const [error, setError] = useState('');
+  const conflictList = conflicts(form);
+  const hasConflict = conflictList.length > 0;
+
+  function updateField(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError('');
+    if (parseTimeToMinutes(form.end_time) <= parseTimeToMinutes(form.start_time)) {
+      setError('End time must be after start time.');
+      return;
+    }
+    if (hasConflict) {
+      setError('This placeholder overlaps with an existing booking.');
+      return;
+    }
+
+    try {
+      await onSave(form);
+    } catch (saveError) {
+      setError(saveError.message);
+    }
+  }
+
+  return (
+    <div className="placeholder-editor-backdrop" onClick={onClose}>
+      <aside className="placeholder-editor" onClick={(event) => event.stopPropagation()}>
+        <div className="panel-label-row">
+          <span className="panel-label">{mode === 'edit' ? 'Edit placeholder' : 'New placeholder'}</span>
+          <button aria-label="Close placeholder editor" onClick={onClose} type="button">
+            <X size={16} />
+          </button>
+        </div>
+        <h2>{mode === 'edit' ? 'Update tentative hold' : 'Create tentative hold'}</h2>
+        <form onSubmit={handleSubmit}>
+          <label>
+            Court
+            <select onChange={(event) => updateField('court_id', event.target.value)} required value={form.court_id}>
+              <option value="">Select court</option>
+              {courts.map((court) => <option key={court.id} value={court.id}>{court.name}</option>)}
+            </select>
+          </label>
+          <div className="form-grid two">
+            <label>
+              Date
+              <input onChange={(event) => updateField('date', event.target.value)} required type="date" value={form.date} />
+            </label>
+            <label>
+              Status
+              <select onChange={(event) => updateField('status', event.target.value)} value={form.status}>
+                {PLACEHOLDER_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="form-grid two">
+            <label>
+              Start time
+              <input onChange={(event) => updateField('start_time', event.target.value)} required type="time" value={form.start_time} />
+            </label>
+            <label>
+              End time
+              <input onChange={(event) => updateField('end_time', event.target.value)} required type="time" value={form.end_time} />
+            </label>
+          </div>
+          <label>
+            Customer name
+            <input onChange={(event) => updateField('customer_name', event.target.value)} placeholder="Customer or group name" required value={form.customer_name} />
+          </label>
+          <label>
+            Contact
+            <input onChange={(event) => updateField('customer_contact', event.target.value)} placeholder="Phone, WhatsApp, or email" value={form.customer_contact} />
+          </label>
+          <div className="form-grid two">
+            <label>
+              Estimated price
+              <input min="0" onChange={(event) => updateField('estimated_price', event.target.value)} type="number" value={form.estimated_price} />
+            </label>
+            <label>
+              Created by
+              <input onChange={(event) => updateField('created_by_name', event.target.value)} placeholder="PIC name" value={form.created_by_name} />
+            </label>
+          </div>
+          <label>
+            Updated by
+            <input onChange={(event) => updateField('updated_by_name', event.target.value)} placeholder="PIC name" value={form.updated_by_name} />
+          </label>
+          <label>
+            Notes
+            <textarea onChange={(event) => updateField('notes', event.target.value)} placeholder="Negotiation/payment context" rows={4} value={form.notes} />
+          </label>
+          {hasConflict ? (
+            <p className="status-line error">Overlaps with {conflictList.length} booking{conflictList.length > 1 ? 's' : ''} on this court.</p>
+          ) : null}
+          {error ? <p className="status-line error">{error}</p> : null}
+          <div className="editor-actions">
+            <button className="logout-button" onClick={onClose} type="button">Cancel</button>
+            <button className="primary-button" disabled={isSaving || hasConflict} type="submit">
+              {isSaving ? 'Saving...' : mode === 'edit' ? 'Save changes' : 'Create placeholder'}
+            </button>
+          </div>
+        </form>
+      </aside>
+    </div>
+  );
+}
+
 async function loadCalendarData({ mitraId, selectedDate, weekDays }) {
-  const [courts, openHour, weekResponses] = await Promise.all([
+  const [courts, openHour, weekResponses, placeholdersResponse] = await Promise.all([
     apiRequest(`/api/admin/mitra/court/${mitraId}/list`),
     apiRequest(`/api/admin/schedule/open-hour-date?mitra_id=${mitraId}&date=${selectedDate}`),
     Promise.all(weekDays.map((date) => apiRequest(`/api/admin/schedule-cal-courts?mitra_id=${mitraId}&date=${date}`)
       .then((response) => [date, response?.lists || []]))),
+    apiRequest(`/api/placeholder-bookings?mitra_id=${mitraId}&from=${weekDays[0]}&to=${weekDays[weekDays.length - 1]}`)
+      .catch(() => ({ lists: [] })),
   ]);
 
   const courtList = Array.isArray(courts) ? courts : [];
   const courtNames = new Map(courtList.map((court) => [court.id, court.name]));
-  const bookingsByDate = Object.fromEntries(weekResponses.map(([date, bookings]) => [
-    date,
-    bookings.map((booking) => ({ ...booking, court_name: courtNames.get(booking.court_id) })),
-  ]));
+  const placeholdersByDate = (placeholdersResponse?.lists || []).reduce((map, placeholder) => {
+    const booking = normalizePlaceholderBooking(placeholder);
+    map[booking.date] = [...(map[booking.date] || []), booking];
+    return map;
+  }, {});
+  const bookingsByDate = Object.fromEntries(weekResponses.map(([date, bookings]) => {
+    const upstreamBookings = bookings.map((booking) => ({ ...booking, court_name: courtNames.get(booking.court_id) }));
+    const localPlaceholders = placeholdersByDate[date] || [];
+    return [date, [...upstreamBookings, ...localPlaceholders].sort((first, second) => getBookingStartMinutes(first) - getBookingStartMinutes(second))];
+  }));
 
   return {
     courts: courtList,
@@ -888,6 +1153,87 @@ function findMitraId(value, depth = 0) {
     if (found) return found;
   }
   return null;
+}
+
+function normalizePlaceholderBooking(placeholder) {
+  return {
+    ...placeholder,
+    id: `placeholder-${placeholder.id}`,
+    placeholder_id: placeholder.id,
+    booking_owner: placeholder.customer_name,
+    name: placeholder.customer_name,
+    booking_type: 'placeholder',
+    booking_paid: false,
+    court_id: placeholder.court_id,
+    court_name: placeholder.court_name,
+    customer_contact: placeholder.customer_contact,
+    date: placeholder.date,
+    duration: Math.max(parseTimeToMinutes(placeholder.end_time) - parseTimeToMinutes(placeholder.start_time), 0),
+    is_placeholder: true,
+    notes: placeholder.notes,
+    price: placeholder.estimated_price,
+    status: placeholder.status,
+    time: `${placeholder.start_time}-${placeholder.end_time}`,
+    type: 'placeholder',
+  };
+}
+
+function buildPlaceholderForm({ booking, courts, defaultDate, defaultName, draft, openHour }) {
+  if (booking) {
+    const [startTime, endTime] = String(booking.time || '').split('-');
+    return {
+      court_id: booking.court_id || '',
+      court_name: booking.court_name || '',
+      date: booking.date || defaultDate,
+      start_time: startTime || openHour?.open_hours || '06:00',
+      end_time: endTime || shiftTime(startTime || openHour?.open_hours || '06:00', 60),
+      customer_name: booking.booking_owner || booking.name || '',
+      customer_contact: booking.customer_contact || '',
+      estimated_price: String(booking.price || 0),
+      status: booking.status || 'awaiting_payment',
+      notes: booking.notes || '',
+      created_by_name: booking.created_by_name || defaultName || '',
+      updated_by_name: booking.updated_by_name || defaultName || '',
+    };
+  }
+
+  const startTime = draft?.start_time || openHour?.open_hours || '06:00';
+  const court = courts.find((item) => item.id === draft?.court_id) || courts[0];
+  return {
+    court_id: court?.id || '',
+    court_name: court?.name || draft?.court_name || '',
+    date: draft?.date || defaultDate,
+    start_time: startTime,
+    end_time: draft?.end_time || shiftTime(startTime, 60),
+    customer_name: '',
+    customer_contact: '',
+    estimated_price: '',
+    status: 'awaiting_payment',
+    notes: '',
+    created_by_name: defaultName || '',
+    updated_by_name: defaultName || '',
+  };
+}
+
+function buildSlotMinutes(startMinutes, endMinutes) {
+  const minutes = [];
+  for (let minute = startMinutes; minute < endMinutes; minute += 60) {
+    minutes.push(minute);
+  }
+  return minutes;
+}
+
+function formatTimeInput(totalMinutes) {
+  const hour = Math.floor(totalMinutes / 60);
+  const minute = totalMinutes % 60;
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+function shiftTime(time, minutesToAdd) {
+  const total = Math.min(parseTimeToMinutes(time) + minutesToAdd, 24 * 60);
+  const hour = Math.floor(total / 60);
+  const minute = total % 60;
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
 
 function toDateInputValue(date) {
@@ -1012,13 +1358,30 @@ function formatCompactTime(totalMinutes) {
 }
 
 function getBookingTone(booking) {
+  if (booking.is_placeholder) return 'tone-placeholder';
   if (booking.booking_paid) return 'tone-blue';
   if (booking.is_paylink || booking.booking_type === 'online') return 'tone-blue';
-  if (booking.notes) return 'tone-amber';
   if (booking.type === 'event') return 'tone-sky';
   if (booking.type === 'coach' || booking.type === 'coaching') return 'tone-mint';
   if (booking.booking_type === 'offline') return 'tone-blue';
   return 'tone-slate';
+}
+
+function getBookingMeta(booking) {
+  if (booking.is_placeholder) return `${formatCurrency(booking.price)} · ${formatStatus(booking.status)}`;
+  return `${booking.booking_type || booking.type || 'booking'} · ${formatCurrency(booking.price)}`;
+}
+
+function formatStatus(value) {
+  return PLACEHOLDER_STATUSES.find((status) => status.value === value)?.label || 'Awaiting payment';
+}
+
+function bookingsOverlap(first, second) {
+  const firstStart = getBookingStartMinutes(first);
+  const firstEnd = getBookingEndMinutes(first);
+  const secondStart = getBookingStartMinutes(second);
+  const secondEnd = getBookingEndMinutes(second);
+  return firstStart < secondEnd && secondStart < firstEnd;
 }
 
 function minutesFromEpoch(value) {

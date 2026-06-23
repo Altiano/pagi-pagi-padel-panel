@@ -4,3 +4,8 @@ compatibility_date = "2026-06-23"
 
 [vars]
 ALLOWED_ORIGINS = "http://127.0.0.1:5173,https://altiano.github.io"
+
+[[d1_databases]]
+binding = "PLACEHOLDER_DB"
+database_name = "pagi-pagi-padel-placeholders"
+database_id = "replace-with-cloudflare-d1-database-id"
