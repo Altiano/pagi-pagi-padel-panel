@@ -51,18 +51,19 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function App() {
   const [auth, setAuth] = useState(() => getStoredAuth());
+  const isMobileExperiment = window.location.pathname.startsWith('/mobile');
 
   if (!auth) {
-    return <LoginScreen onAuthenticated={setAuth} />;
+    return <LoginScreen isMobileExperiment={isMobileExperiment} onAuthenticated={setAuth} />;
   }
 
-  return <PanelShell auth={auth} onLogout={() => {
+  return <PanelShell auth={auth} isMobileExperiment={isMobileExperiment} onLogout={() => {
     clearStoredAuth();
     setAuth(null);
   }} />;
 }
 
-function LoginScreen({ onAuthenticated }) {
+function LoginScreen({ isMobileExperiment = false, onAuthenticated }) {
   const [form, setForm] = useState({ username: '', password: '', remember: false });
   const [status, setStatus] = useState({ state: 'idle', message: '' });
 
@@ -80,7 +81,10 @@ function LoginScreen({ onAuthenticated }) {
   }
 
   return (
-    <main className="login-page">
+    <main className={`login-page ${isMobileExperiment ? 'mobile-experiment mobile-login' : ''}`}>
+      {isMobileExperiment ? (
+        <div className="experiment-banner">Mobile experiment · /mobile</div>
+      ) : null}
       <section className="login-panel" aria-label="Sign in">
         <div className="login-card">
           <div className="form-heading">
@@ -143,7 +147,7 @@ function LoginScreen({ onAuthenticated }) {
   );
 }
 
-function PanelShell({ auth, onLogout }) {
+function PanelShell({ auth, isMobileExperiment = false, onLogout }) {
   const [meState, setMeState] = useState({ loading: true, data: null, error: '' });
   const [activeNav, setActiveNav] = useState('Calendar');
 
@@ -166,7 +170,10 @@ function PanelShell({ auth, onLogout }) {
   const mitraId = findMitraId(meState.data) || FALLBACK_MITRA_ID;
 
   return (
-    <main className="panel-shell">
+    <main className={`panel-shell ${isMobileExperiment ? 'mobile-experiment' : ''}`}>
+      {isMobileExperiment ? (
+        <div className="experiment-banner">Mobile-friendly experiment · live at /mobile</div>
+      ) : null}
       <aside className="sidebar">
         <div className="sidebar-brand">
           <span className="brand-mark small">PP</span>
