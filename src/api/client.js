@@ -19,7 +19,7 @@ export async function apiRequest(path, options = {}) {
     headers.set('Content-Type', 'application/json');
   }
 
-  const requestUrl = isPlaceholderRequest(path) ? buildPlaceholderApiUrl(path) : buildApiUrl(path);
+  const requestUrl = isPlaceholderRequest(path) && hasPlaceholderApi() ? buildPlaceholderApiUrl(path) : buildApiUrl(path);
   const response = await fetch(requestUrl, { ...options, headers });
   const payload = await readBody(response);
 
