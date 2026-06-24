@@ -9,6 +9,8 @@ const SAFE_REQUEST_HEADERS = new Set([
 const DEFAULT_ALLOWED_METHODS = 'GET,POST,PUT,PATCH,DELETE,OPTIONS';
 const DEFAULT_ALLOWED_HEADERS = 'authorization,content-type,x-requested-with';
 const PLACEHOLDER_PREFIX = '/api/placeholder-bookings';
+const VIRTUAL_USERS_PREFIX = '/api/virtual-users';
+const VIRTUAL_LOGIN_PREFIX = '_';
 
 function getAllowedOrigin(request, env) {
   const origin = request.headers.get('Origin');
@@ -118,6 +120,282 @@ async function readJsonBody(request) {
   } catch {
     return null;
   }
+}
+
+async function readJsonResponse(response) {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: text };
+  }
+}
+
+function requireAppDb(env) {
+  if (!env.PLACEHOLDER_DB) {
+    return Response.json({ error: 'Application database is not configured.' }, { status: 500 });
+  }
+  return null;
+}
+
+async function ensureVirtualUsersTable(db) {
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS virtual_users (
+      id TEXT PRIMARY KEY,
+      username TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL,
+      password_salt TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      permissions TEXT NOT NULL DEFAULT '[]',
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    )
+  `).run();
+  await db.prepare('CREATE INDEX IF NOT EXISTS idx_virtual_users_username ON virtual_users (username)').run();
+}
+
+function normalizeVirtualUsername(value = '') {
+  return String(value).trim().replace(/^_+/, '').toLowerCase();
+}
+
+function normalizePermissions(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((item) => String(item || '').trim()).filter(Boolean))];
+}
+
+function validateVirtualUser(payload, { requirePassword = false } = {}) {
+  if (!payload.username) return 'Username is required.';
+  if (!/^[a-z0-9][a-z0-9._-]{1,31}$/.test(payload.username)) {
+    return 'Username must be 2-32 characters and use letters, numbers, dots, dashes, or underscores.';
+  }
+  if (!payload.display_name) return 'Display name is required.';
+  if (requirePassword && !payload.password) return 'Password is required.';
+  if (payload.password && String(payload.password).length < 4) return 'Password must be at least 4 characters.';
+  return '';
+}
+
+function rowToVirtualUser(row) {
+  let permissions = [];
+  try {
+    permissions = JSON.parse(row.permissions || '[]');
+  } catch {
+    permissions = [];
+  }
+
+  return {
+    id: row.id,
+    username: row.username,
+    login_username: `${VIRTUAL_LOGIN_PREFIX}${row.username}`,
+    display_name: row.display_name,
+    permissions,
+    is_active: Boolean(row.is_active),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+function randomHex(byteLength = 16) {
+  const bytes = new Uint8Array(byteLength);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function hashPassword(password, salt) {
+  const encoded = new TextEncoder().encode(`${salt}:${password}`);
+  const digest = await crypto.subtle.digest('SHA-256', encoded);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function safeEqual(first, second) {
+  if (first.length !== second.length) return false;
+  let result = 0;
+  for (let index = 0; index < first.length; index += 1) {
+    result |= first.charCodeAt(index) ^ second.charCodeAt(index);
+  }
+  return result === 0;
+}
+
+async function handleVirtualUsersRequest(request, env) {
+  const dbError = requireAppDb(env);
+  if (dbError) return withCors(dbError, request, env);
+
+  await ensureVirtualUsersTable(env.PLACEHOLDER_DB);
+
+  const url = new URL(request.url);
+  const id = url.pathname.slice(VIRTUAL_USERS_PREFIX.length).replace(/^\//, '');
+
+  if (request.method === 'GET' && !id) {
+    const { results } = await env.PLACEHOLDER_DB.prepare(`
+      SELECT * FROM virtual_users
+      WHERE deleted_at IS NULL
+      ORDER BY display_name COLLATE NOCASE, username COLLATE NOCASE
+    `).all();
+    return withCors(Response.json({ lists: (results || []).map(rowToVirtualUser) }), request, env);
+  }
+
+  if (request.method === 'POST' && !id) {
+    const body = await readJsonBody(request) || {};
+    const payload = {
+      username: normalizeVirtualUsername(body.username),
+      display_name: String(body.display_name || '').trim(),
+      password: String(body.password || ''),
+      permissions: normalizePermissions(body.permissions),
+      is_active: body.is_active !== false,
+    };
+    const validationError = validateVirtualUser(payload, { requirePassword: true });
+    if (validationError) {
+      return withCors(Response.json({ error: validationError }, { status: 400 }), request, env);
+    }
+
+    const existing = await env.PLACEHOLDER_DB.prepare('SELECT id FROM virtual_users WHERE username = ? AND deleted_at IS NULL').bind(payload.username).first();
+    if (existing) {
+      return withCors(Response.json({ error: 'A virtual user with that username already exists.' }, { status: 409 }), request, env);
+    }
+
+    const now = new Date().toISOString();
+    const salt = randomHex();
+    const passwordHash = await hashPassword(payload.password, salt);
+    const newId = crypto.randomUUID();
+    await env.PLACEHOLDER_DB.prepare(`
+      INSERT INTO virtual_users (
+        id, username, display_name, password_salt, password_hash,
+        permissions, is_active, created_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      newId,
+      payload.username,
+      payload.display_name,
+      salt,
+      passwordHash,
+      JSON.stringify(payload.permissions),
+      payload.is_active ? 1 : 0,
+      now,
+      now,
+    ).run();
+
+    const row = await env.PLACEHOLDER_DB.prepare('SELECT * FROM virtual_users WHERE id = ?').bind(newId).first();
+    return withCors(Response.json({ data: rowToVirtualUser(row) }, { status: 201 }), request, env);
+  }
+
+  if ((request.method === 'PUT' || request.method === 'PATCH') && id) {
+    const existing = await env.PLACEHOLDER_DB.prepare('SELECT * FROM virtual_users WHERE id = ? AND deleted_at IS NULL').bind(id).first();
+    if (!existing) return withCors(Response.json({ error: 'Virtual user not found.' }, { status: 404 }), request, env);
+
+    const body = await readJsonBody(request) || {};
+    const payload = {
+      username: Object.prototype.hasOwnProperty.call(body, 'username') ? normalizeVirtualUsername(body.username) : existing.username,
+      display_name: Object.prototype.hasOwnProperty.call(body, 'display_name') ? String(body.display_name || '').trim() : existing.display_name,
+      password: String(body.password || ''),
+      permissions: Object.prototype.hasOwnProperty.call(body, 'permissions') ? normalizePermissions(body.permissions) : normalizePermissions(rowToVirtualUser(existing).permissions),
+      is_active: Object.prototype.hasOwnProperty.call(body, 'is_active') ? body.is_active !== false : Boolean(existing.is_active),
+    };
+    const validationError = validateVirtualUser(payload);
+    if (validationError) {
+      return withCors(Response.json({ error: validationError }, { status: 400 }), request, env);
+    }
+
+    const duplicate = await env.PLACEHOLDER_DB.prepare('SELECT id FROM virtual_users WHERE username = ? AND id != ? AND deleted_at IS NULL').bind(payload.username, id).first();
+    if (duplicate) {
+      return withCors(Response.json({ error: 'A virtual user with that username already exists.' }, { status: 409 }), request, env);
+    }
+
+    const now = new Date().toISOString();
+    let salt = existing.password_salt;
+    let passwordHash = existing.password_hash;
+    if (payload.password) {
+      salt = randomHex();
+      passwordHash = await hashPassword(payload.password, salt);
+    }
+
+    await env.PLACEHOLDER_DB.prepare(`
+      UPDATE virtual_users
+      SET username = ?, display_name = ?, password_salt = ?, password_hash = ?,
+        permissions = ?, is_active = ?, updated_at = ?
+      WHERE id = ?
+    `).bind(
+      payload.username,
+      payload.display_name,
+      salt,
+      passwordHash,
+      JSON.stringify(payload.permissions),
+      payload.is_active ? 1 : 0,
+      now,
+      id,
+    ).run();
+
+    const row = await env.PLACEHOLDER_DB.prepare('SELECT * FROM virtual_users WHERE id = ?').bind(id).first();
+    return withCors(Response.json({ data: rowToVirtualUser(row) }), request, env);
+  }
+
+  if (request.method === 'DELETE' && id) {
+    const now = new Date().toISOString();
+    await env.PLACEHOLDER_DB.prepare('UPDATE virtual_users SET deleted_at = ?, updated_at = ? WHERE id = ?').bind(now, now, id).run();
+    return withCors(Response.json({ ok: true }), request, env);
+  }
+
+  return withCors(Response.json({ error: 'Not found.' }, { status: 404 }), request, env);
+}
+
+async function handleVirtualLoginRequest(request, env) {
+  const body = await readJsonBody(request.clone()) || {};
+  const username = String(body.username || '');
+  if (!username.startsWith(VIRTUAL_LOGIN_PREFIX)) {
+    return proxyApiRequest(request, env);
+  }
+
+  const dbError = requireAppDb(env);
+  if (dbError) return withCors(dbError, request, env);
+  if (!env.MASTER_USERNAME || !env.MASTER_PASSWORD) {
+    return withCors(Response.json({ error: 'Virtual login master credentials are not configured.' }, { status: 500 }), request, env);
+  }
+  if (!env.UPSTREAM_ORIGIN) {
+    return withCors(Response.json({ error: 'Proxy upstream is not configured.' }, { status: 500 }), request, env);
+  }
+
+  await ensureVirtualUsersTable(env.PLACEHOLDER_DB);
+
+  const virtualUsername = normalizeVirtualUsername(username);
+  const virtualUser = await env.PLACEHOLDER_DB.prepare('SELECT * FROM virtual_users WHERE username = ? AND deleted_at IS NULL').bind(virtualUsername).first();
+  if (!virtualUser || !virtualUser.is_active) {
+    return withCors(Response.json({ error: 'Virtual user was not found or is inactive.' }, { status: 401 }), request, env);
+  }
+
+  const passwordHash = await hashPassword(String(body.password || ''), virtualUser.password_salt);
+  if (!safeEqual(passwordHash, virtualUser.password_hash)) {
+    return withCors(Response.json({ error: 'Unable to sign in with those credentials.' }, { status: 401 }), request, env);
+  }
+
+  const upstreamOrigin = env.UPSTREAM_ORIGIN.replace(/\/$/, '');
+  const upstreamResponse = await fetch(`${upstreamOrigin}/api/auth/login`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json, text/plain, */*',
+      'Content-Type': 'application/json',
+      Origin: upstreamOrigin,
+      Referer: `${upstreamOrigin}/`,
+    },
+    body: JSON.stringify({
+      username: env.MASTER_USERNAME,
+      password: env.MASTER_PASSWORD,
+      remember: body.remember,
+    }),
+    redirect: 'manual',
+  });
+
+  const payload = await readJsonResponse(upstreamResponse);
+  if (!upstreamResponse.ok) {
+    const message = payload?.message || payload?.error || 'Unable to sign in with the configured master account.';
+    return withCors(Response.json({ error: message }, { status: upstreamResponse.status }), request, env);
+  }
+
+  return withCors(Response.json({
+    ...payload,
+    virtual_user: rowToVirtualUser(virtualUser),
+  }, { status: upstreamResponse.status }), request, env);
 }
 
 function normalizePlaceholderPayload(payload = {}) {
@@ -338,6 +616,14 @@ export default {
     }
 
     const url = new URL(request.url);
+    if (url.pathname === '/api/auth/login' && request.method === 'POST') {
+      return handleVirtualLoginRequest(request, env);
+    }
+
+    if (url.pathname === VIRTUAL_USERS_PREFIX || url.pathname.startsWith(`${VIRTUAL_USERS_PREFIX}/`)) {
+      return handleVirtualUsersRequest(request, env);
+    }
+
     if (url.pathname === PLACEHOLDER_PREFIX || url.pathname.startsWith(`${PLACEHOLDER_PREFIX}/`)) {
       return handlePlaceholderRequest(request, env);
     }

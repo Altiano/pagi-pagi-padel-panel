@@ -8,16 +8,18 @@ Pagi Pagi Padel Panel is a React + Vite admin frontend. It is currently compact 
 2. `App` checks `getStoredAuth()` from `src/api/auth.js`.
 3. If there is no valid auth object, `LoginScreen` is shown.
 4. Login posts to `/api/auth/login`, stores auth in localStorage, then renders the panel.
-5. `PanelShell` loads `/api/auth/me`, derives the display name and `mitraId`, and renders the active screen.
-6. Calendar is the only fully wired screen today. Other navigation items render placeholders.
+5. If the login username starts with `_`, the Worker validates a D1-backed virtual user and signs into upstream with the configured master account before returning the upstream token plus virtual-user metadata.
+6. `PanelShell` loads `/api/auth/me`, derives the display name and `mitraId`, applies wrapper-level virtual-user navigation visibility, and renders the active screen.
+7. Calendar is the only fully wired screen today. Settings now manages virtual users. Other navigation items render placeholders.
 
-Placeholder bookings are the first wrapper-owned data model. They are stored in Cloudflare D1 through the Worker and merged into Calendar responses on the frontend. They deliberately do not call the upstream booking API until a future confirmation/payment flow is implemented.
+Placeholder bookings and virtual users are wrapper-owned data models. They are stored in Cloudflare D1 through the Worker. Placeholder bookings are merged into Calendar responses on the frontend and deliberately do not call the upstream booking API until a future confirmation/payment flow is implemented. Virtual users allow multiple wrapper logins to share one real upstream account.
 
 ## API Flow
 
 - `src/api/config.js` builds request URLs.
 - `src/api/client.js` wraps `fetch`, adds `Accept` and `Authorization` headers, reads JSON/text bodies, and clears auth on `401`.
 - `src/api/auth.js` handles login and localStorage persistence.
+- `src/api/virtualUsers.js` reads and mutates Worker-owned virtual users.
 - `vite.config.js` can proxy local `/api` requests to `PANEL_API_ORIGIN`, but the normal local setup uses `VITE_API_BASE_URL` to call the deployed Worker.
 
 ## Calendar Flow
@@ -48,6 +50,7 @@ Current component structure inside `src/App.jsx`:
 - `App`
 - `LoginScreen`
 - `PanelShell`
+- `VirtualUsersPage`
 - `PlaceholderPage`
 - `CalendarPage`
 - `DayCalendar`

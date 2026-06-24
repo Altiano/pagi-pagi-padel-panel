@@ -49,6 +49,23 @@ The client stores this as `panel.auth` in localStorage and also writes Nuxt-comp
 - `auth._token_expiration.local`
 - `auth._refresh_token.local`
 
+If `username` starts with `_`, the Worker treats it as a virtual account login. It strips the underscore prefix, validates the virtual user and password against D1, then logs into the upstream API with `MASTER_USERNAME` and `MASTER_PASSWORD`. The response keeps the upstream token fields and adds:
+
+```json
+{
+  "virtual_user": {
+    "id": "virtual-user-id",
+    "username": "frontdesk",
+    "login_username": "_frontdesk",
+    "display_name": "Front desk",
+    "permissions": ["Calendar", "Setting"],
+    "is_active": true
+  }
+}
+```
+
+The master credentials must be configured on the Worker and must not be exposed as Vite variables.
+
 ### `GET /api/auth/me`
 
 Called from `PanelShell` through `apiRequest`.
@@ -186,6 +203,31 @@ Stored fields:
 ```
 
 The frontend maps these rows into booking-like calendar entries with `is_placeholder: true`, `booking_type: "placeholder"`, and an amber dashed visual treatment. `confirmed_booking_id` is reserved for a future flow that creates a real upstream booking after payment.
+
+## Virtual Users
+
+Virtual users are stored by this wrapper and are currently open to any authenticated or virtual user through the Settings screen. They provide wrapper-level login identities while all upstream calls still use the configured master upstream account.
+
+The Worker handles these routes locally before proxying other `/api/*` requests upstream:
+
+- `GET /api/virtual-users`
+- `POST /api/virtual-users`
+- `PUT /api/virtual-users/:id`
+- `DELETE /api/virtual-users/:id`
+
+Create/update payload:
+
+```json
+{
+  "username": "frontdesk",
+  "display_name": "Front desk",
+  "password": "virtual-password",
+  "permissions": ["Calendar", "Setting"],
+  "is_active": true
+}
+```
+
+For updates, omit or blank `password` to keep the current password. Passwords are stored as salted SHA-256 hashes in D1. Permissions currently control visible navigation in the wrapper UI; they are not yet a full server-side authorization model for upstream data.
 
 ## Error Handling
 

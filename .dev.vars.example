@@ -1,1 +1,3 @@
 UPSTREAM_ORIGIN=https://api.example.com
+MASTER_USERNAME=admin@example.com
+MASTER_PASSWORD=change-me

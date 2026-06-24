@@ -28,6 +28,7 @@ export function storeAuth(loginResponse, username) {
     expiresIn: loginResponse.expires_in,
     expiresAt: expiresInMs ? Date.now() + expiresInMs : null,
     username,
+    virtualUser: loginResponse.virtual_user || null,
   };
   localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(auth));
 

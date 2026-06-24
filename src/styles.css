@@ -347,6 +347,188 @@ textarea:focus {
   letter-spacing: -0.03em;
 }
 
+.settings-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  align-items: start;
+}
+
+.settings-panel {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 20px;
+  background: var(--surface);
+}
+
+.settings-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.settings-panel h2 {
+  margin: 4px 0 0;
+  font-size: 26px;
+  letter-spacing: -0.03em;
+}
+
+.compact-button {
+  min-height: 40px;
+  padding: 0 14px;
+}
+
+.virtual-user-list {
+  display: grid;
+  gap: 10px;
+}
+
+.virtual-user-card {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.7fr) minmax(180px, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  background: #fbfcf8;
+}
+
+.virtual-user-card strong,
+.virtual-user-card span {
+  display: block;
+}
+
+.virtual-user-card strong {
+  font-size: 15px;
+}
+
+.virtual-user-card > div:first-child span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.virtual-user-permissions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.virtual-user-permissions span,
+.state-pill {
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: var(--surface-strong);
+  color: #526052;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.state-pill.active {
+  background: #e4f2d7;
+  color: var(--green-deep);
+}
+
+.state-pill.inactive {
+  background: #f4e4df;
+  color: var(--danger);
+}
+
+.virtual-user-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.virtual-user-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 0 10px;
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.virtual-user-actions .danger-action {
+  border-color: #f0c6c0;
+  color: var(--danger);
+}
+
+.settings-info dl {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.settings-info dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+}
+
+.settings-info dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.settings-info dd {
+  margin: 0;
+  font-weight: 700;
+  text-align: right;
+}
+
+.settings-info p,
+.empty-state {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.empty-state {
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  padding: 18px;
+  background: #fbfcf8;
+}
+
+.virtual-user-editor {
+  width: min(100%, 680px);
+}
+
+.permission-picker {
+  display: grid;
+  gap: 10px;
+}
+
+.permission-picker > span {
+  color: #39433b;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.permission-picker > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  background: #fbfcf8;
+}
+
 .calendar-page {
   display: grid;
   gap: 12px;
@@ -1848,6 +2030,18 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 
+  .settings-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .virtual-user-card {
+    grid-template-columns: 1fr;
+  }
+
+  .virtual-user-actions {
+    justify-content: flex-start;
+  }
+
   .calendar-layout {
     grid-template-columns: 1fr;
   }
@@ -1930,7 +2124,8 @@ textarea:focus {
   }
 
   .form-grid.two,
-  .editor-actions {
+  .editor-actions,
+  .permission-picker > div {
     grid-template-columns: 1fr;
   }
 }

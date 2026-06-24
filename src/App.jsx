@@ -18,10 +18,12 @@ import {
   Sparkles,
   Trash2,
   Users,
+  UserPlus,
   X,
 } from 'lucide-react';
 import { clearStoredAuth, getStoredAuth, login } from './api/auth.js';
 import { apiRequest } from './api/client.js';
+import { createVirtualUser, deleteVirtualUser, listVirtualUsers, updateVirtualUser } from './api/virtualUsers.js';
 
 const navGroups = [
   {
@@ -68,6 +70,8 @@ const mobileNavItems = [
   { label: 'Customers', icon: Users, nav: 'Customers' },
   { label: 'Setting', icon: Settings, nav: 'Setting' },
 ];
+
+const virtualPermissionOptions = navGroups.flatMap((group) => group.items.map((item) => item.label));
 
 export function App() {
   const [auth, setAuth] = useState(() => getStoredAuth());
@@ -176,6 +180,9 @@ function PanelShell({ auth, isMobileRoute = false, onLogout }) {
   const [meState, setMeState] = useState({ loading: true, data: null, error: '' });
   const [activeNav, setActiveNav] = useState('Calendar');
   const mobileView = usePreferredMobileView(isMobileRoute);
+  const allowedNav = getAllowedNav(auth);
+  const visibleNavGroups = filterNavGroups(navGroups, allowedNav);
+  const visibleMobileNavItems = mobileNavItems.filter((item) => isNavAllowed(item.nav, allowedNav));
 
   useEffect(() => {
     let active = true;
@@ -192,7 +199,13 @@ function PanelShell({ auth, isMobileRoute = false, onLogout }) {
     };
   }, []);
 
-  const displayName = meState.data?.data?.name || meState.data?.name || auth.username || 'Owner';
+  useEffect(() => {
+    if (!isNavAllowed(activeNav, allowedNav)) {
+      setActiveNav(isNavAllowed('Calendar', allowedNav) ? 'Calendar' : 'Setting');
+    }
+  }, [activeNav, allowedNav]);
+
+  const displayName = auth.virtualUser?.display_name || meState.data?.data?.name || meState.data?.name || auth.username || 'Owner';
   const mitraId = findMitraId(meState.data) || FALLBACK_MITRA_ID;
   const shellClassName = `panel-shell ${mobileView.isMobileApp ? 'mobile-app' : ''}`;
 
@@ -203,6 +216,13 @@ function PanelShell({ auth, isMobileRoute = false, onLogout }) {
       mitraId={mitraId}
       onLogout={onLogout}
       onUseMobileView={() => mobileView.setPreference('mobile')}
+    />
+  ) : activeNav === 'Setting' ? (
+    <VirtualUsersPage
+      auth={auth}
+      displayName={displayName}
+      meState={meState}
+      onLogout={onLogout}
     />
   ) : (
     <PlaceholderPage
@@ -219,6 +239,7 @@ function PanelShell({ auth, isMobileRoute = false, onLogout }) {
         <MobileAppShell
           activeNav={activeNav}
           displayName={displayName}
+          navItems={visibleMobileNavItems}
           onChangeNav={setActiveNav}
           onLogout={onLogout}
           onUseDesktopView={() => mobileView.setPreference('desktop')}
@@ -227,7 +248,7 @@ function PanelShell({ auth, isMobileRoute = false, onLogout }) {
         </MobileAppShell>
       ) : (
         <>
-          <DesktopSidebar activeNav={activeNav} onChangeNav={setActiveNav} />
+          <DesktopSidebar activeNav={activeNav} navGroups={visibleNavGroups} onChangeNav={setActiveNav} />
 
           <section className="content">
             {content}
@@ -271,7 +292,29 @@ function usePreferredMobileView(isMobileRoute) {
   };
 }
 
-function DesktopSidebar({ activeNav, onChangeNav }) {
+function getAllowedNav(auth) {
+  if (!auth?.virtualUser) return null;
+  const permissions = Array.isArray(auth.virtualUser.permissions) ? auth.virtualUser.permissions : [];
+  return new Set([...permissions, 'Setting']);
+}
+
+function isNavAllowed(nav, allowedNav) {
+  if (!allowedNav) return true;
+  if (nav === 'Court Prices' && allowedNav.has('Service')) return true;
+  return allowedNav.has(nav) || nav === 'Setting';
+}
+
+function filterNavGroups(groups, allowedNav) {
+  if (!allowedNav) return groups;
+  return groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => isNavAllowed(item.label, allowedNav)),
+    }))
+    .filter((group) => group.items.length);
+}
+
+function DesktopSidebar({ activeNav, navGroups: visibleNavGroups, onChangeNav }) {
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
@@ -283,7 +326,7 @@ function DesktopSidebar({ activeNav, onChangeNav }) {
       </div>
 
       <nav>
-        {navGroups.map((group) => (
+        {visibleNavGroups.map((group) => (
           <div className="nav-group" key={group.label}>
             <p>{group.label}</p>
             {group.items.map((item) => {
@@ -307,7 +350,7 @@ function DesktopSidebar({ activeNav, onChangeNav }) {
   );
 }
 
-function MobileAppShell({ activeNav, children, displayName, onChangeNav, onLogout, onUseDesktopView }) {
+function MobileAppShell({ activeNav, children, displayName, navItems, onChangeNav, onLogout, onUseDesktopView }) {
   return (
     <>
       <header className="mobile-app-header">
@@ -331,7 +374,7 @@ function MobileAppShell({ activeNav, children, displayName, onChangeNav, onLogou
       </section>
 
       <nav className="mobile-bottom-nav" aria-label="Primary">
-        {mobileNavItems.map((item) => {
+        {navItems.map((item) => {
           const Icon = item.icon;
           const selected = activeNav === item.nav || (item.nav === 'Court Prices' && ['Court Prices', 'Event', 'Coach', 'Add On'].includes(activeNav));
           return (
@@ -348,6 +391,242 @@ function MobileAppShell({ activeNav, children, displayName, onChangeNav, onLogou
         })}
       </nav>
     </>
+  );
+}
+
+function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
+  const [users, setUsers] = useState([]);
+  const [state, setState] = useState({ loading: true, error: '', status: '' });
+  const [editor, setEditor] = useState({ mode: 'closed', user: null });
+
+  useEffect(() => {
+    let active = true;
+    setState({ loading: true, error: '', status: '' });
+    listVirtualUsers()
+      .then((items) => {
+        if (active) {
+          setUsers(items);
+          setState({ loading: false, error: '', status: '' });
+        }
+      })
+      .catch((error) => {
+        if (active) setState({ loading: false, error: error.message, status: '' });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function refreshUsers() {
+    const items = await listVirtualUsers();
+    setUsers(items);
+  }
+
+  async function saveUser(form) {
+    setState((current) => ({ ...current, status: 'Saving virtual user...' }));
+    if (editor.mode === 'edit') {
+      await updateVirtualUser(editor.user.id, form);
+    } else {
+      await createVirtualUser(form);
+    }
+    await refreshUsers();
+    setEditor({ mode: 'closed', user: null });
+    setState({ loading: false, error: '', status: 'Virtual user saved.' });
+  }
+
+  async function removeUser(user) {
+    const confirmed = window.confirm(`Delete virtual user _${user.username}?`);
+    if (!confirmed) return;
+    setState((current) => ({ ...current, status: 'Deleting virtual user...' }));
+    try {
+      await deleteVirtualUser(user.id);
+      await refreshUsers();
+      setState({ loading: false, error: '', status: 'Virtual user deleted.' });
+    } catch (error) {
+      setState({ loading: false, error: error.message, status: '' });
+    }
+  }
+
+  return (
+    <>
+      <header className="topbar">
+        <div>
+          <h1>Settings</h1>
+          <p>Manage wrapper-only virtual accounts that sign in with an underscore prefix.</p>
+        </div>
+        <div className="topbar-actions">
+          <span className="user-chip">{auth.virtualUser ? `_${auth.virtualUser.username}` : displayName}</span>
+          <button className="logout-button" onClick={onLogout} type="button">
+            <LogOut size={17} />
+            Logout
+          </button>
+        </div>
+      </header>
+
+      <section className="settings-layout">
+        <article className="settings-panel">
+          <div className="settings-panel-heading">
+            <div>
+              <span className="panel-label">Virtual accounts</span>
+              <h2>Users</h2>
+            </div>
+            <button className="primary-button compact-button" onClick={() => setEditor({ mode: 'create', user: null })} type="button">
+              <UserPlus size={16} />
+              Add user
+            </button>
+          </div>
+
+          {state.error ? <p className="status-line error">{state.error}</p> : null}
+          {state.status ? <p className="status-line">{state.status}</p> : null}
+
+          <div className="virtual-user-list">
+            {state.loading ? (
+              <div className="empty-state">Loading virtual users...</div>
+            ) : users.length ? users.map((user) => (
+              <article className="virtual-user-card" key={user.id}>
+                <div>
+                  <strong>{user.display_name}</strong>
+                  <span>{user.login_username}</span>
+                </div>
+                <div className="virtual-user-permissions">
+                  {user.permissions.length ? user.permissions.map((permission) => (
+                    <span key={permission}>{permission}</span>
+                  )) : <span>Settings only</span>}
+                </div>
+                <div className="virtual-user-actions">
+                  <span className={`state-pill ${user.is_active ? 'active' : 'inactive'}`}>{user.is_active ? 'Active' : 'Inactive'}</span>
+                  <button onClick={() => copyText(user.login_username)} type="button"><Copy size={15} /> Copy</button>
+                  <button onClick={() => setEditor({ mode: 'edit', user })} type="button"><Pencil size={15} /> Edit</button>
+                  <button className="danger-action" onClick={() => removeUser(user)} type="button"><Trash2 size={15} /> Delete</button>
+                </div>
+              </article>
+            )) : (
+              <div className="empty-state">No virtual users yet.</div>
+            )}
+          </div>
+        </article>
+
+        <aside className="settings-panel settings-info">
+          <span className="panel-label">Current session</span>
+          <h2>{displayName}</h2>
+          <dl>
+            <div><dt>Login type</dt><dd>{auth.virtualUser ? 'Virtual account' : 'Regular upstream account'}</dd></div>
+            <div><dt>Upstream</dt><dd>{meState.loading ? 'Checking...' : meState.error ? 'Needs attention' : 'Connected'}</dd></div>
+            <div><dt>Virtual prefix</dt><dd>_username</dd></div>
+          </dl>
+          <p>Virtual users authenticate with their own wrapper password. The Worker then signs into the upstream service with the configured master account.</p>
+        </aside>
+      </section>
+
+      {editor.mode !== 'closed' ? (
+        <VirtualUserEditor
+          mode={editor.mode}
+          user={editor.user}
+          onClose={() => setEditor({ mode: 'closed', user: null })}
+          onSave={saveUser}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function VirtualUserEditor({ mode, user, onClose, onSave }) {
+  const [form, setForm] = useState(() => buildVirtualUserForm(user));
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  function updateField(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function togglePermission(permission) {
+    setForm((current) => {
+      const permissions = new Set(current.permissions);
+      if (permissions.has(permission)) {
+        permissions.delete(permission);
+      } else {
+        permissions.add(permission);
+      }
+      return { ...current, permissions: [...permissions] };
+    });
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError('');
+    setSaving(true);
+    try {
+      await onSave({
+        ...form,
+        username: form.username.replace(/^_+/, ''),
+        password: form.password,
+        permissions: form.permissions,
+      });
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="placeholder-editor-backdrop" onClick={onClose}>
+      <aside className="placeholder-editor virtual-user-editor" onClick={(event) => event.stopPropagation()}>
+        <div className="panel-label-row">
+          <span className="panel-label">{mode === 'edit' ? 'Edit virtual user' : 'New virtual user'}</span>
+          <button aria-label="Close virtual user editor" onClick={onClose} type="button">
+            <X size={16} />
+          </button>
+        </div>
+        <h2>{mode === 'edit' ? 'Update access' : 'Create wrapper login'}</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="form-grid two">
+            <label>
+              Username
+              <input onChange={(event) => updateField('username', event.target.value)} placeholder="_frontdesk" required value={form.username} />
+            </label>
+            <label>
+              Display name
+              <input onChange={(event) => updateField('display_name', event.target.value)} placeholder="Front desk" required value={form.display_name} />
+            </label>
+          </div>
+          <label>
+            {mode === 'edit' ? 'New password' : 'Password'}
+            <input
+              autoComplete="new-password"
+              onChange={(event) => updateField('password', event.target.value)}
+              placeholder={mode === 'edit' ? 'Leave blank to keep current password' : 'Set password'}
+              required={mode === 'create'}
+              type="password"
+              value={form.password}
+            />
+          </label>
+          <label className="check-row">
+            <input checked={form.is_active} onChange={(event) => updateField('is_active', event.target.checked)} type="checkbox" />
+            Active
+          </label>
+          <div className="permission-picker">
+            <span>Visible screens</span>
+            <div>
+              {virtualPermissionOptions.map((permission) => (
+                <label className="check-row" key={permission}>
+                  <input checked={form.permissions.includes(permission)} onChange={() => togglePermission(permission)} type="checkbox" />
+                  {permission}
+                </label>
+              ))}
+            </div>
+          </div>
+          {error ? <p className="status-line error">{error}</p> : null}
+          <div className="editor-actions">
+            <button className="logout-button" onClick={onClose} type="button">Cancel</button>
+            <button className="primary-button" disabled={saving} type="submit">
+              {saving ? 'Saving...' : mode === 'edit' ? 'Save changes' : 'Create user'}
+            </button>
+          </div>
+        </form>
+      </aside>
+    </div>
   );
 }
 
@@ -1184,6 +1463,26 @@ function PlaceholderBookingEditor({ booking, conflicts, courts, defaultDate, def
       </aside>
     </div>
   );
+}
+
+function buildVirtualUserForm(user) {
+  if (user) {
+    return {
+      username: user.login_username || `_${user.username || ''}`,
+      display_name: user.display_name || '',
+      password: '',
+      permissions: Array.isArray(user.permissions) ? user.permissions : [],
+      is_active: user.is_active !== false,
+    };
+  }
+
+  return {
+    username: '',
+    display_name: '',
+    password: '',
+    permissions: ['Calendar', 'Setting'],
+    is_active: true,
+  };
 }
 
 async function loadCalendarData({ mitraId, selectedDate, weekDays }) {

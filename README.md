@@ -7,6 +7,7 @@ React/Vite frontend client for the Pagi Pagi Padel admin panel.
 This app provides the browser UI for managing Pagi Pagi Padel admin workflows. It currently includes:
 
 - Login with panel credentials.
+- Virtual account login with an underscore-prefixed username, backed by Worker-managed users.
 - Authenticated session storage in the browser.
 - A wired Calendar screen with day/week views, court bookings, booking details, and summary metrics.
 - D1-backed placeholder bookings for tentative holds before payment or upstream confirmation.
@@ -49,15 +50,25 @@ VITE_BASE_PATH=/
 - `PANEL_API_ORIGIN`: optional backend target used only when running through the Vite dev proxy.
 - `VITE_USE_LOCAL_PLACEHOLDERS`: optional escape hatch for browser-local placeholder storage. Leave unset for D1-backed testing.
 - `VITE_BASE_PATH`: base path for static deployments.
+- `UPSTREAM_ORIGIN`: Worker secret/var for the upstream API origin.
+- `MASTER_USERNAME`: Worker secret for the real upstream account used by virtual users.
+- `MASTER_PASSWORD`: Worker secret for the real upstream account used by virtual users.
 
 ## Worker And D1
 
-The Worker proxies ordinary `/api/*` requests to the configured upstream service. `/api/placeholder-bookings` is handled locally by the Worker and stored in Cloudflare D1, so tentative holds stay inside this wrapper until a future confirmed-booking flow sends data upstream.
+The Worker proxies ordinary `/api/*` requests to the configured upstream service. `/api/placeholder-bookings` and `/api/virtual-users` are handled locally by the Worker and stored in Cloudflare D1. Virtual users sign in with usernames like `_frontdesk`; the Worker validates that virtual user password, then signs into upstream using `MASTER_USERNAME` and `MASTER_PASSWORD`.
 
 The current `wrangler.toml` is bound to the project D1 database. To create a new database for another environment:
 
 ```sh
 wrangler d1 create pagi-pagi-padel-placeholders
+```
+
+Set the master upstream credentials as Worker secrets before enabling virtual login:
+
+```sh
+wrangler secret put MASTER_USERNAME
+wrangler secret put MASTER_PASSWORD
 ```
 
 ## Repository Map
