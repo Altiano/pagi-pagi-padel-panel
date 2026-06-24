@@ -206,7 +206,7 @@ The frontend maps these rows into booking-like calendar entries with `is_placeho
 
 ## Virtual Users
 
-Virtual users are stored by this wrapper and are currently open to any authenticated or virtual user through the Settings screen. They provide wrapper-level login identities while all upstream calls still use the configured master upstream account.
+Virtual users are stored by this wrapper and can only be managed by a real session for the configured `MASTER_USERNAME`. They provide wrapper-level login identities while all upstream calls still use the configured master upstream account.
 
 The Worker handles these routes locally before proxying other `/api/*` requests upstream:
 
@@ -228,6 +228,8 @@ Create/update payload:
 ```
 
 For updates, omit or blank `password` to keep the current password. Passwords are stored as salted SHA-256 hashes in D1. Permissions currently control visible navigation in the wrapper UI; they are not yet a full server-side authorization model for upstream data.
+
+The Worker records virtual-issued access token hashes in D1 so `/api/virtual-users` can reject virtual sessions even though those sessions use a master upstream token underneath. Non-master upstream accounts are rejected after the Worker verifies `/api/auth/me` against `MASTER_USERNAME`.
 
 ## Error Handling
 

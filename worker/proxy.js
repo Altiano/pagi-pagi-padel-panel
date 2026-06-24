@@ -7,7 +7,7 @@ const SAFE_REQUEST_HEADERS = new Set([
 ]);
 
 const DEFAULT_ALLOWED_METHODS = 'GET,POST,PUT,PATCH,DELETE,OPTIONS';
-const DEFAULT_ALLOWED_HEADERS = 'authorization,content-type,x-requested-with';
+const DEFAULT_ALLOWED_HEADERS = 'authorization,content-type,x-requested-with,x-panel-virtual-user';
 const PLACEHOLDER_PREFIX = '/api/placeholder-bookings';
 const VIRTUAL_USERS_PREFIX = '/api/virtual-users';
 const VIRTUAL_LOGIN_PREFIX = '_';
@@ -157,6 +157,18 @@ async function ensureVirtualUsersTable(db) {
   await db.prepare('CREATE INDEX IF NOT EXISTS idx_virtual_users_username ON virtual_users (username)').run();
 }
 
+async function ensureVirtualSessionsTable(db) {
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS virtual_sessions (
+      token_hash TEXT PRIMARY KEY,
+      virtual_user_id TEXT NOT NULL,
+      expires_at TEXT,
+      created_at TEXT NOT NULL
+    )
+  `).run();
+  await db.prepare('CREATE INDEX IF NOT EXISTS idx_virtual_sessions_expires_at ON virtual_sessions (expires_at)').run();
+}
+
 function normalizeVirtualUsername(value = '') {
   return String(value).trim().replace(/^_+/, '').toLowerCase();
 }
@@ -209,6 +221,12 @@ async function hashPassword(password, salt) {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+async function hashValue(value) {
+  const encoded = new TextEncoder().encode(String(value || ''));
+  const digest = await crypto.subtle.digest('SHA-256', encoded);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 function safeEqual(first, second) {
   if (first.length !== second.length) return false;
   let result = 0;
@@ -218,11 +236,94 @@ function safeEqual(first, second) {
   return result === 0;
 }
 
+function getBearerToken(request) {
+  const authorization = request.headers.get('Authorization') || '';
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : '';
+}
+
+function findIdentityValues(value, depth = 0) {
+  if (!value || depth > 5 || typeof value !== 'object') return [];
+  const identities = [];
+  for (const [key, nested] of Object.entries(value)) {
+    if (['email', 'username', 'user_name', 'login', 'name'].includes(key.toLowerCase()) && typeof nested === 'string') {
+      identities.push(nested);
+    } else if (nested && typeof nested === 'object') {
+      identities.push(...findIdentityValues(nested, depth + 1));
+    }
+  }
+  return identities;
+}
+
+async function isVirtualSession(request, env) {
+  const token = getBearerToken(request);
+  if (!token) return false;
+  await ensureVirtualSessionsTable(env.PLACEHOLDER_DB);
+  const now = new Date().toISOString();
+  await env.PLACEHOLDER_DB.prepare('DELETE FROM virtual_sessions WHERE expires_at IS NOT NULL AND expires_at <= ?').bind(now).run();
+  const tokenHash = await hashValue(token);
+  const session = await env.PLACEHOLDER_DB.prepare(`
+    SELECT token_hash FROM virtual_sessions
+    WHERE token_hash = ? AND (expires_at IS NULL OR expires_at > ?)
+  `).bind(tokenHash, now).first();
+  return Boolean(session);
+}
+
+async function requireMasterVirtualUserAccess(request, env) {
+  if (!env.MASTER_USERNAME) {
+    return Response.json({ error: 'Virtual user management master username is not configured.' }, { status: 500 });
+  }
+
+  const token = getBearerToken(request);
+  if (!token) {
+    return Response.json({ error: 'Authentication is required.' }, { status: 401 });
+  }
+
+  if (request.headers.get('X-Panel-Virtual-User')) {
+    return Response.json({ error: 'Only the master account can manage virtual users.' }, { status: 403 });
+  }
+
+  if (await isVirtualSession(request, env)) {
+    return Response.json({ error: 'Only the master account can manage virtual users.' }, { status: 403 });
+  }
+
+  if (!env.UPSTREAM_ORIGIN) {
+    return Response.json({ error: 'Proxy upstream is not configured.' }, { status: 500 });
+  }
+
+  const upstreamOrigin = env.UPSTREAM_ORIGIN.replace(/\/$/, '');
+  const response = await fetch(`${upstreamOrigin}/api/auth/me`, {
+    headers: {
+      Accept: 'application/json, text/plain, */*',
+      Authorization: `Bearer ${token}`,
+      Origin: upstreamOrigin,
+      Referer: `${upstreamOrigin}/`,
+    },
+  });
+  const payload = await readJsonResponse(response);
+  if (!response.ok) {
+    return Response.json({ error: payload?.message || payload?.error || 'Unable to verify the current account.' }, { status: response.status });
+  }
+
+  const masterUsername = String(env.MASTER_USERNAME).trim().toLowerCase();
+  const identities = findIdentityValues(payload).map((value) => String(value).trim().toLowerCase());
+  if (!identities.includes(masterUsername)) {
+    return Response.json({ error: 'Only the master account can manage virtual users.' }, { status: 403 });
+  }
+
+  return null;
+}
+
 async function handleVirtualUsersRequest(request, env) {
   const dbError = requireAppDb(env);
   if (dbError) return withCors(dbError, request, env);
 
   await ensureVirtualUsersTable(env.PLACEHOLDER_DB);
+  await ensureVirtualSessionsTable(env.PLACEHOLDER_DB);
+  await ensureVirtualSessionsTable(env.PLACEHOLDER_DB);
+
+  const accessError = await requireMasterVirtualUserAccess(request, env);
+  if (accessError) return withCors(accessError, request, env);
 
   const url = new URL(request.url);
   const id = url.pathname.slice(VIRTUAL_USERS_PREFIX.length).replace(/^\//, '');
@@ -390,6 +491,21 @@ async function handleVirtualLoginRequest(request, env) {
   if (!upstreamResponse.ok) {
     const message = payload?.message || payload?.error || 'Unable to sign in with the configured master account.';
     return withCors(Response.json({ error: message }, { status: upstreamResponse.status }), request, env);
+  }
+
+  if (payload?.access_token) {
+    const now = new Date().toISOString();
+    const expiresInMs = Number(payload.expires_in || 0) * 1000;
+    const expiresAt = expiresInMs ? new Date(Date.now() + expiresInMs).toISOString() : null;
+    await env.PLACEHOLDER_DB.prepare(`
+      INSERT OR REPLACE INTO virtual_sessions (token_hash, virtual_user_id, expires_at, created_at)
+      VALUES (?, ?, ?, ?)
+    `).bind(
+      await hashValue(payload.access_token),
+      virtualUser.id,
+      expiresAt,
+      now,
+    ).run();
   }
 
   return withCors(Response.json({

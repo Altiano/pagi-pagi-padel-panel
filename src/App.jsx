@@ -396,21 +396,21 @@ function MobileAppShell({ activeNav, children, displayName, navItems, onChangeNa
 
 function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
   const [users, setUsers] = useState([]);
-  const [state, setState] = useState({ loading: true, error: '', status: '' });
+  const [state, setState] = useState({ loading: true, error: '', status: '', canManage: false });
   const [editor, setEditor] = useState({ mode: 'closed', user: null });
 
   useEffect(() => {
     let active = true;
-    setState({ loading: true, error: '', status: '' });
+    setState({ loading: true, error: '', status: '', canManage: false });
     listVirtualUsers()
       .then((items) => {
         if (active) {
           setUsers(items);
-          setState({ loading: false, error: '', status: '' });
+          setState({ loading: false, error: '', status: '', canManage: true });
         }
       })
       .catch((error) => {
-        if (active) setState({ loading: false, error: error.message, status: '' });
+        if (active) setState({ loading: false, error: error.message, status: '', canManage: false });
       });
 
     return () => {
@@ -432,7 +432,7 @@ function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
     }
     await refreshUsers();
     setEditor({ mode: 'closed', user: null });
-    setState({ loading: false, error: '', status: 'Virtual user saved.' });
+    setState({ loading: false, error: '', status: 'Virtual user saved.', canManage: true });
   }
 
   async function removeUser(user) {
@@ -442,9 +442,9 @@ function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
     try {
       await deleteVirtualUser(user.id);
       await refreshUsers();
-      setState({ loading: false, error: '', status: 'Virtual user deleted.' });
+      setState({ loading: false, error: '', status: 'Virtual user deleted.', canManage: true });
     } catch (error) {
-      setState({ loading: false, error: error.message, status: '' });
+      setState({ loading: false, error: error.message, status: '', canManage: false });
     }
   }
 
@@ -471,10 +471,12 @@ function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
               <span className="panel-label">Virtual accounts</span>
               <h2>Users</h2>
             </div>
-            <button className="primary-button compact-button" onClick={() => setEditor({ mode: 'create', user: null })} type="button">
+            {state.canManage ? (
+              <button className="primary-button compact-button" onClick={() => setEditor({ mode: 'create', user: null })} type="button">
               <UserPlus size={16} />
               Add user
-            </button>
+              </button>
+            ) : null}
           </div>
 
           {state.error ? <p className="status-line error">{state.error}</p> : null}
@@ -483,6 +485,8 @@ function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
           <div className="virtual-user-list">
             {state.loading ? (
               <div className="empty-state">Loading virtual users...</div>
+            ) : !state.canManage ? (
+              <div className="empty-state">Sign in with the master username to manage virtual users.</div>
             ) : users.length ? users.map((user) => (
               <article className="virtual-user-card" key={user.id}>
                 <div>

@@ -15,6 +15,10 @@ export async function apiRequest(path, options = {}) {
     headers.set('Authorization', `${auth.tokenType || 'Bearer'} ${auth.accessToken}`);
   }
 
+  if (auth?.virtualUser?.id) {
+    headers.set('X-Panel-Virtual-User', auth.virtualUser.id);
+  }
+
   if (options.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
