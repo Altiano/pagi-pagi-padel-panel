@@ -169,6 +169,17 @@ async function ensureVirtualSessionsTable(db) {
   await db.prepare('CREATE INDEX IF NOT EXISTS idx_virtual_sessions_expires_at ON virtual_sessions (expires_at)').run();
 }
 
+async function ensureMasterSessionsTable(db) {
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS master_sessions (
+      token_hash TEXT PRIMARY KEY,
+      expires_at TEXT,
+      created_at TEXT NOT NULL
+    )
+  `).run();
+  await db.prepare('CREATE INDEX IF NOT EXISTS idx_master_sessions_expires_at ON master_sessions (expires_at)').run();
+}
+
 function normalizeVirtualUsername(value = '') {
   return String(value).trim().replace(/^_+/, '').toLowerCase();
 }
@@ -269,6 +280,32 @@ async function isVirtualSession(request, env) {
   return Boolean(session);
 }
 
+async function isMasterSession(request, env) {
+  const token = getBearerToken(request);
+  if (!token) return false;
+  await ensureMasterSessionsTable(env.PLACEHOLDER_DB);
+  const now = new Date().toISOString();
+  await env.PLACEHOLDER_DB.prepare('DELETE FROM master_sessions WHERE expires_at IS NOT NULL AND expires_at <= ?').bind(now).run();
+  const tokenHash = await hashValue(token);
+  const session = await env.PLACEHOLDER_DB.prepare(`
+    SELECT token_hash FROM master_sessions
+    WHERE token_hash = ? AND (expires_at IS NULL OR expires_at > ?)
+  `).bind(tokenHash, now).first();
+  return Boolean(session);
+}
+
+async function storeMasterSession(env, payload) {
+  if (!payload?.access_token) return;
+  await ensureMasterSessionsTable(env.PLACEHOLDER_DB);
+  const now = new Date().toISOString();
+  const expiresInMs = Number(payload.expires_in || 0) * 1000;
+  const expiresAt = expiresInMs ? new Date(Date.now() + expiresInMs).toISOString() : null;
+  await env.PLACEHOLDER_DB.prepare(`
+    INSERT OR REPLACE INTO master_sessions (token_hash, expires_at, created_at)
+    VALUES (?, ?, ?)
+  `).bind(await hashValue(payload.access_token), expiresAt, now).run();
+}
+
 async function requireMasterVirtualUserAccess(request, env) {
   if (!env.MASTER_USERNAME) {
     return Response.json({ error: 'Virtual user management master username is not configured.' }, { status: 500 });
@@ -285,6 +322,10 @@ async function requireMasterVirtualUserAccess(request, env) {
 
   if (await isVirtualSession(request, env)) {
     return Response.json({ error: 'Only the master account can manage virtual users.' }, { status: 403 });
+  }
+
+  if (await isMasterSession(request, env)) {
+    return null;
   }
 
   if (!env.UPSTREAM_ORIGIN) {
@@ -320,6 +361,7 @@ async function handleVirtualUsersRequest(request, env) {
 
   await ensureVirtualUsersTable(env.PLACEHOLDER_DB);
   await ensureVirtualSessionsTable(env.PLACEHOLDER_DB);
+  await ensureMasterSessionsTable(env.PLACEHOLDER_DB);
   await ensureVirtualSessionsTable(env.PLACEHOLDER_DB);
 
   const accessError = await requireMasterVirtualUserAccess(request, env);
@@ -445,7 +487,7 @@ async function handleVirtualLoginRequest(request, env) {
   const body = await readJsonBody(request.clone()) || {};
   const username = String(body.username || '');
   if (!username.startsWith(VIRTUAL_LOGIN_PREFIX)) {
-    return proxyApiRequest(request, env);
+    return handleRegularLoginRequest(request, env, body);
   }
 
   const dbError = requireAppDb(env);
@@ -512,6 +554,19 @@ async function handleVirtualLoginRequest(request, env) {
     ...payload,
     virtual_user: rowToVirtualUser(virtualUser),
   }, { status: upstreamResponse.status }), request, env);
+}
+
+async function handleRegularLoginRequest(request, env, body) {
+  const response = await proxyApiRequest(request, env);
+  const masterUsername = String(env.MASTER_USERNAME || '').trim().toLowerCase();
+  const loginUsername = String(body.username || '').trim().toLowerCase();
+  if (!env.PLACEHOLDER_DB || !masterUsername || loginUsername !== masterUsername || !response.ok) {
+    return response;
+  }
+
+  const payload = await readJsonResponse(response.clone());
+  await storeMasterSession(env, payload);
+  return response;
 }
 
 function normalizePlaceholderPayload(payload = {}) {
