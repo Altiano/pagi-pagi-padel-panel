@@ -8,6 +8,7 @@ This app provides the browser UI for managing Pagi Pagi Padel admin workflows. I
 
 - Login with panel credentials.
 - Virtual account login with an underscore-prefixed username, backed by Worker-managed users.
+- Virtual account screen permissions, Worker endpoint authorization, and optional Calendar revenue visibility.
 - Authenticated session storage in the browser.
 - A wired Calendar screen with day/week views, court bookings, booking details, and summary metrics.
 - D1-backed placeholder bookings for tentative holds before payment or upstream confirmation.
@@ -57,6 +58,8 @@ VITE_BASE_PATH=/
 ## Worker And D1
 
 The Worker proxies ordinary `/api/*` requests to the configured upstream service. `/api/placeholder-bookings` and `/api/virtual-users` are handled locally by the Worker and stored in Cloudflare D1. Virtual users sign in with usernames like `_frontdesk`; the Worker validates that virtual user password, then signs into upstream using `MASTER_USERNAME` and `MASTER_PASSWORD`.
+
+Virtual-user permissions are enforced in the Worker before upstream proxying. Screen permissions map to captured endpoint groups, and the separate `Calendar revenue` permission controls whether calendar money fields are returned. Placeholder booking audit names are server-stamped for virtual users, so they cannot submit another PIC name as creator/updater.
 
 The current `wrangler.toml` is bound to the project D1 database. To create a new database for another environment:
 

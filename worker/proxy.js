@@ -11,6 +11,76 @@ const DEFAULT_ALLOWED_HEADERS = 'authorization,content-type,x-requested-with,x-p
 const PLACEHOLDER_PREFIX = '/api/placeholder-bookings';
 const VIRTUAL_USERS_PREFIX = '/api/virtual-users';
 const VIRTUAL_LOGIN_PREFIX = '_';
+const CALENDAR_REVENUE_PERMISSION = 'Calendar revenue';
+const MONEY_FIELD_NAMES = new Set([
+  'amount',
+  'balance',
+  'estimated_price',
+  'income',
+  'nominal',
+  'paid_amount',
+  'price',
+  'remaining_amount',
+  'revenue',
+  'subtotal',
+  'total',
+  'total_balance',
+  'total_price',
+]);
+const VIRTUAL_ENDPOINT_RULES = [
+  {
+    permission: 'Dashboard',
+    matches: [
+      /^\/api\/admin\/dashboard(?:\/|$)/,
+      /^\/api\/admin\/mitra\/info(?:\/|$)/,
+      /^\/api\/admin\/mitra\/notifications(?:\/|$)/,
+      /^\/api\/admin\/transaction\/addon-trans-summary(?:\/|$)/,
+      /^\/api\/admin\/transaction\/list(?:\/|$)/,
+    ],
+  },
+  {
+    permission: 'Calendar',
+    matches: [
+      /^\/api\/admin\/schedule(?:\/|$|-)/,
+      /^\/api\/admin\/schedule-cal-courts(?:\/|$)/,
+      /^\/api\/admin\/mitra\/court\/[^/]+\/list$/,
+      /^\/api\/admin\/mitra\/operation-hour(?:\/|$)/,
+    ],
+  },
+  {
+    permission: 'Court Prices',
+    matches: [/^\/api\/admin\/services(?:\/|$)/],
+  },
+  {
+    permission: 'Event',
+    matches: [/^\/api\/admin\/event(?:\/|$)/],
+  },
+  {
+    permission: 'Coach',
+    matches: [/^\/api\/admin\/coach(?:\/|$)/],
+  },
+  {
+    permission: 'Add On',
+    matches: [/^\/api\/admin\/addons(?:\/|$)/],
+  },
+  {
+    permission: 'Customers',
+    matches: [
+      /^\/api\/admin\/player(?:\/|$)/,
+      /^\/api\/admin\/voucher(?:\/|$)/,
+      /^\/api\/admin\/promotion(?:\/|$)/,
+      /^\/api\/admin\/membership(?:\/|$)/,
+      /^\/api\/admin\/mitra\/discount(?:\/|$)/,
+    ],
+  },
+  {
+    permission: 'Setting',
+    matches: [
+      /^\/api\/admin\/user(?:\/|$)/,
+      /^\/api\/media\/image-get(?:\/|$)/,
+    ],
+  },
+];
 
 function getAllowedOrigin(request, env) {
   const origin = request.headers.get('Origin');
@@ -49,7 +119,7 @@ function buildUpstreamHeaders(request, upstreamOrigin) {
   return headers;
 }
 
-async function proxyApiRequest(request, env) {
+async function proxyApiRequest(request, env, { transformResponse } = {}) {
   if (!env.UPSTREAM_ORIGIN) {
     return Response.json({ error: 'Proxy upstream is not configured.' }, { status: 500 });
   }
@@ -72,6 +142,17 @@ async function proxyApiRequest(request, env) {
   const responseHeaders = new Headers(response.headers);
   for (const [key, value] of Object.entries(corsHeaders(request, env))) {
     responseHeaders.set(key, value);
+  }
+
+  if (transformResponse) {
+    const payload = await readJsonResponse(response);
+    const transformedPayload = transformResponse(payload);
+    responseHeaders.set('Content-Type', 'application/json; charset=utf-8');
+    return new Response(JSON.stringify(transformedPayload), {
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders,
+    });
   }
 
   return new Response(response.body, {
@@ -253,6 +334,15 @@ function getBearerToken(request) {
   return match ? match[1].trim() : '';
 }
 
+function hasVirtualPermission(virtualUser, permission) {
+  const permissions = Array.isArray(virtualUser?.permissions) ? virtualUser.permissions : [];
+  return permissions.includes(permission);
+}
+
+function responseWithStatus(error, status = 403) {
+  return Response.json({ error }, { status });
+}
+
 function findIdentityValues(value, depth = 0) {
   if (!value || depth > 5 || typeof value !== 'object') return [];
   const identities = [];
@@ -266,18 +356,32 @@ function findIdentityValues(value, depth = 0) {
   return identities;
 }
 
-async function isVirtualSession(request, env) {
+async function getVirtualSessionContext(request, env) {
   const token = getBearerToken(request);
-  if (!token) return false;
+  if (!token || !env.PLACEHOLDER_DB) return null;
   await ensureVirtualSessionsTable(env.PLACEHOLDER_DB);
+  await ensureVirtualUsersTable(env.PLACEHOLDER_DB);
   const now = new Date().toISOString();
   await env.PLACEHOLDER_DB.prepare('DELETE FROM virtual_sessions WHERE expires_at IS NOT NULL AND expires_at <= ?').bind(now).run();
   const tokenHash = await hashValue(token);
-  const session = await env.PLACEHOLDER_DB.prepare(`
-    SELECT token_hash FROM virtual_sessions
-    WHERE token_hash = ? AND (expires_at IS NULL OR expires_at > ?)
+  const row = await env.PLACEHOLDER_DB.prepare(`
+    SELECT vu.*
+    FROM virtual_sessions vs
+    LEFT JOIN virtual_users vu ON vu.id = vs.virtual_user_id
+    WHERE vs.token_hash = ? AND (vs.expires_at IS NULL OR vs.expires_at > ?)
   `).bind(tokenHash, now).first();
-  return Boolean(session);
+
+  if (!row) return null;
+  if (!row.id || row.deleted_at || !row.is_active) {
+    return { error: responseWithStatus('Virtual user was not found or is inactive.', 403) };
+  }
+
+  return { user: rowToVirtualUser(row) };
+}
+
+async function isVirtualSession(request, env) {
+  const context = await getVirtualSessionContext(request, env);
+  return Boolean(context?.user || context?.error);
 }
 
 async function isMasterSession(request, env) {
@@ -353,6 +457,49 @@ async function requireMasterVirtualUserAccess(request, env) {
   }
 
   return null;
+}
+
+function findEndpointPermission(pathname) {
+  return VIRTUAL_ENDPOINT_RULES.find((rule) => rule.matches.some((pattern) => pattern.test(pathname)))?.permission || '';
+}
+
+function authorizeVirtualProxyRequest(request, virtualContext) {
+  if (!virtualContext) return null;
+  if (virtualContext.error) return virtualContext.error;
+
+  const pathname = new URL(request.url).pathname;
+  if (pathname === '/api/auth/me' || pathname === '/api/auth/logout') return null;
+
+  const requiredPermission = findEndpointPermission(pathname);
+  if (requiredPermission && hasVirtualPermission(virtualContext.user, requiredPermission)) {
+    return null;
+  }
+
+  return responseWithStatus('This virtual user does not have permission to access that endpoint.', 403);
+}
+
+function shouldMaskCalendarMoney(pathname, virtualContext) {
+  return Boolean(
+    virtualContext?.user &&
+    !hasVirtualPermission(virtualContext.user, CALENDAR_REVENUE_PERMISSION) &&
+    /^\/api\/admin\/schedule-cal-courts(?:\/|$)/.test(pathname)
+  );
+}
+
+function stripMoneyFields(value) {
+  if (Array.isArray(value)) return value.map(stripMoneyFields);
+  if (!value || typeof value !== 'object') return value;
+
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key]) => !MONEY_FIELD_NAMES.has(key.toLowerCase()))
+    .map(([key, nested]) => [key, stripMoneyFields(nested)]));
+}
+
+function requireVirtualPermission(virtualContext, permission) {
+  if (!virtualContext) return null;
+  if (virtualContext.error) return virtualContext.error;
+  if (hasVirtualPermission(virtualContext.user, permission)) return null;
+  return responseWithStatus('This virtual user does not have permission to access that data.', 403);
 }
 
 async function handleVirtualUsersRequest(request, env) {
@@ -627,8 +774,8 @@ function validatePlaceholder(payload, partial = false) {
   return '';
 }
 
-function rowToPlaceholder(row) {
-  return {
+function rowToPlaceholder(row, { includeMoney = true } = {}) {
+  const placeholder = {
     id: row.id,
     mitra_id: row.mitra_id,
     court_id: row.court_id,
@@ -647,13 +794,21 @@ function rowToPlaceholder(row) {
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
+  if (!includeMoney) delete placeholder.estimated_price;
+  return placeholder;
 }
 
-async function handlePlaceholderRequest(request, env) {
+async function handlePlaceholderRequest(request, env, virtualContext = null) {
   const dbError = requirePlaceholderDb(env);
   if (dbError) return withCors(dbError, request, env);
 
   await ensurePlaceholderTable(env.PLACEHOLDER_DB);
+
+  const accessError = requireVirtualPermission(virtualContext, 'Calendar');
+  if (accessError) return withCors(accessError, request, env);
+
+  const canViewMoney = !virtualContext?.user || hasVirtualPermission(virtualContext.user, CALENDAR_REVENUE_PERMISSION);
+  const virtualDisplayName = virtualContext?.user?.display_name || '';
 
   const url = new URL(request.url);
   const id = url.pathname.slice(PLACEHOLDER_PREFIX.length).replace(/^\//, '');
@@ -673,11 +828,20 @@ async function handlePlaceholderRequest(request, env) {
       ORDER BY date, start_time, court_name
     `).bind(mitraId, from, to).all();
 
-    return withCors(Response.json({ lists: (results || []).map(rowToPlaceholder) }), request, env);
+    return withCors(Response.json({
+      lists: (results || []).map((row) => rowToPlaceholder(row, { includeMoney: canViewMoney })),
+    }), request, env);
   }
 
   if (request.method === 'POST' && !id) {
     const payload = normalizePlaceholderPayload(await readJsonBody(request));
+    if (virtualDisplayName) {
+      payload.created_by_name = virtualDisplayName;
+      payload.updated_by_name = virtualDisplayName;
+    }
+    if (!canViewMoney) {
+      payload.estimated_price = 0;
+    }
     const validationError = validatePlaceholder(payload);
     if (validationError) {
       return withCors(Response.json({ error: validationError }, { status: 400 }), request, env);
@@ -713,7 +877,9 @@ async function handlePlaceholderRequest(request, env) {
     ).run();
 
     const row = await env.PLACEHOLDER_DB.prepare('SELECT * FROM placeholder_bookings WHERE id = ?').bind(newId).first();
-    return withCors(Response.json({ data: rowToPlaceholder(row) }, { status: 201 }), request, env);
+    return withCors(Response.json({
+      data: rowToPlaceholder(row, { includeMoney: canViewMoney }),
+    }, { status: 201 }), request, env);
   }
 
   if ((request.method === 'PUT' || request.method === 'PATCH') && id) {
@@ -721,6 +887,13 @@ async function handlePlaceholderRequest(request, env) {
     if (!existing) return withCors(Response.json({ error: 'Placeholder booking not found.' }, { status: 404 }), request, env);
 
     const payload = mergePlaceholderPayload(existing, await readJsonBody(request));
+    if (virtualDisplayName) {
+      payload.created_by_name = existing.created_by_name;
+      payload.updated_by_name = virtualDisplayName;
+    }
+    if (!canViewMoney) {
+      payload.estimated_price = existing.estimated_price;
+    }
     const validationError = validatePlaceholder(payload);
     if (validationError) {
       return withCors(Response.json({ error: validationError }, { status: 400 }), request, env);
@@ -753,7 +926,9 @@ async function handlePlaceholderRequest(request, env) {
     ).run();
 
     const row = await env.PLACEHOLDER_DB.prepare('SELECT * FROM placeholder_bookings WHERE id = ?').bind(id).first();
-    return withCors(Response.json({ data: rowToPlaceholder(row) }), request, env);
+    return withCors(Response.json({
+      data: rowToPlaceholder(row, { includeMoney: canViewMoney }),
+    }), request, env);
   }
 
   if (request.method === 'DELETE' && id) {
@@ -791,14 +966,21 @@ export default {
       return handleVirtualLoginRequest(request, env);
     }
 
+    const virtualContext = await getVirtualSessionContext(request, env);
+
     if (url.pathname === VIRTUAL_USERS_PREFIX || url.pathname.startsWith(`${VIRTUAL_USERS_PREFIX}/`)) {
       return handleVirtualUsersRequest(request, env);
     }
 
     if (url.pathname === PLACEHOLDER_PREFIX || url.pathname.startsWith(`${PLACEHOLDER_PREFIX}/`)) {
-      return handlePlaceholderRequest(request, env);
+      return handlePlaceholderRequest(request, env, virtualContext);
     }
 
-    return proxyApiRequest(request, env);
+    const accessError = authorizeVirtualProxyRequest(request, virtualContext);
+    if (accessError) return withCors(accessError, request, env);
+
+    return proxyApiRequest(request, env, {
+      transformResponse: shouldMaskCalendarMoney(url.pathname, virtualContext) ? stripMoneyFields : null,
+    });
   },
 };

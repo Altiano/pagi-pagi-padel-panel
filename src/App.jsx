@@ -62,6 +62,7 @@ const PLACEHOLDER_STATUSES = [
   { label: 'Ready to confirm', value: 'ready_to_confirm' },
   { label: 'Cancelled', value: 'cancelled' },
 ];
+const CALENDAR_REVENUE_PERMISSION = 'Calendar revenue';
 
 const mobileNavItems = [
   { label: 'Dashboard', icon: LayoutDashboard, nav: 'Dashboard' },
@@ -71,7 +72,12 @@ const mobileNavItems = [
   { label: 'Setting', icon: Settings, nav: 'Setting' },
 ];
 
-const virtualPermissionOptions = navGroups.flatMap((group) => group.items.map((item) => item.label));
+const screenPermissionOptions = navGroups.flatMap((group) => group.items.map((item) => item.label));
+const virtualPermissionGroups = [
+  { label: 'Visible screens', options: screenPermissionOptions },
+  { label: 'Calendar data', options: [CALENDAR_REVENUE_PERMISSION] },
+];
+const virtualPermissionOptions = virtualPermissionGroups.flatMap((group) => group.options);
 
 export function App() {
   const [auth, setAuth] = useState(() => getStoredAuth());
@@ -183,6 +189,10 @@ function PanelShell({ auth, isMobileRoute = false, onLogout }) {
   const allowedNav = getAllowedNav(auth);
   const visibleNavGroups = filterNavGroups(navGroups, allowedNav);
   const visibleMobileNavItems = mobileNavItems.filter((item) => isNavAllowed(item.nav, allowedNav));
+  const firstAllowedNav = getFirstAllowedNav(allowedNav);
+  const currentNav = isNavAllowed(activeNav, allowedNav) ? activeNav : firstAllowedNav;
+  const canViewCalendarRevenue = hasPermission(auth, CALENDAR_REVENUE_PERMISSION);
+  const isVirtualUser = Boolean(auth.virtualUser);
 
   useEffect(() => {
     let active = true;
@@ -201,23 +211,27 @@ function PanelShell({ auth, isMobileRoute = false, onLogout }) {
 
   useEffect(() => {
     if (!isNavAllowed(activeNav, allowedNav)) {
-      setActiveNav(isNavAllowed('Calendar', allowedNav) ? 'Calendar' : 'Setting');
+      setActiveNav(firstAllowedNav || '');
     }
-  }, [activeNav, allowedNav]);
+  }, [activeNav, allowedNav, firstAllowedNav]);
 
   const displayName = auth.virtualUser?.display_name || meState.data?.data?.name || meState.data?.name || auth.username || 'Owner';
   const mitraId = findMitraId(meState.data) || FALLBACK_MITRA_ID;
   const shellClassName = `panel-shell ${mobileView.isMobileApp ? 'mobile-app' : ''}`;
 
-  const content = activeNav === 'Calendar' ? (
+  const content = !currentNav ? (
+    <NoAccessPage displayName={displayName} onLogout={onLogout} />
+  ) : currentNav === 'Calendar' ? (
     <CalendarPage
+      canViewRevenue={canViewCalendarRevenue}
       displayName={displayName}
+      isVirtualUser={isVirtualUser}
       isMobileApp={mobileView.isMobileApp}
       mitraId={mitraId}
       onLogout={onLogout}
       onUseMobileView={() => mobileView.setPreference('mobile')}
     />
-  ) : activeNav === 'Setting' ? (
+  ) : currentNav === 'Setting' ? (
     <VirtualUsersPage
       auth={auth}
       displayName={displayName}
@@ -226,7 +240,7 @@ function PanelShell({ auth, isMobileRoute = false, onLogout }) {
     />
   ) : (
     <PlaceholderPage
-      activeNav={activeNav}
+      activeNav={currentNav}
       displayName={displayName}
       meState={meState}
       onLogout={onLogout}
@@ -237,7 +251,7 @@ function PanelShell({ auth, isMobileRoute = false, onLogout }) {
     <main className={shellClassName}>
       {mobileView.isMobileApp ? (
         <MobileAppShell
-          activeNav={activeNav}
+          activeNav={currentNav}
           displayName={displayName}
           navItems={visibleMobileNavItems}
           onChangeNav={setActiveNav}
@@ -248,7 +262,7 @@ function PanelShell({ auth, isMobileRoute = false, onLogout }) {
         </MobileAppShell>
       ) : (
         <>
-          <DesktopSidebar activeNav={activeNav} navGroups={visibleNavGroups} onChangeNav={setActiveNav} />
+          <DesktopSidebar activeNav={currentNav} navGroups={visibleNavGroups} onChangeNav={setActiveNav} />
 
           <section className="content">
             {content}
@@ -295,13 +309,13 @@ function usePreferredMobileView(isMobileRoute) {
 function getAllowedNav(auth) {
   if (!auth?.virtualUser) return null;
   const permissions = Array.isArray(auth.virtualUser.permissions) ? auth.virtualUser.permissions : [];
-  return new Set([...permissions, 'Setting']);
+  return new Set(permissions);
 }
 
 function isNavAllowed(nav, allowedNav) {
   if (!allowedNav) return true;
   if (nav === 'Court Prices' && allowedNav.has('Service')) return true;
-  return allowedNav.has(nav) || nav === 'Setting';
+  return allowedNav.has(nav);
 }
 
 function filterNavGroups(groups, allowedNav) {
@@ -312,6 +326,17 @@ function filterNavGroups(groups, allowedNav) {
       items: group.items.filter((item) => isNavAllowed(item.label, allowedNav)),
     }))
     .filter((group) => group.items.length);
+}
+
+function getFirstAllowedNav(allowedNav) {
+  if (!allowedNav) return 'Calendar';
+  return navGroups.flatMap((group) => group.items).find((item) => isNavAllowed(item.label, allowedNav))?.label || '';
+}
+
+function hasPermission(auth, permission) {
+  if (!auth?.virtualUser) return true;
+  const permissions = Array.isArray(auth.virtualUser.permissions) ? auth.virtualUser.permissions : [];
+  return permissions.includes(permission);
 }
 
 function DesktopSidebar({ activeNav, navGroups: visibleNavGroups, onChangeNav }) {
@@ -496,7 +521,7 @@ function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
                 <div className="virtual-user-permissions">
                   {user.permissions.length ? user.permissions.map((permission) => (
                     <span key={permission}>{permission}</span>
-                  )) : <span>Settings only</span>}
+                  )) : <span>No access</span>}
                 </div>
                 <div className="virtual-user-actions">
                   <span className={`state-pill ${user.is_active ? 'active' : 'inactive'}`}>{user.is_active ? 'Active' : 'Inactive'}</span>
@@ -611,15 +636,19 @@ function VirtualUserEditor({ mode, user, onClose, onSave }) {
             Active
           </label>
           <div className="permission-picker">
-            <span>Visible screens</span>
-            <div>
-              {virtualPermissionOptions.map((permission) => (
-                <label className="check-row" key={permission}>
-                  <input checked={form.permissions.includes(permission)} onChange={() => togglePermission(permission)} type="checkbox" />
-                  {permission}
-                </label>
-              ))}
-            </div>
+            {virtualPermissionGroups.map((group) => (
+              <div className="permission-section" key={group.label}>
+                <span>{group.label}</span>
+                <div>
+                  {group.options.map((permission) => (
+                    <label className="check-row" key={permission}>
+                      <input checked={form.permissions.includes(permission)} onChange={() => togglePermission(permission)} type="checkbox" />
+                      {permission}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
           {error ? <p className="status-line error">{error}</p> : null}
           <div className="editor-actions">
@@ -669,7 +698,32 @@ function PlaceholderPage({ activeNav, displayName, meState, onLogout }) {
   );
 }
 
-function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout, onUseMobileView }) {
+function NoAccessPage({ displayName, onLogout }) {
+  return (
+    <>
+      <header className="topbar">
+        <div>
+          <h1>Limited access</h1>
+          <p>{displayName} does not have any screens enabled yet.</p>
+        </div>
+        <button className="logout-button" onClick={onLogout} type="button">
+          <LogOut size={17} />
+          Logout
+        </button>
+      </header>
+
+      <section className="handoff-grid">
+        <article>
+          <span>Permissions</span>
+          <strong>No screens selected</strong>
+          <p>Ask the master account to update this virtual user's visible screens.</p>
+        </article>
+      </section>
+    </>
+  );
+}
+
+function CalendarPage({ canViewRevenue = true, displayName, isMobileApp = false, isVirtualUser = false, mitraId, onLogout, onUseMobileView }) {
   const [view, setView] = useState(() => (isMobileApp ? 'day' : 'week'));
   const [selectedDate, setSelectedDate] = useState(() => toDateInputValue(new Date()));
   const [refreshKey, setRefreshKey] = useState(0);
@@ -684,8 +738,8 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout, onU
 
   const weekDays = getWeekDays(selectedDate);
   const activeBookings = state.bookingsByDate[selectedDate] || [];
-  const selectedDaySummary = summarizeDay(activeBookings, state.openHour, state.courts.length);
-  const weekSummary = summarizeWeek(weekDays, state.bookingsByDate, state.openHour, state.courts.length);
+  const selectedDaySummary = summarizeDay(activeBookings, state.openHour, state.courts.length, canViewRevenue);
+  const weekSummary = summarizeWeek(weekDays, state.bookingsByDate, state.openHour, state.courts.length, canViewRevenue);
   const showDetailPanel = !isMobileApp && (selectedBooking || showSummaryPanel);
 
   useEffect(() => {
@@ -765,8 +819,12 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout, onU
       ...form,
       mitra_id: mitraId,
       court_name: court?.name || form.court_name || '',
-      estimated_price: Number(form.estimated_price || 0),
     };
+    if (canViewRevenue) {
+      payload.estimated_price = Number(form.estimated_price || 0);
+    } else {
+      delete payload.estimated_price;
+    }
     const editingId = placeholderEditor.mode === 'edit' ? placeholderEditor.booking?.placeholder_id || placeholderEditor.booking?.id : null;
     const saved = await apiRequest(editingId ? `/api/placeholder-bookings/${editingId}` : '/api/placeholder-bookings', {
       method: editingId ? 'PUT' : 'POST',
@@ -886,6 +944,7 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout, onU
             ) : isMobileApp && view === 'day' ? (
               <MobileDayAgenda
                 bookings={activeBookings}
+                canViewRevenue={canViewRevenue}
                 courts={state.courts}
                 openHour={state.openHour}
                 selectedBooking={selectedBooking}
@@ -895,6 +954,7 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout, onU
             ) : isMobileApp && view === 'week' ? (
               <MobileWeekCalendar
                 bookingsByDate={state.bookingsByDate}
+                canViewRevenue={canViewRevenue}
                 courts={state.courts}
                 openHour={state.openHour}
                 selectedDate={selectedDate}
@@ -906,6 +966,7 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout, onU
             ) : view === 'day' ? (
               <DayCalendar
                 bookings={activeBookings}
+                canViewRevenue={canViewRevenue}
                 courts={state.courts}
                 openHour={state.openHour}
                 selectedBooking={selectedBooking}
@@ -916,6 +977,7 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout, onU
             ) : (
               <WeekCalendar
                 bookingsByDate={state.bookingsByDate}
+                canViewRevenue={canViewRevenue}
                 courts={state.courts}
                 openHour={state.openHour}
                 selectedDate={selectedDate}
@@ -942,6 +1004,7 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout, onU
         {showDetailPanel ? (
           <CalendarDetailPanel
             booking={selectedBooking}
+            canViewRevenue={canViewRevenue}
             selectedDate={selectedDate}
             selectedDaySummary={selectedDaySummary}
             view={view}
@@ -960,12 +1023,14 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout, onU
       {placeholderEditor.mode !== 'closed' ? (
         <PlaceholderBookingEditor
           booking={placeholderEditor.booking}
+          canViewRevenue={canViewRevenue}
           conflicts={findPlaceholderConflicts}
           courts={state.courts}
           defaultDate={selectedDate}
           defaultName={displayName}
           draft={placeholderEditor.draft}
           isSaving={placeholderStatus.state === 'loading'}
+          isVirtualUser={isVirtualUser}
           mode={placeholderEditor.mode}
           openHour={state.openHour}
           onClose={() => setPlaceholderEditor({ mode: 'closed', booking: null })}
@@ -977,6 +1042,7 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout, onU
           <div onClick={(event) => event.stopPropagation()}>
             <CalendarDetailPanel
               booking={selectedBooking}
+              canViewRevenue={canViewRevenue}
               selectedDate={selectedDate}
               selectedDaySummary={selectedDaySummary}
               view={view}
@@ -993,7 +1059,7 @@ function CalendarPage({ displayName, isMobileApp = false, mitraId, onLogout, onU
   );
 }
 
-function MobileDayAgenda({ bookings, courts, openHour, selectedBooking, selectedDate, onSelectBooking }) {
+function MobileDayAgenda({ bookings, canViewRevenue = true, courts, openHour, selectedBooking, selectedDate, onSelectBooking }) {
   const courtBookings = courts.length ? courts.map((court) => ({
     court,
     entries: buildCourtTimelineEntries(bookings.filter((booking) => booking.court_id === court.id), openHour),
@@ -1030,7 +1096,7 @@ function MobileDayAgenda({ bookings, courts, openHour, selectedBooking, selected
                   <span className="mobile-booking-time">{entry.booking.time || getStartLabel(entry.booking)}</span>
                   <span className="mobile-booking-main">
                     <strong>{entry.booking.booking_owner || entry.booking.name}</strong>
-                    <small>{getBookingMeta(entry.booking)}</small>
+                    <small>{getBookingMeta(entry.booking, canViewRevenue)}</small>
                   </span>
                   <span className="mobile-payment-pill">{entry.booking.is_placeholder ? 'Placeholder' : entry.booking.booking_paid ? 'Paid' : 'Unpaid'}</span>
                 </button>
@@ -1048,12 +1114,12 @@ function MobileDayAgenda({ bookings, courts, openHour, selectedBooking, selected
   );
 }
 
-function MobileWeekCalendar({ bookingsByDate, courts, openHour, selectedDate, weekDays, onSelectBooking, onSelectDate, onSwitchDay }) {
+function MobileWeekCalendar({ bookingsByDate, canViewRevenue = true, courts, openHour, selectedDate, weekDays, onSelectBooking, onSelectDate, onSwitchDay }) {
   return (
     <div className="mobile-week-list">
       {weekDays.map((date) => {
         const bookings = bookingsByDate[date] || [];
-        const summary = summarizeDay(bookings, openHour, courts.length);
+        const summary = summarizeDay(bookings, openHour, courts.length, canViewRevenue);
         return (
           <article className={`mobile-week-row ${date === selectedDate ? 'selected' : ''}`} key={date}>
             <button className="mobile-week-summary" onClick={() => onSelectDate(date)} type="button">
@@ -1063,7 +1129,7 @@ function MobileWeekCalendar({ bookingsByDate, courts, openHour, selectedDate, we
               </span>
               <span className="mobile-week-stats">
                 <strong>{bookings.length} bookings</strong>
-                <small>{summary.bookedHours.toFixed(1)}h · {formatCurrency(summary.revenue)}</small>
+                <small>{summary.bookedHours.toFixed(1)}h · {formatMoney(summary.revenue, canViewRevenue)}</small>
               </span>
               <span className="occupancy-bar">
                 <span style={{ width: `${summary.occupancy}%` }} />
@@ -1096,7 +1162,7 @@ function MobileWeekCalendar({ bookingsByDate, courts, openHour, selectedDate, we
   );
 }
 
-function DayCalendar({ bookings, courts, openHour, selectedBooking, selectedDate, onCreatePlaceholder, onSelectBooking }) {
+function DayCalendar({ bookings, canViewRevenue = true, courts, openHour, selectedBooking, selectedDate, onCreatePlaceholder, onSelectBooking }) {
   const hours = buildHours(openHour);
   const intervalCount = Math.max(hours.length - 1, 1);
   const startMinutes = parseTimeToMinutes(openHour?.open_hours || '06:00');
@@ -1167,7 +1233,7 @@ function DayCalendar({ bookings, courts, openHour, selectedBooking, selectedDate
                 >
                   <strong>{booking.booking_owner || booking.name}</strong>
                   <span>{booking.time}</span>
-                  <small>{getBookingMeta(booking)}</small>
+                  <small>{getBookingMeta(booking, canViewRevenue)}</small>
                   {booking.is_placeholder ? <em>Placeholder</em> : booking.notes ? <em>Notes</em> : null}
                 </button>
               );
@@ -1179,7 +1245,7 @@ function DayCalendar({ bookings, courts, openHour, selectedBooking, selectedDate
   );
 }
 
-function WeekCalendar({ bookingsByDate, courts, openHour, selectedDate, weekDays, onSelectBooking, onSelectDate, onSwitchDay }) {
+function WeekCalendar({ bookingsByDate, canViewRevenue = true, courts, openHour, selectedDate, weekDays, onSelectBooking, onSelectDate, onSwitchDay }) {
   return (
     <div className="week-calendar">
       {weekDays.map((date) => {
@@ -1187,6 +1253,7 @@ function WeekCalendar({ bookingsByDate, courts, openHour, selectedDate, weekDays
         return (
           <WeekDayColumn
             bookings={bookings}
+            canViewRevenue={canViewRevenue}
             courts={courts}
             date={date}
             isSelected={date === selectedDate}
@@ -1202,10 +1269,10 @@ function WeekCalendar({ bookingsByDate, courts, openHour, selectedDate, weekDays
   );
 }
 
-function WeekDayColumn({ bookings, courts, date, isSelected, openHour, onSelectBooking, onSelectDate, onSwitchDay }) {
+function WeekDayColumn({ bookings, canViewRevenue = true, courts, date, isSelected, openHour, onSelectBooking, onSelectDate, onSwitchDay }) {
   const [hiddenCounts, setHiddenCounts] = useState({ above: 0, below: 0 });
   const courtListRef = useRef(null);
-  const summary = summarizeDay(bookings, openHour, courts.length);
+  const summary = summarizeDay(bookings, openHour, courts.length, canViewRevenue);
   const bookingLabel = `${bookings.length} booking${bookings.length === 1 ? '' : 's'}`;
 
   useEffect(() => {
@@ -1242,7 +1309,7 @@ function WeekDayColumn({ bookings, courts, date, isSelected, openHour, onSelectB
       </button>
       <div className="week-day-metrics">
         <span>{summary.bookedHours.toFixed(1)}h booked</span>
-        <em>{formatCurrency(summary.revenue)}</em>
+        <em>{formatMoney(summary.revenue, canViewRevenue)}</em>
       </div>
       <div className="week-day-body">
         <div className="week-court-list" ref={courtListRef}>
@@ -1290,7 +1357,7 @@ function WeekDayColumn({ bookings, courts, date, isSelected, openHour, onSelectB
   );
 }
 
-function CalendarDetailPanel({ booking, selectedDate, selectedDaySummary, view, weekSummary, onClose, onDeletePlaceholder, onEditPlaceholder, onOpenDay }) {
+function CalendarDetailPanel({ booking, canViewRevenue = true, selectedDate, selectedDaySummary, view, weekSummary, onClose, onDeletePlaceholder, onEditPlaceholder, onOpenDay }) {
   if (booking) {
     const isPlaceholder = booking.is_placeholder;
     return (
@@ -1311,7 +1378,7 @@ function CalendarDetailPanel({ booking, selectedDate, selectedDaySummary, view, 
           <div><dt>Duration</dt><dd>{booking.duration || getDurationMinutes(booking)} min</dd></div>
           <div><dt>Type</dt><dd>{isPlaceholder ? 'Local placeholder' : booking.booking_type || booking.type}</dd></div>
           <div><dt>Payment</dt><dd>{isPlaceholder ? formatStatus(booking.status) : booking.booking_paid ? 'Paid' : 'Unpaid'}</dd></div>
-          <div><dt>Price</dt><dd>{formatCurrency(booking.price)}</dd></div>
+          <div><dt>Price</dt><dd>{formatMoney(booking.price, canViewRevenue)}</dd></div>
           {isPlaceholder ? <div><dt>Contact</dt><dd>{booking.customer_contact || '-'}</dd></div> : null}
           <div><dt>Notes</dt><dd>{booking.notes || 'No notes'}</dd></div>
           {isPlaceholder ? (
@@ -1346,7 +1413,7 @@ function CalendarDetailPanel({ booking, selectedDate, selectedDaySummary, view, 
       <dl>
         <div><dt>Total bookings</dt><dd>{view === 'week' ? weekSummary.totalBookings : selectedDaySummary.bookingCount}</dd></div>
         <div><dt>Booked hours</dt><dd>{(view === 'week' ? weekSummary.bookedHours : selectedDaySummary.bookedHours).toFixed(1)}h</dd></div>
-        <div><dt>Estimated revenue</dt><dd>{formatCurrency(view === 'week' ? weekSummary.revenue : selectedDaySummary.revenue)}</dd></div>
+        <div><dt>Estimated revenue</dt><dd>{formatMoney(view === 'week' ? weekSummary.revenue : selectedDaySummary.revenue, canViewRevenue)}</dd></div>
         <div><dt>Busiest day</dt><dd>{weekSummary.busiestDay || 'No bookings'}</dd></div>
         <div><dt>Busiest band</dt><dd>{weekSummary.busiestBand || 'No bookings'}</dd></div>
       </dl>
@@ -1358,8 +1425,8 @@ function CalendarDetailPanel({ booking, selectedDate, selectedDaySummary, view, 
   );
 }
 
-function PlaceholderBookingEditor({ booking, conflicts, courts, defaultDate, defaultName, draft, isSaving, mode, openHour, onClose, onSave }) {
-  const [form, setForm] = useState(() => buildPlaceholderForm({ booking, courts, defaultDate, defaultName, draft, openHour }));
+function PlaceholderBookingEditor({ booking, canViewRevenue = true, conflicts, courts, defaultDate, defaultName, draft, isSaving, isVirtualUser = false, mode, openHour, onClose, onSave }) {
+  const [form, setForm] = useState(() => buildPlaceholderForm({ booking, courts, defaultDate, defaultName, draft, isVirtualUser, openHour }));
   const [error, setError] = useState('');
   const conflictList = conflicts(form);
   const hasConflict = conflictList.length > 0;
@@ -1436,18 +1503,30 @@ function PlaceholderBookingEditor({ booking, conflicts, courts, defaultDate, def
             <input onChange={(event) => updateField('customer_contact', event.target.value)} placeholder="Phone, WhatsApp, or email" value={form.customer_contact} />
           </label>
           <div className="form-grid two">
-            <label>
-              Estimated price
-              <input min="0" onChange={(event) => updateField('estimated_price', event.target.value)} type="number" value={form.estimated_price} />
-            </label>
+            {canViewRevenue ? (
+              <label>
+                Estimated price
+                <input min="0" onChange={(event) => updateField('estimated_price', event.target.value)} type="number" value={form.estimated_price} />
+              </label>
+            ) : null}
             <label>
               Created by
-              <input onChange={(event) => updateField('created_by_name', event.target.value)} placeholder="PIC name" value={form.created_by_name} />
+              <input
+                onChange={(event) => updateField('created_by_name', event.target.value)}
+                placeholder="PIC name"
+                readOnly={isVirtualUser}
+                value={form.created_by_name}
+              />
             </label>
           </div>
           <label>
             Updated by
-            <input onChange={(event) => updateField('updated_by_name', event.target.value)} placeholder="PIC name" value={form.updated_by_name} />
+            <input
+              onChange={(event) => updateField('updated_by_name', event.target.value)}
+              placeholder="PIC name"
+              readOnly={isVirtualUser}
+              value={form.updated_by_name}
+            />
           </label>
           <label>
             Notes
@@ -1554,7 +1633,7 @@ function normalizePlaceholderBooking(placeholder) {
   };
 }
 
-function buildPlaceholderForm({ booking, courts, defaultDate, defaultName, draft, openHour }) {
+function buildPlaceholderForm({ booking, courts, defaultDate, defaultName, draft, isVirtualUser = false, openHour }) {
   if (booking) {
     const [startTime, endTime] = String(booking.time || '').split('-');
     return {
@@ -1569,7 +1648,7 @@ function buildPlaceholderForm({ booking, courts, defaultDate, defaultName, draft
       status: booking.status || 'awaiting_payment',
       notes: booking.notes || '',
       created_by_name: booking.created_by_name || defaultName || '',
-      updated_by_name: booking.updated_by_name || defaultName || '',
+      updated_by_name: isVirtualUser ? defaultName || '' : booking.updated_by_name || defaultName || '',
     };
   }
 
@@ -1669,6 +1748,10 @@ function formatCompactCurrency(value) {
   }).format(amount);
 }
 
+function formatMoney(value, canViewRevenue = true) {
+  return canViewRevenue ? formatCurrency(value) : 'Hidden';
+}
+
 function parseTimeToMinutes(value) {
   const normalized = String(value || '00:00').replace('.', ':');
   const [hour, minute = '0'] = normalized.split(':').map(Number);
@@ -1754,9 +1837,9 @@ function getBookingTone(booking) {
   return 'tone-slate';
 }
 
-function getBookingMeta(booking) {
-  if (booking.is_placeholder) return `${formatCurrency(booking.price)} · ${formatStatus(booking.status)}`;
-  return `${booking.booking_type || booking.type || 'booking'} · ${formatCurrency(booking.price)}`;
+function getBookingMeta(booking, canViewRevenue = true) {
+  if (booking.is_placeholder) return `${formatMoney(booking.price, canViewRevenue)} · ${formatStatus(booking.status)}`;
+  return `${booking.booking_type || booking.type || 'booking'} · ${formatMoney(booking.price, canViewRevenue)}`;
 }
 
 function formatStatus(value) {
@@ -1793,10 +1876,10 @@ function buildHours(openHour) {
   return hours;
 }
 
-function summarizeDay(bookings, openHour, courtCount = 1) {
+function summarizeDay(bookings, openHour, courtCount = 1, canViewRevenue = true) {
   const openMinutes = parseTimeToMinutes(openHour?.close_hours || '24:00') - parseTimeToMinutes(openHour?.open_hours || '06:00');
   const bookedMinutes = bookings.reduce((sum, booking) => sum + Number(booking.duration || getDurationMinutes(booking)), 0);
-  const revenue = bookings.reduce((sum, booking) => sum + Number(booking.price || 0), 0);
+  const revenue = canViewRevenue ? bookings.reduce((sum, booking) => sum + Number(booking.price || 0), 0) : null;
   const capacityMinutes = openMinutes * Math.max(Number(courtCount) || 1, 1);
   return {
     bookedHours: bookedMinutes / 60,
@@ -1806,11 +1889,11 @@ function summarizeDay(bookings, openHour, courtCount = 1) {
   };
 }
 
-function summarizeWeek(weekDays, bookingsByDate, openHour, courtCount = 1) {
-  const summaries = weekDays.map((date) => ({ date, ...summarizeDay(bookingsByDate[date] || [], openHour, courtCount) }));
+function summarizeWeek(weekDays, bookingsByDate, openHour, courtCount = 1, canViewRevenue = true) {
+  const summaries = weekDays.map((date) => ({ date, ...summarizeDay(bookingsByDate[date] || [], openHour, courtCount, canViewRevenue) }));
   const totalBookings = summaries.reduce((sum, day) => sum + day.bookingCount, 0);
   const bookedHours = summaries.reduce((sum, day) => sum + day.bookedHours, 0);
-  const revenue = summaries.reduce((sum, day) => sum + day.revenue, 0);
+  const revenue = canViewRevenue ? summaries.reduce((sum, day) => sum + Number(day.revenue || 0), 0) : null;
   const busiest = summaries.reduce((best, day) => day.bookingCount > best.bookingCount ? day : best, summaries[0] || {});
   const allBookings = weekDays.flatMap((date) => bookingsByDate[date] || []);
   const bands = allBookings.reduce((map, booking) => {

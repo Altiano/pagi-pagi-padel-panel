@@ -174,6 +174,11 @@ input::placeholder {
   font-weight: 500;
 }
 
+input:read-only {
+  color: #5a635b;
+  background: #eef3e8;
+}
+
 input:focus,
 select:focus,
 textarea:focus {
@@ -513,13 +518,18 @@ textarea:focus {
   gap: 10px;
 }
 
-.permission-picker > span {
+.permission-section {
+  display: grid;
+  gap: 8px;
+}
+
+.permission-section > span {
   color: #39433b;
   font-size: 13px;
   font-weight: 650;
 }
 
-.permission-picker > div {
+.permission-section > div {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
@@ -2125,7 +2135,7 @@ textarea:focus {
 
   .form-grid.two,
   .editor-actions,
-  .permission-picker > div {
+  .permission-section > div {
     grid-template-columns: 1fr;
   }
 }

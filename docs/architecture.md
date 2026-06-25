@@ -9,10 +9,15 @@ Pagi Pagi Padel Panel is a React + Vite admin frontend. It is currently compact 
 3. If there is no valid auth object, `LoginScreen` is shown.
 4. Login posts to `/api/auth/login`, stores auth in localStorage, then renders the panel.
 5. If the login username starts with `_`, the Worker validates a D1-backed virtual user and signs into upstream with the configured master account before returning the upstream token plus virtual-user metadata.
-6. `PanelShell` loads `/api/auth/me`, derives the display name and `mitraId`, applies wrapper-level virtual-user navigation visibility, and renders the active screen.
+6. `PanelShell` loads `/api/auth/me`, derives the display name and `mitraId`, applies virtual-user navigation visibility, and renders the active screen.
 7. Calendar is the only fully wired screen today. Settings exposes virtual user management only when the Worker confirms the real master account is signed in. Other navigation items render placeholders.
 
 Placeholder bookings and virtual users are wrapper-owned data models. They are stored in Cloudflare D1 through the Worker. Placeholder bookings are merged into Calendar responses on the frontend and deliberately do not call the upstream booking API until a future confirmation/payment flow is implemented. Virtual users allow multiple wrapper logins to share one real upstream account, but only a real `MASTER_USERNAME` session can manage them.
+
+Virtual permissions are enforced twice:
+
+- The React shell filters visible screens and hides calendar money when `Calendar revenue` is absent.
+- The Worker maps bearer tokens back to D1 virtual sessions before proxying, rejects upstream endpoints outside the user's allowed screens, strips calendar money fields without `Calendar revenue`, and stamps virtual placeholder audit names from the virtual user's display name.
 
 ## API Flow
 

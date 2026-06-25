@@ -58,7 +58,7 @@ If `username` starts with `_`, the Worker treats it as a virtual account login. 
     "username": "frontdesk",
     "login_username": "_frontdesk",
     "display_name": "Front desk",
-    "permissions": ["Calendar", "Setting"],
+    "permissions": ["Calendar", "Calendar revenue"],
     "is_active": true
   }
 }
@@ -227,9 +227,23 @@ Create/update payload:
 }
 ```
 
-For updates, omit or blank `password` to keep the current password. Passwords are stored as salted SHA-256 hashes in D1. Permissions currently control visible navigation in the wrapper UI; they are not yet a full server-side authorization model for upstream data.
+For updates, omit or blank `password` to keep the current password. Passwords are stored as salted SHA-256 hashes in D1. Permissions control visible navigation in the wrapper UI and Worker authorization before virtual sessions reach proxied upstream endpoints.
 
 The Worker records virtual-issued access token hashes in D1 so `/api/virtual-users` can reject virtual sessions even though those sessions use a master upstream token underneath. Non-master upstream accounts are rejected after the Worker verifies `/api/auth/me` against `MASTER_USERNAME`.
+
+Virtual endpoint authorization:
+
+- `Dashboard`: dashboard, mitra info/notifications, and dashboard transaction summary/list routes from the captured API map.
+- `Calendar`: schedule/open-hour, schedule calendar courts, mitra court list, mitra operation hours, and `/api/placeholder-bookings`.
+- `Court Prices`: `/api/admin/services`.
+- `Event`: `/api/admin/event`.
+- `Coach`: `/api/admin/coach`.
+- `Add On`: `/api/admin/addons`.
+- `Customers`: player, voucher, promotion, membership, and mitra discount routes.
+- `Setting`: admin user routes and image lookup.
+- `Calendar revenue`: data permission, not a screen. Without it, the Worker strips money fields from calendar schedule responses and placeholder responses for virtual sessions.
+
+Placeholder audit fields are also server-owned for virtual sessions. On create, the Worker sets both `created_by_name` and `updated_by_name` to the virtual user's display name. On update, it preserves the original creator and sets `updated_by_name` to the virtual user's display name.
 
 ## Error Handling
 

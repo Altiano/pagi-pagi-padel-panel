@@ -49,7 +49,8 @@ Use `pnpm build` as the default verification command after code changes.
 - Calendar data is loaded in `loadCalendarData`, which fetches courts, open hours, one schedule response per weekday, and D1-backed placeholder bookings.
 - Virtual account login uses an underscore-prefixed username, for example `_frontdesk`. The Worker validates the D1 virtual user, then logs into upstream with `MASTER_USERNAME` and `MASTER_PASSWORD`.
 - Virtual user management is master-only. The Worker rejects `/api/virtual-users` requests from virtual sessions and from real upstream accounts whose `/api/auth/me` identity does not match `MASTER_USERNAME`.
-- Virtual user permissions currently control wrapper navigation visibility. They are not yet server-side upstream authorization.
+- Virtual user permissions control wrapper navigation and Worker endpoint authorization. The Worker maps virtual sessions to D1 token hashes before proxying upstream routes, rejects endpoints outside the user's allowed screens, and masks calendar money fields unless `Calendar revenue` is granted.
+- Virtual users can create and update placeholder bookings, but the Worker stamps `created_by_name`/`updated_by_name` from the virtual user's display name instead of trusting submitted PIC names.
 - Authentication is stored in localStorage under `panel.auth` plus Nuxt-compatible keys used for parity checks.
 - A `401` response clears stored auth in `apiRequest`.
 
