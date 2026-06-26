@@ -1600,127 +1600,131 @@ function PlaceholderBookingEditor({ booking, canViewRevenue = true, conflicts, c
         </div>
         <h2>{mode === 'edit' ? 'Update tentative hold' : 'Create tentative hold'}</h2>
         <form onSubmit={handleSubmit}>
-          {mode === 'edit' ? (
-            <label>
-              Court
-              <select onChange={(event) => updateField('court_id', event.target.value)} required value={form.court_id}>
-                <option value="">Select court</option>
-                {courts.map((court) => <option key={court.id} value={court.id}>{court.name}</option>)}
-              </select>
-            </label>
-          ) : (
-            <div className="court-picker">
-              <span>Courts</span>
-              <div className="court-choice-grid">
-                {courts.map((court) => (
-                  <label className={`court-choice ${selectedCourtIds.includes(court.id) ? 'selected' : ''}`} key={court.id}>
-                    <input
-                      checked={selectedCourtIds.includes(court.id)}
-                      onChange={() => toggleCourt(court.id)}
-                      type="checkbox"
-                    />
-                    {court.name}
-                  </label>
-                ))}
+          <div className="placeholder-editor-fields">
+            {mode === 'edit' ? (
+              <label>
+                Court
+                <select onChange={(event) => updateField('court_id', event.target.value)} required value={form.court_id}>
+                  <option value="">Select court</option>
+                  {courts.map((court) => <option key={court.id} value={court.id}>{court.name}</option>)}
+                </select>
+              </label>
+            ) : (
+              <div className="court-picker">
+                <span>Courts</span>
+                <div className="court-choice-grid">
+                  {courts.map((court) => (
+                    <label className={`court-choice ${selectedCourtIds.includes(court.id) ? 'selected' : ''}`} key={court.id}>
+                      <input
+                        checked={selectedCourtIds.includes(court.id)}
+                        onChange={() => toggleCourt(court.id)}
+                        type="checkbox"
+                      />
+                      {court.name}
+                    </label>
+                  ))}
+                </div>
               </div>
+            )}
+            <div className="form-grid two">
+              <label>
+                Date
+                <input onChange={(event) => updateField('date', event.target.value)} required type="date" value={form.date} />
+              </label>
+              <label>
+                Status
+                <select onChange={(event) => updateField('status', event.target.value)} value={form.status}>
+                  {PLACEHOLDER_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
+                </select>
+              </label>
             </div>
-          )}
-          <div className="form-grid two">
-            <label>
-              Date
-              <input onChange={(event) => updateField('date', event.target.value)} required type="date" value={form.date} />
-            </label>
-            <label>
-              Status
-              <select onChange={(event) => updateField('status', event.target.value)} value={form.status}>
-                {PLACEHOLDER_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
-              </select>
-            </label>
-          </div>
-          <div className="form-grid time-duration-grid">
-            <label>
-              Start time
-              <input onChange={(event) => updateField('start_time', event.target.value)} required type="time" value={form.start_time} />
-            </label>
-            <div className="duration-control">
-              <span>Duration</span>
-              <div className="duration-options">
-                {PLACEHOLDER_DURATION_OPTIONS.map((option) => (
+            <div className="form-grid time-grid">
+              <label>
+                Start time
+                <input onChange={(event) => updateField('start_time', event.target.value)} required type="time" value={form.start_time} />
+              </label>
+              <label>
+                End time
+                <input onChange={(event) => updateField('end_time', event.target.value)} required type="time" value={form.end_time} />
+              </label>
+              <div className="duration-control">
+                <span>Duration</span>
+                <div className="duration-options">
+                  {PLACEHOLDER_DURATION_OPTIONS.map((option) => (
+                    <button
+                      className={form.duration_mode === String(option.minutes) ? 'selected' : ''}
+                      key={option.minutes}
+                      onClick={() => setDuration(option.minutes)}
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
                   <button
-                    className={form.duration_mode === String(option.minutes) ? 'selected' : ''}
-                    key={option.minutes}
-                    onClick={() => setDuration(option.minutes)}
+                    className={form.duration_mode === 'custom' ? 'selected' : ''}
+                    onClick={() => updateField('duration_mode', 'custom')}
                     type="button"
                   >
-                    {option.label}
+                    Custom
                   </button>
-                ))}
-                <button
-                  className={form.duration_mode === 'custom' ? 'selected' : ''}
-                  onClick={() => updateField('duration_mode', 'custom')}
-                  type="button"
-                >
-                  Custom
-                </button>
+                </div>
               </div>
             </div>
             <label>
-              End time
-              <input onChange={(event) => updateField('end_time', event.target.value)} required type="time" value={form.end_time} />
+              Customer name
+              <input onChange={(event) => updateField('customer_name', event.target.value)} placeholder="Customer or group name" required value={form.customer_name} />
             </label>
-          </div>
-          <label>
-            Customer name
-            <input onChange={(event) => updateField('customer_name', event.target.value)} placeholder="Customer or group name" required value={form.customer_name} />
-          </label>
-          <label>
-            Contact
-            <input onChange={(event) => updateField('customer_contact', event.target.value)} placeholder="Phone, WhatsApp, or email" value={form.customer_contact} />
-          </label>
-          <div className="form-grid two">
-            {canViewRevenue ? (
+            <label>
+              Contact
+              <input onChange={(event) => updateField('customer_contact', event.target.value)} placeholder="Phone, WhatsApp, or email" value={form.customer_contact} />
+            </label>
+            <div className="form-grid two">
+              {canViewRevenue ? (
+                <label>
+                  Estimated price
+                  <input
+                    inputMode="numeric"
+                    onChange={(event) => updateField('estimated_price', parseMoneyInput(event.target.value))}
+                    placeholder="Rp 0"
+                    value={formatMoneyInput(form.estimated_price)}
+                  />
+                </label>
+              ) : null}
               <label>
-                Estimated price
+                Created by
                 <input
-                  inputMode="numeric"
-                  onChange={(event) => updateField('estimated_price', parseMoneyInput(event.target.value))}
-                  placeholder="Rp 0"
-                  value={formatMoneyInput(form.estimated_price)}
+                  onChange={(event) => updateField('created_by_name', event.target.value)}
+                  placeholder="PIC name"
+                  readOnly={isVirtualUser}
+                  value={form.created_by_name}
                 />
               </label>
-            ) : null}
+            </div>
             <label>
-              Created by
+              Updated by
               <input
-                onChange={(event) => updateField('created_by_name', event.target.value)}
+                onChange={(event) => updateField('updated_by_name', event.target.value)}
                 placeholder="PIC name"
                 readOnly={isVirtualUser}
-                value={form.created_by_name}
+                value={form.updated_by_name}
               />
             </label>
+            <label>
+              Notes
+              <textarea onChange={(event) => updateField('notes', event.target.value)} placeholder="Negotiation/payment context" rows={4} value={form.notes} />
+            </label>
           </div>
-          <label>
-            Updated by
-            <input
-              onChange={(event) => updateField('updated_by_name', event.target.value)}
-              placeholder="PIC name"
-              readOnly={isVirtualUser}
-              value={form.updated_by_name}
-            />
-          </label>
-          <label>
-            Notes
-            <textarea onChange={(event) => updateField('notes', event.target.value)} placeholder="Negotiation/payment context" rows={4} value={form.notes} />
-          </label>
-          {hasConflict ? (
-            <p className="status-line error">Overlaps with {conflictList.length} booking{conflictList.length > 1 ? 's' : ''} on this court.</p>
-          ) : null}
-          {error ? <p className="status-line error">{error}</p> : null}
-          <div className="editor-actions">
-            <button className="logout-button" onClick={onClose} type="button">Cancel</button>
-            <button className="primary-button" disabled={isSaving || hasConflict} type="submit">
-              {isSaving ? 'Saving...' : mode === 'edit' ? 'Save changes' : 'Create placeholder'}
-            </button>
+          <div className="editor-footer">
+            {hasConflict ? (
+              <p className="status-line error">Overlaps with {conflictList.length} booking{conflictList.length > 1 ? 's' : ''} on this court.</p>
+            ) : null}
+            {error ? <p className="status-line error">{error}</p> : null}
+            <div className="editor-actions">
+              <button className="logout-button" onClick={onClose} type="button">Cancel</button>
+              <button className="primary-button" disabled={isSaving || hasConflict} type="submit">
+                {isSaving ? 'Saving...' : mode === 'edit' ? 'Save changes' : 'Create placeholder'}
+              </button>
+            </div>
           </div>
         </form>
       </aside>

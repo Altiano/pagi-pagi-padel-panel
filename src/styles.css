@@ -1429,12 +1429,13 @@ textarea:focus {
 
 .placeholder-editor {
   display: grid;
-  align-content: start;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  align-content: stretch;
   gap: 18px;
   width: min(100%, 470px);
   height: 100%;
-  overflow: auto;
-  padding: 24px;
+  overflow: hidden;
+  padding: 24px 24px 0;
   border-left: 1px solid var(--line);
   background: var(--surface);
   box-shadow: -24px 0 70px rgba(23, 33, 27, 0.13);
@@ -1447,7 +1448,20 @@ textarea:focus {
 }
 
 .placeholder-editor form {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+
+.placeholder-editor-fields {
+  display: grid;
   gap: 15px;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: 16px;
 }
 
 .court-picker {
@@ -1498,9 +1512,13 @@ textarea:focus {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.time-duration-grid {
-  grid-template-columns: 0.9fr 1.3fr 0.9fr;
-  align-items: end;
+.time-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.time-grid .duration-control {
+  grid-column: 1 / -1;
 }
 
 .duration-control {
@@ -1513,25 +1531,40 @@ textarea:focus {
 
 .duration-options {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(58px, 1fr));
   gap: 6px;
 }
 
 .duration-options button {
   min-height: 48px;
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 11px;
+  padding: 0 10px;
   background: #fbfcf8;
   color: #526052;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 750;
+  white-space: nowrap;
 }
 
 .duration-options button.selected {
   border-color: rgba(40, 99, 69, 0.28);
   background: var(--green);
   color: white;
+}
+
+.editor-footer {
+  z-index: 2;
+  display: grid;
+  gap: 10px;
+  margin: 0 -24px;
+  padding: 14px 24px calc(16px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 -18px 34px rgba(23, 33, 27, 0.08);
+  backdrop-filter: blur(14px);
 }
 
 .editor-actions {
@@ -2225,11 +2258,10 @@ textarea:focus {
     border-top-left-radius: 22px;
     border-top-right-radius: 22px;
     border-left: 0;
-    padding-bottom: calc(24px + env(safe-area-inset-bottom));
   }
 
   .form-grid.two,
-  .time-duration-grid,
+  .time-grid,
   .editor-actions,
   .court-choice-grid,
   .permission-section > div {
