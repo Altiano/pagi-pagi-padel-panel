@@ -165,6 +165,8 @@ Important booking fields used by the UI:
 
 `loadCalendarData` attaches `court_name` to each booking by matching `court_id` to the court list.
 
+Calendar responses are cached in browser memory for 30 seconds per auth/revenue scope, `mitraId`, data type, and date. This cache is deliberately not persisted. The dashboard refresh button and placeholder mutations bypass the cache, and a browser reload naturally starts with an empty cache.
+
 ## Placeholder Bookings
 
 Placeholder bookings are stored by this wrapper and are not sent to the upstream API. They are intended for tentative holds while staff negotiate or wait for payment.
@@ -203,6 +205,8 @@ Stored fields:
 ```
 
 The frontend maps these rows into booking-like calendar entries with `is_placeholder: true`, `booking_type: "placeholder"`, and an amber dashed visual treatment. `confirmed_booking_id` is reserved for a future flow that creates a real upstream booking after payment.
+
+The placeholder form can create the same tentative hold across multiple courts. The backend contract remains one row per request; the frontend sends one `POST /api/placeholder-bookings` request per selected court. Editing remains a single-row `PUT`.
 
 ## Virtual Users
 

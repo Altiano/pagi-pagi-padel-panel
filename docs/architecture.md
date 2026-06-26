@@ -33,7 +33,7 @@ Virtual permissions are enforced twice:
 
 - `view`: `day` or `week`.
 - `selectedDate`: `YYYY-MM-DD` date string.
-- `refreshKey`: incremented to reload current calendar data.
+- `refreshKey`: incremented to force-refresh current calendar data.
 - `state`: courts, open hours, bookings grouped by date, loading, and error state.
 - `selectedBooking`: booking shown in the detail panel.
 
@@ -42,11 +42,15 @@ When `mitraId`, `selectedDate`, or `refreshKey` changes, `CalendarPage` calls `l
 `loadCalendarData` fetches:
 
 - court list for the current `mitraId`
-- open hours for the selected date
+- open hours for every date in the selected week
 - schedule entries for every date in the selected week
-- local placeholder bookings for the selected week
+- local placeholder bookings for every date in the selected week
 
 Then it attaches court names to booking rows, maps placeholders into booking-like entries, and returns normalized calendar state.
+
+Calendar data uses a module-level in-memory cache with a 30-second TTL. Cache keys include the current auth/revenue visibility scope, `mitraId`, data type, and date so virtual-user revenue masking does not bleed across sessions. Selecting another already-cached day in the same week reuses cached open hours, schedule rows, and placeholders. The toolbar refresh button and placeholder create/update/delete increment `refreshKey` and bypass the cache; a browser reload also clears the cache because it is not persisted.
+
+Placeholder create mode can target multiple courts at once. The frontend fans that out into one `/api/placeholder-bookings` POST per selected court. Edit mode updates a single placeholder row.
 
 ## UI Structure
 

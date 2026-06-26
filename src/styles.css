@@ -1205,13 +1205,18 @@ textarea:focus {
 }
 
 .availability-gap {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   width: 100%;
   border: 1px dashed rgba(119, 129, 118, 0.16);
   border-radius: 8px;
   padding: 7px 8px;
   background: rgba(248, 250, 245, 0.56);
   color: #8a9388;
+  cursor: pointer;
+  text-align: left;
 }
 
 .availability-gap strong {
@@ -1219,6 +1224,24 @@ textarea:focus {
   font-size: 11px;
   font-weight: 500;
   white-space: nowrap;
+}
+
+.availability-gap svg {
+  flex: 0 0 auto;
+  color: var(--green);
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.availability-gap:hover,
+.availability-gap:focus-visible {
+  border-color: rgba(40, 99, 69, 0.28);
+  background: #f2f6ec;
+}
+
+.availability-gap:hover svg,
+.availability-gap:focus-visible svg {
+  opacity: 1;
 }
 
 .tone-green {
@@ -1445,6 +1468,45 @@ textarea:focus {
   gap: 15px;
 }
 
+.court-picker {
+  display: grid;
+  gap: 8px;
+  color: #39433b;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.court-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.court-choice {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 9px 11px;
+  background: #fbfcf8;
+  color: #526052;
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.court-choice.selected {
+  border-color: rgba(40, 99, 69, 0.28);
+  background: #edf4e5;
+  color: var(--green);
+}
+
+.court-choice input {
+  width: 17px;
+  height: 17px;
+}
+
 .form-grid {
   display: grid;
   gap: 12px;
@@ -1452,6 +1514,42 @@ textarea:focus {
 
 .form-grid.two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.time-duration-grid {
+  grid-template-columns: 0.9fr 1.3fr 0.9fr;
+  align-items: end;
+}
+
+.duration-control {
+  display: grid;
+  gap: 8px;
+  color: #39433b;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.duration-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.duration-options button {
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #fbfcf8;
+  color: #526052;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.duration-options button.selected {
+  border-color: rgba(40, 99, 69, 0.28);
+  background: var(--green);
+  color: white;
 }
 
 .editor-actions {
@@ -1981,6 +2079,21 @@ textarea:focus {
     transform 140ms ease;
 }
 
+.mobile-week-court .mobile-week-availability {
+  border-style: dashed;
+  background: rgba(248, 250, 245, 0.7);
+  color: #8a9388;
+}
+
+.mobile-week-court .mobile-week-availability span {
+  overflow: hidden;
+  color: #8a9388;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .mobile-week-court button:hover,
 .mobile-week-court button:focus-visible {
   box-shadow: 0 10px 22px rgba(23, 63, 43, 0.11);
@@ -2134,7 +2247,9 @@ textarea:focus {
   }
 
   .form-grid.two,
+  .time-duration-grid,
   .editor-actions,
+  .court-choice-grid,
   .permission-section > div {
     grid-template-columns: 1fr;
   }

@@ -63,6 +63,13 @@ const PLACEHOLDER_STATUSES = [
   { label: 'Cancelled', value: 'cancelled' },
 ];
 const CALENDAR_REVENUE_PERMISSION = 'Calendar revenue';
+const CALENDAR_DATA_CACHE_TTL_MS = 30 * 1000;
+const PLACEHOLDER_DURATION_OPTIONS = [
+  { label: '1h', minutes: 60 },
+  { label: '2h', minutes: 120 },
+  { label: '3h', minutes: 180 },
+];
+const calendarDataCache = new Map();
 
 const mobileNavItems = [
   { label: 'Dashboard', icon: LayoutDashboard, nav: 'Dashboard' },
@@ -89,6 +96,7 @@ export function App() {
 
   return <PanelShell auth={auth} isMobileRoute={isMobileRoute} onLogout={() => {
     clearStoredAuth();
+    clearCalendarDataCache();
     setAuth(null);
   }} />;
 }
@@ -217,12 +225,14 @@ function PanelShell({ auth, isMobileRoute = false, onLogout }) {
 
   const displayName = auth.virtualUser?.display_name || meState.data?.data?.name || meState.data?.name || auth.username || 'Owner';
   const mitraId = findMitraId(meState.data) || FALLBACK_MITRA_ID;
+  const calendarCacheScope = getCalendarCacheScope(auth, canViewCalendarRevenue);
   const shellClassName = `panel-shell ${mobileView.isMobileApp ? 'mobile-app' : ''}`;
 
   const content = !currentNav ? (
     <NoAccessPage displayName={displayName} onLogout={onLogout} />
   ) : currentNav === 'Calendar' ? (
     <CalendarPage
+      cacheScope={calendarCacheScope}
       canViewRevenue={canViewCalendarRevenue}
       displayName={displayName}
       isVirtualUser={isVirtualUser}
@@ -337,6 +347,11 @@ function hasPermission(auth, permission) {
   if (!auth?.virtualUser) return true;
   const permissions = Array.isArray(auth.virtualUser.permissions) ? auth.virtualUser.permissions : [];
   return permissions.includes(permission);
+}
+
+function getCalendarCacheScope(auth, canViewRevenue) {
+  const identity = auth?.virtualUser?.id || auth?.accessToken || auth?.username || 'session';
+  return `${identity}:${canViewRevenue ? 'revenue' : 'masked'}`;
 }
 
 function DesktopSidebar({ activeNav, navGroups: visibleNavGroups, onChangeNav }) {
@@ -723,7 +738,7 @@ function NoAccessPage({ displayName, onLogout }) {
   );
 }
 
-function CalendarPage({ canViewRevenue = true, displayName, isMobileApp = false, isVirtualUser = false, mitraId, onLogout, onUseMobileView }) {
+function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayName, isMobileApp = false, isVirtualUser = false, mitraId, onLogout, onUseMobileView }) {
   const [view, setView] = useState(() => (isMobileApp ? 'day' : 'week'));
   const [selectedDate, setSelectedDate] = useState(() => toDateInputValue(new Date()));
   const [refreshKey, setRefreshKey] = useState(0);
@@ -735,6 +750,8 @@ function CalendarPage({ canViewRevenue = true, displayName, isMobileApp = false,
   const [hiddenBelowCount, setHiddenBelowCount] = useState(0);
   const [showSummaryPanel, setShowSummaryPanel] = useState(false);
   const calendarPanelRef = useRef(null);
+  const lastRefreshKeyRef = useRef(refreshKey);
+  const lastSelectionScopeRef = useRef({ cacheScope, mitraId, selectedDate });
 
   const weekDays = getWeekDays(selectedDate);
   const activeBookings = state.bookingsByDate[selectedDate] || [];
@@ -748,10 +765,19 @@ function CalendarPage({ canViewRevenue = true, displayName, isMobileApp = false,
 
   useEffect(() => {
     let active = true;
-    setState((current) => ({ ...current, loading: true, error: '' }));
-    setSelectedBooking(null);
+    const forceRefresh = refreshKey !== lastRefreshKeyRef.current;
+    const selectionScopeChanged = lastSelectionScopeRef.current.cacheScope !== cacheScope
+      || lastSelectionScopeRef.current.mitraId !== mitraId
+      || lastSelectionScopeRef.current.selectedDate !== selectedDate;
+    const hasFreshCachedData = !forceRefresh && hasCalendarDataCache({ cacheScope, mitraId, selectedDate, weekDays });
 
-    loadCalendarData({ mitraId, selectedDate, weekDays })
+    lastRefreshKeyRef.current = refreshKey;
+    lastSelectionScopeRef.current = { cacheScope, mitraId, selectedDate };
+
+    setState((current) => ({ ...current, loading: !hasFreshCachedData, error: '' }));
+    if (selectionScopeChanged) setSelectedBooking(null);
+
+    loadCalendarData({ cacheScope, forceRefresh, mitraId, selectedDate, weekDays })
       .then((data) => {
         if (active) setState({ loading: false, error: '', ...data });
       })
@@ -762,7 +788,7 @@ function CalendarPage({ canViewRevenue = true, displayName, isMobileApp = false,
     return () => {
       active = false;
     };
-  }, [mitraId, selectedDate, refreshKey]);
+  }, [cacheScope, mitraId, selectedDate, refreshKey]);
 
   useEffect(() => {
     const panel = calendarPanelRef.current;
@@ -812,28 +838,54 @@ function CalendarPage({ canViewRevenue = true, displayName, isMobileApp = false,
     setPlaceholderEditor({ mode: 'edit', booking });
   }
 
+  function requestCalendarRefresh() {
+    setRefreshKey((current) => current + 1);
+  }
+
   async function savePlaceholder(form) {
     setPlaceholderStatus({ state: 'loading', message: 'Saving placeholder...' });
-    const court = state.courts.find((item) => item.id === form.court_id);
-    const payload = {
-      ...form,
-      mitra_id: mitraId,
-      court_name: court?.name || form.court_name || '',
-    };
-    if (canViewRevenue) {
-      payload.estimated_price = Number(form.estimated_price || 0);
-    } else {
-      delete payload.estimated_price;
-    }
     const editingId = placeholderEditor.mode === 'edit' ? placeholderEditor.booking?.placeholder_id || placeholderEditor.booking?.id : null;
-    const saved = await apiRequest(editingId ? `/api/placeholder-bookings/${editingId}` : '/api/placeholder-bookings', {
-      method: editingId ? 'PUT' : 'POST',
-      body: JSON.stringify(payload),
+    const selectedCourtIds = getSelectedCourtIds(form);
+    const { court_ids: _courtIds, duration_mode: _durationMode, ...formPayload } = form;
+
+    if (!selectedCourtIds.length) {
+      throw new Error('Select at least one court.');
+    }
+
+    const buildPayload = (courtId) => {
+      const court = state.courts.find((item) => item.id === courtId);
+      const payload = {
+        ...formPayload,
+        mitra_id: mitraId,
+        court_id: courtId,
+        court_name: court?.name || form.court_name || '',
+      };
+      if (canViewRevenue) {
+        payload.estimated_price = Number(form.estimated_price || 0);
+      } else {
+        delete payload.estimated_price;
+      }
+      return payload;
+    };
+
+    const savedItems = editingId ? [
+      await apiRequest(`/api/placeholder-bookings/${editingId}`, {
+        method: 'PUT',
+        body: JSON.stringify(buildPayload(form.court_id || selectedCourtIds[0])),
+      }),
+    ] : await Promise.all(selectedCourtIds.map((courtId) => apiRequest('/api/placeholder-bookings', {
+      method: 'POST',
+      body: JSON.stringify(buildPayload(courtId)),
+    })));
+
+    setPlaceholderStatus({
+      state: 'success',
+      message: selectedCourtIds.length > 1 ? `${selectedCourtIds.length} placeholders saved.` : 'Placeholder saved.',
     });
-    setPlaceholderStatus({ state: 'success', message: 'Placeholder saved.' });
-    setPlaceholderEditor({ mode: 'closed', booking: null });
-    setRefreshKey((current) => current + 1);
-    if (saved?.data) setSelectedBooking(normalizePlaceholderBooking(saved.data));
+    setPlaceholderEditor({ mode: 'closed', booking: null, draft: null });
+    requestCalendarRefresh();
+    const firstSaved = savedItems.map((item) => item?.data).find(Boolean);
+    if (firstSaved) setSelectedBooking(normalizePlaceholderBooking(firstSaved));
   }
 
   async function deletePlaceholder(booking) {
@@ -843,19 +895,19 @@ function CalendarPage({ canViewRevenue = true, displayName, isMobileApp = false,
     await apiRequest(`/api/placeholder-bookings/${id}`, { method: 'DELETE' });
     setPlaceholderStatus({ state: 'success', message: 'Placeholder deleted.' });
     setSelectedBooking(null);
-    setRefreshKey((current) => current + 1);
+    requestCalendarRefresh();
   }
 
   function findPlaceholderConflicts(form) {
     const bookings = state.bookingsByDate[form.date] || [];
+    const selectedCourtIds = new Set(getSelectedCourtIds(form));
     const candidate = {
-      court_id: form.court_id,
       time: `${form.start_time}-${form.end_time}`,
     };
-    const editingId = placeholderEditor.booking?.id;
+    const editingIds = new Set([placeholderEditor.booking?.id, placeholderEditor.booking?.placeholder_id].filter(Boolean));
     return bookings.filter((booking) => {
-      if (booking.id === editingId || booking.placeholder_id === editingId) return false;
-      return booking.court_id === candidate.court_id && bookingsOverlap(candidate, booking);
+      if (editingIds.has(booking.id) || editingIds.has(booking.placeholder_id)) return false;
+      return selectedCourtIds.has(booking.court_id) && bookingsOverlap(candidate, booking);
     });
   }
 
@@ -903,7 +955,7 @@ function CalendarPage({ canViewRevenue = true, displayName, isMobileApp = false,
         <div className="calendar-filters">
           <span>All courts</span>
           <span>All booking types</span>
-          <button onClick={() => setRefreshKey((current) => current + 1)} type="button">
+          <button onClick={requestCalendarRefresh} type="button">
             <RefreshCw size={15} />
           </button>
         </div>
@@ -959,6 +1011,7 @@ function CalendarPage({ canViewRevenue = true, displayName, isMobileApp = false,
                 openHour={state.openHour}
                 selectedDate={selectedDate}
                 weekDays={weekDays}
+                onCreatePlaceholder={openCreatePlaceholder}
                 onSelectBooking={setSelectedBooking}
                 onSelectDate={setSelectedDate}
                 onSwitchDay={() => setView('day')}
@@ -982,6 +1035,7 @@ function CalendarPage({ canViewRevenue = true, displayName, isMobileApp = false,
                 openHour={state.openHour}
                 selectedDate={selectedDate}
                 weekDays={weekDays}
+                onCreatePlaceholder={openCreatePlaceholder}
                 onSelectBooking={setSelectedBooking}
                 onSelectDate={setSelectedDate}
                 onSwitchDay={() => setView('day')}
@@ -1009,6 +1063,10 @@ function CalendarPage({ canViewRevenue = true, displayName, isMobileApp = false,
             selectedDaySummary={selectedDaySummary}
             view={view}
             weekSummary={weekSummary}
+            onClose={() => {
+              setSelectedBooking(null);
+              setShowSummaryPanel(false);
+            }}
             onDeletePlaceholder={deletePlaceholder}
             onEditPlaceholder={openEditPlaceholder}
             onOpenDay={() => setView('day')}
@@ -1033,7 +1091,7 @@ function CalendarPage({ canViewRevenue = true, displayName, isMobileApp = false,
           isVirtualUser={isVirtualUser}
           mode={placeholderEditor.mode}
           openHour={state.openHour}
-          onClose={() => setPlaceholderEditor({ mode: 'closed', booking: null })}
+          onClose={() => setPlaceholderEditor({ mode: 'closed', booking: null, draft: null })}
           onSave={savePlaceholder}
         />
       ) : null}
@@ -1114,7 +1172,7 @@ function MobileDayAgenda({ bookings, canViewRevenue = true, courts, openHour, se
   );
 }
 
-function MobileWeekCalendar({ bookingsByDate, canViewRevenue = true, courts, openHour, selectedDate, weekDays, onSelectBooking, onSelectDate, onSwitchDay }) {
+function MobileWeekCalendar({ bookingsByDate, canViewRevenue = true, courts, openHour, selectedDate, weekDays, onCreatePlaceholder, onSelectBooking, onSelectDate, onSwitchDay }) {
   return (
     <div className="mobile-week-list">
       {weekDays.map((date) => {
@@ -1148,7 +1206,22 @@ function MobileWeekCalendar({ bookingsByDate, canViewRevenue = true, courts, ope
                           <strong>{getStartLabel(booking)}</strong>
                           <span>{booking.booking_owner || booking.name}</span>
                         </button>
-                      )) : <small>Available</small>}
+                      )) : (
+                        <button
+                          className="mobile-week-availability"
+                          onClick={() => onCreatePlaceholder?.({
+                            court_id: court.id,
+                            court_name: court.name,
+                            date,
+                            start_time: openHour?.open_hours || '06:00',
+                            end_time: shiftTime(openHour?.open_hours || '06:00', 60),
+                          })}
+                          type="button"
+                        >
+                          <strong>{formatCompactTime(parseTimeToMinutes(openHour?.open_hours || '06:00'))}</strong>
+                          <span>Available</span>
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -1245,7 +1318,7 @@ function DayCalendar({ bookings, canViewRevenue = true, courts, openHour, select
   );
 }
 
-function WeekCalendar({ bookingsByDate, canViewRevenue = true, courts, openHour, selectedDate, weekDays, onSelectBooking, onSelectDate, onSwitchDay }) {
+function WeekCalendar({ bookingsByDate, canViewRevenue = true, courts, openHour, selectedDate, weekDays, onCreatePlaceholder, onSelectBooking, onSelectDate, onSwitchDay }) {
   return (
     <div className="week-calendar">
       {weekDays.map((date) => {
@@ -1259,6 +1332,7 @@ function WeekCalendar({ bookingsByDate, canViewRevenue = true, courts, openHour,
             isSelected={date === selectedDate}
             key={date}
             openHour={openHour}
+            onCreatePlaceholder={onCreatePlaceholder}
             onSelectBooking={onSelectBooking}
             onSelectDate={onSelectDate}
             onSwitchDay={onSwitchDay}
@@ -1269,7 +1343,7 @@ function WeekCalendar({ bookingsByDate, canViewRevenue = true, courts, openHour,
   );
 }
 
-function WeekDayColumn({ bookings, canViewRevenue = true, courts, date, isSelected, openHour, onSelectBooking, onSelectDate, onSwitchDay }) {
+function WeekDayColumn({ bookings, canViewRevenue = true, courts, date, isSelected, openHour, onCreatePlaceholder, onSelectBooking, onSelectDate, onSwitchDay }) {
   const [hiddenCounts, setHiddenCounts] = useState({ above: 0, below: 0 });
   const courtListRef = useRef(null);
   const summary = summarizeDay(bookings, openHour, courts.length, canViewRevenue);
@@ -1321,9 +1395,22 @@ function WeekDayColumn({ bookings, canViewRevenue = true, courts, date, isSelect
                 <p>{court.name}</p>
                 {timelineEntries.length ? timelineEntries.map((entry) => (
                   entry.type === 'availability' ? (
-                    <span className="availability-gap" key={entry.id}>
+                    <button
+                      aria-label={`Create placeholder for ${court.name} on ${formatLongDate(date)} at ${formatTimeInput(entry.startMinutes)}`}
+                      className="availability-gap"
+                      key={entry.id}
+                      onClick={() => onCreatePlaceholder?.({
+                        court_id: court.id,
+                        court_name: court.name,
+                        date,
+                        start_time: formatTimeInput(entry.startMinutes),
+                        end_time: formatTimeInput(Math.min(entry.startMinutes + 60, entry.endMinutes)),
+                      })}
+                      type="button"
+                    >
                       <strong>{entry.label}</strong>
-                    </span>
+                      <Plus size={13} />
+                    </button>
                   ) : (
                     <button className={`week-booking-card ${getBookingTone(entry.booking)}`} key={entry.booking.id} onClick={() => onSelectBooking(entry.booking)} type="button">
                       <span>{getStartLabel(entry.booking)}</span>
@@ -1408,7 +1495,14 @@ function CalendarDetailPanel({ booking, canViewRevenue = true, selectedDate, sel
 
   return (
     <aside className="calendar-detail">
-      <span className="panel-label">{view === 'week' ? 'Week summary' : 'Day summary'}</span>
+      <div className="panel-label-row">
+        <span className="panel-label">{view === 'week' ? 'Week summary' : 'Day summary'}</span>
+        {onClose ? (
+          <button aria-label="Close summary" onClick={onClose} type="button">
+            <X size={16} />
+          </button>
+        ) : null}
+      </div>
       <h2>{view === 'week' ? formatWeekRange(selectedDate) : formatLongDate(selectedDate)}</h2>
       <dl>
         <div><dt>Total bookings</dt><dd>{view === 'week' ? weekSummary.totalBookings : selectedDaySummary.bookingCount}</dd></div>
@@ -1430,14 +1524,56 @@ function PlaceholderBookingEditor({ booking, canViewRevenue = true, conflicts, c
   const [error, setError] = useState('');
   const conflictList = conflicts(form);
   const hasConflict = conflictList.length > 0;
+  const selectedCourtIds = getSelectedCourtIds(form);
 
   function updateField(field, value) {
-    setForm((current) => ({ ...current, [field]: value }));
+    setForm((current) => {
+      if (field === 'start_time') {
+        const durationMinutes = getPlaceholderDurationMinutes(current);
+        return { ...current, start_time: value, end_time: shiftTime(value, durationMinutes) };
+      }
+      if (field === 'end_time') {
+        return { ...current, end_time: value, duration_mode: inferPlaceholderDurationMode(current.start_time, value) };
+      }
+      if (field === 'court_id') {
+        return { ...current, court_id: value, court_ids: value ? [value] : [] };
+      }
+      return { ...current, [field]: value };
+    });
+  }
+
+  function toggleCourt(courtId) {
+    setForm((current) => {
+      const courtIds = new Set(getSelectedCourtIds(current));
+      if (courtIds.has(courtId)) {
+        courtIds.delete(courtId);
+      } else {
+        courtIds.add(courtId);
+      }
+      const nextCourtIds = [...courtIds];
+      return {
+        ...current,
+        court_id: nextCourtIds[0] || '',
+        court_ids: nextCourtIds,
+      };
+    });
+  }
+
+  function setDuration(minutes) {
+    setForm((current) => ({
+      ...current,
+      duration_mode: String(minutes),
+      end_time: shiftTime(current.start_time, minutes),
+    }));
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
     setError('');
+    if (!selectedCourtIds.length) {
+      setError('Select at least one court.');
+      return;
+    }
     if (parseTimeToMinutes(form.end_time) <= parseTimeToMinutes(form.start_time)) {
       setError('End time must be after start time.');
       return;
@@ -1465,13 +1601,31 @@ function PlaceholderBookingEditor({ booking, canViewRevenue = true, conflicts, c
         </div>
         <h2>{mode === 'edit' ? 'Update tentative hold' : 'Create tentative hold'}</h2>
         <form onSubmit={handleSubmit}>
-          <label>
-            Court
-            <select onChange={(event) => updateField('court_id', event.target.value)} required value={form.court_id}>
-              <option value="">Select court</option>
-              {courts.map((court) => <option key={court.id} value={court.id}>{court.name}</option>)}
-            </select>
-          </label>
+          {mode === 'edit' ? (
+            <label>
+              Court
+              <select onChange={(event) => updateField('court_id', event.target.value)} required value={form.court_id}>
+                <option value="">Select court</option>
+                {courts.map((court) => <option key={court.id} value={court.id}>{court.name}</option>)}
+              </select>
+            </label>
+          ) : (
+            <div className="court-picker">
+              <span>Courts</span>
+              <div className="court-choice-grid">
+                {courts.map((court) => (
+                  <label className={`court-choice ${selectedCourtIds.includes(court.id) ? 'selected' : ''}`} key={court.id}>
+                    <input
+                      checked={selectedCourtIds.includes(court.id)}
+                      onChange={() => toggleCourt(court.id)}
+                      type="checkbox"
+                    />
+                    {court.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="form-grid two">
             <label>
               Date
@@ -1484,11 +1638,33 @@ function PlaceholderBookingEditor({ booking, canViewRevenue = true, conflicts, c
               </select>
             </label>
           </div>
-          <div className="form-grid two">
+          <div className="form-grid time-duration-grid">
             <label>
               Start time
               <input onChange={(event) => updateField('start_time', event.target.value)} required type="time" value={form.start_time} />
             </label>
+            <div className="duration-control">
+              <span>Duration</span>
+              <div className="duration-options">
+                {PLACEHOLDER_DURATION_OPTIONS.map((option) => (
+                  <button
+                    className={form.duration_mode === String(option.minutes) ? 'selected' : ''}
+                    key={option.minutes}
+                    onClick={() => setDuration(option.minutes)}
+                    type="button"
+                  >
+                    {option.label}
+                  </button>
+                ))}
+                <button
+                  className={form.duration_mode === 'custom' ? 'selected' : ''}
+                  onClick={() => updateField('duration_mode', 'custom')}
+                  type="button"
+                >
+                  Custom
+                </button>
+              </div>
+            </div>
             <label>
               End time
               <input onChange={(event) => updateField('end_time', event.target.value)} required type="time" value={form.end_time} />
@@ -1506,7 +1682,12 @@ function PlaceholderBookingEditor({ booking, canViewRevenue = true, conflicts, c
             {canViewRevenue ? (
               <label>
                 Estimated price
-                <input min="0" onChange={(event) => updateField('estimated_price', event.target.value)} type="number" value={form.estimated_price} />
+                <input
+                  inputMode="numeric"
+                  onChange={(event) => updateField('estimated_price', parseMoneyInput(event.target.value))}
+                  placeholder="Rp 0"
+                  value={formatMoneyInput(form.estimated_price)}
+                />
               </label>
             ) : null}
             <label>
@@ -1568,23 +1749,37 @@ function buildVirtualUserForm(user) {
   };
 }
 
-async function loadCalendarData({ mitraId, selectedDate, weekDays }) {
-  const [courts, openHour, weekResponses, placeholdersResponse] = await Promise.all([
-    apiRequest(`/api/admin/mitra/court/${mitraId}/list`),
-    apiRequest(`/api/admin/schedule/open-hour-date?mitra_id=${mitraId}&date=${selectedDate}`),
-    Promise.all(weekDays.map((date) => apiRequest(`/api/admin/schedule-cal-courts?mitra_id=${mitraId}&date=${date}`)
-      .then((response) => [date, response?.lists || []]))),
-    apiRequest(`/api/placeholder-bookings?mitra_id=${mitraId}&from=${weekDays[0]}&to=${weekDays[weekDays.length - 1]}`)
-      .catch(() => ({ lists: [] })),
+async function loadCalendarData({ cacheScope, forceRefresh = false, mitraId, selectedDate, weekDays }) {
+  const [courts, openHourResponses, weekResponses, placeholderResponses] = await Promise.all([
+    getCachedCalendarValue(calendarCacheKey(cacheScope, 'courts', mitraId), () => apiRequest(`/api/admin/mitra/court/${mitraId}/list`), { forceRefresh }),
+    Promise.all(weekDays.map((date) => getCachedCalendarValue(
+      calendarCacheKey(cacheScope, 'open-hour', mitraId, date),
+      () => apiRequest(`/api/admin/schedule/open-hour-date?mitra_id=${mitraId}&date=${date}`)
+        .then((response) => response?.data || { open_hours: '06:00', close_hours: '24:00' }),
+      { forceRefresh },
+    ).then((openHour) => [date, openHour]))),
+    Promise.all(weekDays.map((date) => getCachedCalendarValue(
+      calendarCacheKey(cacheScope, 'schedule', mitraId, date),
+      () => apiRequest(`/api/admin/schedule-cal-courts?mitra_id=${mitraId}&date=${date}`)
+        .then((response) => response?.lists || []),
+      { forceRefresh },
+    ).then((bookings) => [date, bookings]))),
+    Promise.all(weekDays.map((date) => getCachedCalendarValue(
+      calendarCacheKey(cacheScope, 'placeholders', mitraId, date),
+      () => apiRequest(`/api/placeholder-bookings?mitra_id=${mitraId}&from=${date}&to=${date}`)
+        .then((response) => response?.lists || [])
+        .catch(() => []),
+      { forceRefresh },
+    ).then((placeholders) => [date, placeholders]))),
   ]);
 
   const courtList = Array.isArray(courts) ? courts : [];
+  const openHoursByDate = new Map(openHourResponses);
   const courtNames = new Map(courtList.map((court) => [court.id, court.name]));
-  const placeholdersByDate = (placeholdersResponse?.lists || []).reduce((map, placeholder) => {
-    const booking = normalizePlaceholderBooking(placeholder);
-    map[booking.date] = [...(map[booking.date] || []), booking];
-    return map;
-  }, {});
+  const placeholdersByDate = Object.fromEntries(placeholderResponses.map(([date, placeholders]) => [
+    date,
+    placeholders.map(normalizePlaceholderBooking),
+  ]));
   const bookingsByDate = Object.fromEntries(weekResponses.map(([date, bookings]) => {
     const upstreamBookings = bookings.map((booking) => ({ ...booking, court_name: courtNames.get(booking.court_id) }));
     const localPlaceholders = placeholdersByDate[date] || [];
@@ -1593,9 +1788,53 @@ async function loadCalendarData({ mitraId, selectedDate, weekDays }) {
 
   return {
     courts: courtList,
-    openHour: openHour?.data || { open_hours: '06:00', close_hours: '24:00' },
+    openHour: openHoursByDate.get(selectedDate) || { open_hours: '06:00', close_hours: '24:00' },
     bookingsByDate,
   };
+}
+
+function calendarCacheKey(cacheScope, type, mitraId, date = '') {
+  return [cacheScope || 'session', type, mitraId || '', date].join('|');
+}
+
+function hasCalendarDataCache({ cacheScope, mitraId, selectedDate, weekDays }) {
+  return isCalendarCacheFresh(calendarCacheKey(cacheScope, 'courts', mitraId))
+    && isCalendarCacheFresh(calendarCacheKey(cacheScope, 'open-hour', mitraId, selectedDate))
+    && weekDays.every((date) => isCalendarCacheFresh(calendarCacheKey(cacheScope, 'schedule', mitraId, date))
+      && isCalendarCacheFresh(calendarCacheKey(cacheScope, 'placeholders', mitraId, date)));
+}
+
+function getCachedCalendarValue(key, fetcher, { forceRefresh = false } = {}) {
+  const now = Date.now();
+  const cached = calendarDataCache.get(key);
+  if (!forceRefresh && cached?.expiresAt > now) {
+    return cached.promise || Promise.resolve(cached.value);
+  }
+
+  const promise = Promise.resolve()
+    .then(fetcher)
+    .then((value) => {
+      calendarDataCache.set(key, { expiresAt: Date.now() + CALENDAR_DATA_CACHE_TTL_MS, value });
+      return value;
+    })
+    .catch((error) => {
+      if (calendarDataCache.get(key)?.promise === promise) {
+        calendarDataCache.delete(key);
+      }
+      throw error;
+    });
+
+  calendarDataCache.set(key, { expiresAt: now + CALENDAR_DATA_CACHE_TTL_MS, promise });
+  return promise;
+}
+
+function isCalendarCacheFresh(key) {
+  const cached = calendarDataCache.get(key);
+  return Boolean(cached?.value && cached.expiresAt > Date.now());
+}
+
+function clearCalendarDataCache() {
+  calendarDataCache.clear();
 }
 
 function findMitraId(value, depth = 0) {
@@ -1636,12 +1875,15 @@ function normalizePlaceholderBooking(placeholder) {
 function buildPlaceholderForm({ booking, courts, defaultDate, defaultName, draft, isVirtualUser = false, openHour }) {
   if (booking) {
     const [startTime, endTime] = String(booking.time || '').split('-');
+    const courtId = booking.court_id || '';
     return {
-      court_id: booking.court_id || '',
+      court_id: courtId,
+      court_ids: courtId ? [courtId] : [],
       court_name: booking.court_name || '',
       date: booking.date || defaultDate,
       start_time: startTime || openHour?.open_hours || '06:00',
       end_time: endTime || shiftTime(startTime || openHour?.open_hours || '06:00', 60),
+      duration_mode: inferPlaceholderDurationMode(startTime || openHour?.open_hours || '06:00', endTime || shiftTime(startTime || openHour?.open_hours || '06:00', 60)),
       customer_name: booking.booking_owner || booking.name || '',
       customer_contact: booking.customer_contact || '',
       estimated_price: String(booking.price || 0),
@@ -1654,12 +1896,16 @@ function buildPlaceholderForm({ booking, courts, defaultDate, defaultName, draft
 
   const startTime = draft?.start_time || openHour?.open_hours || '06:00';
   const court = courts.find((item) => item.id === draft?.court_id) || courts[0];
+  const endTime = draft?.end_time || shiftTime(startTime, 60);
+  const courtIds = draft?.court_ids?.length ? draft.court_ids : court?.id ? [court.id] : [];
   return {
-    court_id: court?.id || '',
+    court_id: courtIds[0] || '',
+    court_ids: courtIds,
     court_name: court?.name || draft?.court_name || '',
     date: draft?.date || defaultDate,
     start_time: startTime,
-    end_time: draft?.end_time || shiftTime(startTime, 60),
+    end_time: endTime,
+    duration_mode: inferPlaceholderDurationMode(startTime, endTime),
     customer_name: '',
     customer_contact: '',
     estimated_price: '',
@@ -1668,6 +1914,33 @@ function buildPlaceholderForm({ booking, courts, defaultDate, defaultName, draft
     created_by_name: defaultName || '',
     updated_by_name: defaultName || '',
   };
+}
+
+function getSelectedCourtIds(form) {
+  if (Array.isArray(form.court_ids) && form.court_ids.length) return form.court_ids;
+  return form.court_id ? [form.court_id] : [];
+}
+
+function inferPlaceholderDurationMode(startTime, endTime) {
+  const duration = parseTimeToMinutes(endTime) - parseTimeToMinutes(startTime);
+  return PLACEHOLDER_DURATION_OPTIONS.some((option) => option.minutes === duration) ? String(duration) : 'custom';
+}
+
+function getPlaceholderDurationMinutes(form) {
+  const presetMinutes = Number(form.duration_mode);
+  if (presetMinutes > 0) return presetMinutes;
+  const manualMinutes = parseTimeToMinutes(form.end_time) - parseTimeToMinutes(form.start_time);
+  return manualMinutes > 0 ? manualMinutes : 60;
+}
+
+function parseMoneyInput(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function formatMoneyInput(value) {
+  const digits = parseMoneyInput(value);
+  if (!digits) return '';
+  return `Rp ${new Intl.NumberFormat('id-ID').format(Number(digits))}`;
 }
 
 function buildSlotMinutes(startMinutes, endMinutes) {
@@ -1800,7 +2073,9 @@ function buildCourtTimelineEntries(bookings, openHour) {
 function buildAvailabilityEntry(startMinutes, endMinutes) {
   return {
     id: `availability-${startMinutes}-${endMinutes}`,
+    endMinutes,
     label: formatAvailabilityRange(startMinutes, endMinutes),
+    startMinutes,
     type: 'availability',
   };
 }

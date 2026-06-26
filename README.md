@@ -10,8 +10,8 @@ This app provides the browser UI for managing Pagi Pagi Padel admin workflows. I
 - Virtual account login with an underscore-prefixed username, backed by Worker-managed users.
 - Virtual account screen permissions, Worker endpoint authorization, and optional Calendar revenue visibility.
 - Authenticated session storage in the browser.
-- A wired Calendar screen with day/week views, court bookings, booking details, and summary metrics.
-- D1-backed placeholder bookings for tentative holds before payment or upstream confirmation.
+- A wired Calendar screen with day/week views, 30-second in-memory date caching, court bookings, booking details, and summary metrics.
+- D1-backed placeholder bookings for tentative holds before payment or upstream confirmation, including multi-court create from the same form.
 - Placeholder screens for Dashboard, Court Prices, Event, Coach, Add On, Customers, and Setting.
 
 For AI-agent onboarding, start with `AGENTS.md`, then read `docs/architecture.md`, `docs/api.md`, and `docs/visual-reference.md`.
@@ -103,6 +103,7 @@ AGENTS.md         AI-agent working guide
 - Before generating UI mockups or design variants, review `docs/visual-reference.md` and the screenshots in `docs/visual-reference/`.
 - When the app's visual design changes materially, refresh the visual-reference screenshots so future mockups stay aligned with the real UI.
 - Keep backend response field names visible at the boundary. If fields need nicer frontend names, map them in one place instead of renaming them throughout the UI.
+- Calendar data is cached only in memory for 30 seconds per auth/revenue scope and visible date. The toolbar refresh button, browser reload, and placeholder mutations intentionally bypass or clear that cache.
 - There are no automated tests yet. If calendar logic changes, a useful first test target is extracting pure date/time/summary helpers from `App.jsx`.
 
 ## GitHub Pages
