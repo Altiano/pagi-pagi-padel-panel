@@ -316,6 +316,27 @@ function usePreferredMobileView(isMobileRoute) {
   };
 }
 
+function useEscapeKey(onEscape, enabled = true) {
+  const onEscapeRef = useRef(onEscape);
+
+  useEffect(() => {
+    onEscapeRef.current = onEscape;
+  }, [onEscape]);
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+
+    function handleKeyDown(event) {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      onEscapeRef.current?.();
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [enabled]);
+}
+
 function getAllowedNav(auth) {
   if (!auth?.virtualUser) return null;
   const permissions = Array.isArray(auth.virtualUser.permissions) ? auth.virtualUser.permissions : [];
@@ -580,6 +601,8 @@ function VirtualUserEditor({ mode, user, onClose, onSave }) {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
+  useEscapeKey(onClose);
+
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
   }
@@ -758,10 +781,28 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
   const selectedDaySummary = summarizeDay(activeBookings, state.openHour, state.courts.length, canViewRevenue);
   const weekSummary = summarizeWeek(weekDays, state.bookingsByDate, state.openHour, state.courts.length, canViewRevenue);
   const showDetailPanel = !isMobileApp && (selectedBooking || showSummaryPanel);
+  const isPlaceholderEditorOpen = placeholderEditor.mode !== 'closed';
 
   useEffect(() => {
     if (isMobileApp) setView('day');
   }, [isMobileApp]);
+
+  function closePlaceholderEditor() {
+    setPlaceholderEditor({ mode: 'closed', booking: null, draft: null });
+  }
+
+  function closeCalendarDetail() {
+    setSelectedBooking(null);
+    setShowSummaryPanel(false);
+  }
+
+  useEscapeKey(() => {
+    if (isPlaceholderEditorOpen) {
+      closePlaceholderEditor();
+      return;
+    }
+    closeCalendarDetail();
+  }, isPlaceholderEditorOpen || Boolean(selectedBooking) || showSummaryPanel);
 
   useEffect(() => {
     let active = true;
@@ -1063,10 +1104,7 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
             selectedDaySummary={selectedDaySummary}
             view={view}
             weekSummary={weekSummary}
-            onClose={() => {
-              setSelectedBooking(null);
-              setShowSummaryPanel(false);
-            }}
+            onClose={closeCalendarDetail}
             onDeletePlaceholder={deletePlaceholder}
             onEditPlaceholder={openEditPlaceholder}
             onOpenDay={() => setView('day')}
@@ -1091,7 +1129,7 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
           isVirtualUser={isVirtualUser}
           mode={placeholderEditor.mode}
           openHour={state.openHour}
-          onClose={() => setPlaceholderEditor({ mode: 'closed', booking: null, draft: null })}
+          onClose={closePlaceholderEditor}
           onSave={savePlaceholder}
         />
       ) : null}
