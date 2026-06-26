@@ -208,6 +208,10 @@ The frontend maps these rows into booking-like calendar entries with `is_placeho
 
 The placeholder form can create the same tentative hold across multiple courts. The backend contract remains one row per request; the frontend sends one `POST /api/placeholder-bookings` request per selected court. Editing remains a single-row `PUT`.
 
+`POST` and `PUT` validate overlap server-side before writing. The Worker rejects a placeholder if it overlaps another non-deleted D1 placeholder for the same `mitra_id`, `court_id`, and `date`, returning `409` with `code: "PLACEHOLDER_OVERLAP"` and the conflicting placeholder row. When `UPSTREAM_ORIGIN` is configured and the schedule endpoint can be read, the Worker also rejects overlap with a live upstream booking using `409` with `code: "BOOKING_OVERLAP"` and a compact conflict summary.
+
+When calendar data is loaded, the frontend also compares live upstream bookings and local placeholders. If a live booking now overlaps an existing placeholder hold, both cards receive a conflict treatment and the booking detail panel lists the item they conflict with.
+
 ## Virtual Users
 
 Virtual users are stored by this wrapper and can only be managed by a real session for the configured `MASTER_USERNAME`. They provide wrapper-level login identities while all upstream calls still use the configured master upstream account.

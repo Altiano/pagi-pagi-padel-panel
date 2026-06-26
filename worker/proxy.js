@@ -770,8 +770,121 @@ function validatePlaceholder(payload, partial = false) {
   if (payload.date && !/^\d{4}-\d{2}-\d{2}$/.test(payload.date)) return 'Date must use YYYY-MM-DD.';
   if (payload.start_time && !/^\d{2}:\d{2}$/.test(payload.start_time)) return 'Start time must use HH:mm.';
   if (payload.end_time && !/^\d{2}:\d{2}$/.test(payload.end_time)) return 'End time must use HH:mm.';
+  if (payload.start_time && payload.end_time && parsePlaceholderTimeToMinutes(payload.end_time) <= parsePlaceholderTimeToMinutes(payload.start_time)) {
+    return 'End time must be after start time.';
+  }
   if (Number.isNaN(payload.estimated_price) || payload.estimated_price < 0) return 'Estimated price must be zero or greater.';
   return '';
+}
+
+function parsePlaceholderTimeToMinutes(value) {
+  const normalized = String(value || '00:00').replace('.', ':');
+  const [hourValue, minuteValue = '0'] = normalized.split(':').map(Number);
+  const hour = Number.isFinite(hourValue) ? hourValue : 0;
+  const minute = Number.isFinite(minuteValue) ? minuteValue : 0;
+  if (hour === 24) return 24 * 60;
+  return hour * 60 + minute;
+}
+
+function placeholderRangesOverlap(first, second) {
+  const firstStart = parsePlaceholderTimeToMinutes(first.start_time);
+  const firstEnd = parsePlaceholderTimeToMinutes(first.end_time);
+  const secondStart = parsePlaceholderTimeToMinutes(second.start_time);
+  const secondEnd = parsePlaceholderTimeToMinutes(second.end_time);
+  return firstStart < secondEnd && secondStart < firstEnd;
+}
+
+function getUpstreamBookingRange(booking) {
+  if (booking.start_time && booking.end_time) {
+    return {
+      end_time: String(booking.end_time).replace('.', ':'),
+      start_time: String(booking.start_time).replace('.', ':'),
+    };
+  }
+
+  if (booking.time && String(booking.time).includes('-')) {
+    const [startTime, endTime] = String(booking.time).split('-');
+    return {
+      end_time: String(endTime || '').trim().replace('.', ':'),
+      start_time: String(startTime || '').trim().replace('.', ':'),
+    };
+  }
+
+  if (booking.start && booking.end) {
+    return {
+      end_time: epochToTimeInput(booking.end),
+      start_time: epochToTimeInput(booking.start),
+    };
+  }
+
+  return null;
+}
+
+function epochToTimeInput(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return '';
+  const date = new Date(numericValue);
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+async function findPlaceholderOverlap(db, payload, excludeId = '') {
+  const { results } = await db.prepare(`
+    SELECT * FROM placeholder_bookings
+    WHERE mitra_id = ? AND court_id = ? AND date = ? AND deleted_at IS NULL
+  `).bind(payload.mitra_id, payload.court_id, payload.date).all();
+
+  return (results || []).find((row) => row.id !== excludeId && placeholderRangesOverlap(payload, row));
+}
+
+async function findUpstreamBookingOverlap(request, env, payload) {
+  if (!env.UPSTREAM_ORIGIN) return null;
+
+  const upstreamOrigin = env.UPSTREAM_ORIGIN.replace(/\/$/, '');
+  const upstreamUrl = new URL(`${upstreamOrigin}/api/admin/schedule-cal-courts`);
+  upstreamUrl.searchParams.set('mitra_id', payload.mitra_id);
+  upstreamUrl.searchParams.set('date', payload.date);
+
+  const response = await fetch(upstreamUrl, {
+    headers: buildUpstreamHeaders(request, upstreamOrigin),
+    method: 'GET',
+    redirect: 'manual',
+  });
+
+  if (!response.ok) return null;
+
+  const schedule = await readJsonResponse(response);
+  const bookings = Array.isArray(schedule?.lists) ? schedule.lists : [];
+  return bookings.find((booking) => {
+    if (String(booking.court_id || '') !== String(payload.court_id || '')) return false;
+    const range = getUpstreamBookingRange(booking);
+    return range && placeholderRangesOverlap(payload, range);
+  });
+}
+
+function placeholderOverlapResponse(request, env, conflict, canViewMoney) {
+  return withCors(Response.json({
+    error: 'This placeholder overlaps with an existing placeholder booking.',
+    code: 'PLACEHOLDER_OVERLAP',
+    conflict: rowToPlaceholder(conflict, { includeMoney: canViewMoney }),
+  }, { status: 409 }), request, env);
+}
+
+function upstreamBookingOverlapResponse(request, env, conflict) {
+  const range = getUpstreamBookingRange(conflict);
+  return withCors(Response.json({
+    error: 'This placeholder overlaps with a live booking.',
+    code: 'BOOKING_OVERLAP',
+    conflict: {
+      booking_owner: conflict.booking_owner || conflict.name || '',
+      booking_type: conflict.booking_type || conflict.type || '',
+      court_id: conflict.court_id || '',
+      court_name: conflict.court_name || '',
+      end_time: range?.end_time || '',
+      id: conflict.id || conflict.trans_id || '',
+      start_time: range?.start_time || '',
+      trans_id: conflict.trans_id || '',
+    },
+  }, { status: 409 }), request, env);
 }
 
 function rowToPlaceholder(row, { includeMoney = true } = {}) {
@@ -846,6 +959,14 @@ async function handlePlaceholderRequest(request, env, virtualContext = null) {
     if (validationError) {
       return withCors(Response.json({ error: validationError }, { status: 400 }), request, env);
     }
+    const overlap = await findPlaceholderOverlap(env.PLACEHOLDER_DB, payload);
+    if (overlap) {
+      return placeholderOverlapResponse(request, env, overlap, canViewMoney);
+    }
+    const bookingOverlap = await findUpstreamBookingOverlap(request, env, payload);
+    if (bookingOverlap) {
+      return upstreamBookingOverlapResponse(request, env, bookingOverlap);
+    }
 
     const now = new Date().toISOString();
     const newId = crypto.randomUUID();
@@ -897,6 +1018,14 @@ async function handlePlaceholderRequest(request, env, virtualContext = null) {
     const validationError = validatePlaceholder(payload);
     if (validationError) {
       return withCors(Response.json({ error: validationError }, { status: 400 }), request, env);
+    }
+    const overlap = await findPlaceholderOverlap(env.PLACEHOLDER_DB, payload, id);
+    if (overlap) {
+      return placeholderOverlapResponse(request, env, overlap, canViewMoney);
+    }
+    const bookingOverlap = await findUpstreamBookingOverlap(request, env, payload);
+    if (bookingOverlap) {
+      return upstreamBookingOverlapResponse(request, env, bookingOverlap);
     }
 
     const now = new Date().toISOString();

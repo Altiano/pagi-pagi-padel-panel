@@ -52,6 +52,8 @@ Calendar data uses a module-level in-memory cache with a 30-second TTL. Cache ke
 
 Placeholder create mode can target multiple courts at once. The frontend fans that out into one `/api/placeholder-bookings` POST per selected court. Edit mode updates a single placeholder row.
 
+The Worker rejects placeholder create/update requests that overlap an existing placeholder row, and also rejects overlap with a live upstream booking when the upstream day schedule is available. On read, the frontend annotates any existing placeholder/live-booking overlap so both cards show a conflict state and the detail panel names the conflicting item.
+
 ## UI Structure
 
 Current component structure inside `src/App.jsx`:

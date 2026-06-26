@@ -33,7 +33,11 @@ export async function apiRequest(path, options = {}) {
 
   if (!response.ok) {
     const message = payload?.message || payload?.error || `Request failed with HTTP ${response.status}`;
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    error.payload = payload;
+    error.code = payload?.code;
+    throw error;
   }
 
   return payload;
