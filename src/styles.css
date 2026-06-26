@@ -1028,11 +1028,9 @@ textarea:focus {
   display: grid;
   gap: 8px;
   width: 100%;
-  border: 0;
   border-radius: 18px;
   padding: 18px 18px 14px;
   background: #f8faf5;
-  cursor: pointer;
   text-align: left;
 }
 
@@ -1126,7 +1124,7 @@ textarea:focus {
   font-weight: 700;
 }
 
-.week-court button {
+.week-court .week-booking-card {
   display: grid;
   gap: 3px;
   width: 100%;
@@ -1179,23 +1177,23 @@ textarea:focus {
   transform: rotate(90deg);
 }
 
-.week-court button:hover,
-.week-court button:focus-visible {
+.week-court .week-booking-card:hover,
+.week-court .week-booking-card:focus-visible {
   box-shadow: 0 10px 22px rgba(23, 63, 43, 0.11);
   transform: translateY(-1px);
 }
 
-.week-court button:focus-visible {
+.week-court .week-booking-card:focus-visible {
   outline: 3px solid rgba(204, 225, 95, 0.42);
 }
 
-.week-court button span {
+.week-court .week-booking-card span {
   color: var(--booking-accent, var(--green));
   font-size: 11px;
   font-weight: 650;
 }
 
-.week-court button strong {
+.week-court .week-booking-card strong {
   overflow: hidden;
   color: var(--booking-ink, #304433);
   font-size: 12px;
@@ -1204,11 +1202,8 @@ textarea:focus {
   white-space: nowrap;
 }
 
-.availability-gap {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+.week-court .availability-gap {
+  display: block;
   width: 100%;
   border: 1px dashed rgba(119, 129, 118, 0.16);
   border-radius: 8px;
@@ -1217,31 +1212,18 @@ textarea:focus {
   color: #8a9388;
   cursor: pointer;
   text-align: left;
+  transition: outline-color 140ms ease;
 }
 
-.availability-gap strong {
+.week-court .availability-gap strong {
   color: #8a9388;
   font-size: 11px;
   font-weight: 500;
   white-space: nowrap;
 }
 
-.availability-gap svg {
-  flex: 0 0 auto;
-  color: var(--green);
-  opacity: 0;
-  transition: opacity 140ms ease;
-}
-
-.availability-gap:hover,
-.availability-gap:focus-visible {
-  border-color: rgba(40, 99, 69, 0.28);
-  background: #f2f6ec;
-}
-
-.availability-gap:hover svg,
-.availability-gap:focus-visible svg {
-  opacity: 1;
+.week-court .availability-gap:focus-visible {
+  outline: 3px solid rgba(204, 225, 95, 0.42);
 }
 
 .tone-green {
@@ -1322,7 +1304,7 @@ textarea:focus {
     0 14px 28px rgba(154, 79, 0, 0.13);
 }
 
-.week-court button small {
+.week-court .week-booking-card small {
   justify-self: start;
   border-radius: 999px;
   padding: 2px 7px;
@@ -2194,7 +2176,7 @@ textarea:focus {
   }
 
   .week-mode .week-day-header,
-  .week-mode .week-court button,
+  .week-mode .week-court .week-booking-card,
   .week-mode .empty-slot {
     padding: 8px;
   }
@@ -2205,7 +2187,7 @@ textarea:focus {
 
   .week-mode .week-day-metrics,
   .week-mode .week-court p,
-  .week-mode .week-court button strong,
+  .week-mode .week-court .week-booking-card strong,
   .week-mode .empty-slot {
     font-size: 11px;
   }
