@@ -1102,13 +1102,13 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
           </div>
           {view === 'day' && hiddenAboveCount > 0 ? (
             <div className="scroll-more-indicator above">
-              <span>{hiddenAboveCount} booking{hiddenAboveCount > 1 ? 's' : ''} above</span>
+              <span>{hiddenAboveCount} hidden above</span>
               <ChevronRight size={16} />
             </div>
           ) : null}
           {view === 'day' && hiddenBelowCount > 0 ? (
             <div className="scroll-more-indicator below">
-              <span>{hiddenBelowCount} booking{hiddenBelowCount > 1 ? 's' : ''} below</span>
+              <span>{hiddenBelowCount} hidden below</span>
               <ChevronRight size={16} />
             </div>
           ) : null}
@@ -1479,13 +1479,13 @@ function WeekDayColumn({ bookings, canViewRevenue = true, courts, date, isSelect
         </div>
         {hiddenCounts.above > 0 ? (
           <div className="week-scroll-more-indicator above">
-            <span>{hiddenCounts.above} booking{hiddenCounts.above > 1 ? 's' : ''} above</span>
+            <span>{hiddenCounts.above} hidden above</span>
             <ChevronRight size={14} />
           </div>
         ) : null}
         {hiddenCounts.below > 0 ? (
           <div className="week-scroll-more-indicator below">
-            <span>{hiddenCounts.below} more below</span>
+            <span>{hiddenCounts.below} hidden below</span>
             <ChevronRight size={14} />
           </div>
         ) : null}
