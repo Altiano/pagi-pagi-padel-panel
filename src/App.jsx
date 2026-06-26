@@ -775,6 +775,7 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
   const calendarPanelRef = useRef(null);
   const lastRefreshKeyRef = useRef(refreshKey);
   const lastSelectionScopeRef = useRef({ cacheScope, mitraId, selectedDate });
+  const autoDayScrollKeyRef = useRef('');
 
   const weekDays = getWeekDays(selectedDate);
   const activeBookings = state.bookingsByDate[selectedDate] || [];
@@ -830,6 +831,22 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
       active = false;
     };
   }, [cacheScope, mitraId, selectedDate, refreshKey]);
+
+  useEffect(() => {
+    if (view !== 'day' || state.loading || !isTodayDate(selectedDate)) {
+      autoDayScrollKeyRef.current = '';
+      return undefined;
+    }
+
+    if (autoDayScrollKeyRef.current === selectedDate) return undefined;
+    autoDayScrollKeyRef.current = selectedDate;
+
+    const frame = window.requestAnimationFrame(() => {
+      scrollDayCalendarToCurrentTime(calendarPanelRef.current, state.openHour);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedDate, state.loading, state.openHour, view]);
 
   useEffect(() => {
     const panel = calendarPanelRef.current;
@@ -2045,6 +2062,37 @@ function formatDayNumber(dateValue) {
 function formatWeekRange(dateValue) {
   const days = getWeekDays(dateValue);
   return `${formatDayNumber(days[0])} - ${formatDayNumber(days[6])}`;
+}
+
+function isTodayDate(dateValue) {
+  return dateValue === toDateInputValue(new Date());
+}
+
+function getCurrentMinutes() {
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes();
+}
+
+function clampNumber(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function scrollDayCalendarToCurrentTime(panel, openHour) {
+  if (!panel) return;
+  const grid = panel.querySelector('.day-calendar-grid');
+  const header = panel.querySelector('.day-calendar-header');
+  if (!grid) return;
+
+  const openMinutes = parseTimeToMinutes(openHour?.open_hours || '06:00');
+  const closeMinutes = parseTimeToMinutes(openHour?.close_hours || '24:00');
+  const totalMinutes = Math.max(closeMinutes - openMinutes, 60);
+  const currentMinutes = clampNumber(getCurrentMinutes(), openMinutes, closeMinutes);
+  const gridPosition = ((currentMinutes - openMinutes) / totalMinutes) * grid.scrollHeight;
+  const headerHeight = header?.offsetHeight || 0;
+  const targetScrollTop = headerHeight + gridPosition - panel.clientHeight * 0.35;
+  const maxScrollTop = Math.max(panel.scrollHeight - panel.clientHeight, 0);
+
+  panel.scrollTop = clampNumber(targetScrollTop, 0, maxScrollTop);
 }
 
 function formatCurrency(value) {
