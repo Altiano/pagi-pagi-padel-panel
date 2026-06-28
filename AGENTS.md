@@ -19,6 +19,8 @@ pnpm preview
 
 Use `pnpm build` as the default verification command after code changes.
 
+Pushing `main` to GitHub triggers the project auto-deployment. For publish requests, push the completed commit to `origin/main` unless the user explicitly asks for a PR or a separate branch.
+
 ## Important Files
 
 - `src/App.jsx`: Main app, login flow, shell, calendar UI, calendar data loading, and calendar helper functions.
