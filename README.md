@@ -10,8 +10,9 @@ This app provides the browser UI for managing Pagi Pagi Padel admin workflows. I
 - Virtual account login with an underscore-prefixed username, backed by Worker-managed users.
 - Virtual account screen permissions, Worker endpoint authorization, and optional Calendar revenue visibility.
 - Authenticated session storage in the browser.
-- A wired Calendar screen with day/week views, 30-second in-memory date caching, court bookings, booking details, and summary metrics.
-- D1-backed placeholder bookings for tentative holds before payment or upstream confirmation, including multi-court create from the same form.
+- A wired Calendar screen with day/week views, 30-second in-memory date caching, court bookings, booking details, write actions, and summary metrics.
+- Real court booking create flows for offline customers and registered Courtside users, plus payment receipt upload, mark-paid, reschedule, notes, and cancellation actions from captured upstream APIs.
+- D1-backed placeholder bookings for tentative holds before payment or upstream confirmation, including multi-court create from the same form and conversion into real upstream bookings.
 - Placeholder screens for Dashboard, Court Prices, Event, Coach, Add On, Customers, and Setting.
 
 For AI-agent onboarding, start with `AGENTS.md`, then read `docs/architecture.md`, `docs/api.md`, and `docs/visual-reference.md`.

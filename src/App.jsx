@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  CheckCircle2,
   CircleDollarSign,
   ClipboardList,
   Copy,
@@ -13,10 +15,13 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Search,
   Settings,
   ShieldCheck,
   Sparkles,
   Trash2,
+  Upload,
+  UserCheck,
   Users,
   UserPlus,
   X,
@@ -69,6 +74,9 @@ const PLACEHOLDER_DURATION_OPTIONS = [
   { label: '2h', minutes: 120 },
   { label: '3h', minutes: 180 },
 ];
+const REGISTERED_PLAYER_SEARCH_MIN_LENGTH = 2;
+// The capture redacted this field; keep the guessed value centralized for upstream verification.
+const RECEIPT_ATTACHMENT_TYPE = 'payment_proof';
 const calendarDataCache = new Map();
 
 const mobileNavItems = [
@@ -768,6 +776,7 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
   const [state, setState] = useState({ loading: true, error: '', courts: [], openHour: null, bookingsByDate: {} });
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [placeholderEditor, setPlaceholderEditor] = useState({ mode: 'closed', booking: null });
+  const [bookingActionEditor, setBookingActionEditor] = useState({ mode: 'closed', booking: null, draft: null });
   const [placeholderStatus, setPlaceholderStatus] = useState({ state: 'idle', message: '' });
   const [hiddenAboveCount, setHiddenAboveCount] = useState(0);
   const [hiddenBelowCount, setHiddenBelowCount] = useState(0);
@@ -783,6 +792,8 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
   const weekSummary = summarizeWeek(weekDays, state.bookingsByDate, state.openHour, state.courts.length, canViewRevenue);
   const showDetailPanel = !isMobileApp && (selectedBooking || showSummaryPanel);
   const isPlaceholderEditorOpen = placeholderEditor.mode !== 'closed';
+  const isBookingActionEditorOpen = bookingActionEditor.mode !== 'closed';
+  const showCalendarFeedback = Boolean(state.error || (placeholderStatus.message && !isPlaceholderEditorOpen && !isBookingActionEditorOpen));
 
   useEffect(() => {
     if (isMobileApp) setView('day');
@@ -792,18 +803,26 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
     setPlaceholderEditor({ mode: 'closed', booking: null, draft: null });
   }
 
+  function closeBookingActionEditor() {
+    setBookingActionEditor({ mode: 'closed', booking: null, draft: null });
+  }
+
   function closeCalendarDetail() {
     setSelectedBooking(null);
     setShowSummaryPanel(false);
   }
 
   useEscapeKey(() => {
+    if (isBookingActionEditorOpen) {
+      closeBookingActionEditor();
+      return;
+    }
     if (isPlaceholderEditorOpen) {
       closePlaceholderEditor();
       return;
     }
     closeCalendarDetail();
-  }, isPlaceholderEditorOpen || Boolean(selectedBooking) || showSummaryPanel);
+  }, isBookingActionEditorOpen || isPlaceholderEditorOpen || Boolean(selectedBooking) || showSummaryPanel);
 
   useEffect(() => {
     let active = true;
@@ -896,6 +915,36 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
     setPlaceholderEditor({ mode: 'edit', booking });
   }
 
+  function openCreateRealBooking(draft = null) {
+    setPlaceholderStatus({ state: 'idle', message: '' });
+    setBookingActionEditor({ mode: 'create-booking', booking: null, draft });
+  }
+
+  function openConvertPlaceholder(booking) {
+    setPlaceholderStatus({ state: 'idle', message: '' });
+    setBookingActionEditor({ mode: 'convert-placeholder', booking, draft: null });
+  }
+
+  function openPaymentProof(booking) {
+    setPlaceholderStatus({ state: 'idle', message: '' });
+    setBookingActionEditor({ mode: 'payment-proof', booking, draft: null });
+  }
+
+  function openRescheduleBooking(booking) {
+    setPlaceholderStatus({ state: 'idle', message: '' });
+    setBookingActionEditor({ mode: 'reschedule', booking, draft: null });
+  }
+
+  function openCancelBooking(booking) {
+    setPlaceholderStatus({ state: 'idle', message: '' });
+    setBookingActionEditor({ mode: 'cancel', booking, draft: null });
+  }
+
+  function openBookingNotes(booking) {
+    setPlaceholderStatus({ state: 'idle', message: '' });
+    setBookingActionEditor({ mode: 'notes', booking, draft: null });
+  }
+
   function requestCalendarRefresh() {
     setRefreshKey((current) => current + 1);
   }
@@ -956,6 +1005,171 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
     requestCalendarRefresh();
   }
 
+  async function saveRealBooking(booking, form) {
+    const isPlaceholderConversion = Boolean(booking?.is_placeholder);
+    const placeholderId = booking?.placeholder_id || booking?.id;
+    if (isPlaceholderConversion && !placeholderId) throw new Error('Placeholder booking ID is missing.');
+    if (!canViewRevenue) throw new Error('Calendar revenue permission is required to create a real booking.');
+
+    setPlaceholderStatus({ state: 'loading', message: isPlaceholderConversion ? 'Converting placeholder...' : 'Creating booking...' });
+
+    try {
+      const response = await apiRequest('/api/admin/court-booking', {
+        method: 'POST',
+        body: JSON.stringify(buildCourtBookingPayload({ form, mitraId })),
+      });
+
+      const bookingId = response?.booking_id || response?.data?.booking_id || response?.id || '';
+      const transId = response?.trans_id || response?.data?.trans_id || '';
+      const warnings = [];
+
+      if (form.receiptFile) {
+        if (!transId) {
+          warnings.push('Receipt was not uploaded because the booking response did not include a transaction ID.');
+        } else {
+          try {
+            await uploadBookingReceipt({ attachmentType: form.attachmentType, file: form.receiptFile, transId });
+          } catch (uploadError) {
+            warnings.push(`Receipt upload failed: ${uploadError.message}`);
+          }
+        }
+      }
+
+      if (isPlaceholderConversion) {
+        try {
+          await apiRequest(`/api/placeholder-bookings/${placeholderId}`, { method: 'DELETE' });
+        } catch (deleteError) {
+          warnings.push(`Real booking was created, but the placeholder could not be removed: ${deleteError.message}`);
+        }
+      }
+
+      setBookingActionEditor({ mode: 'closed', booking: null, draft: null });
+      setSelectedBooking(null);
+      setPlaceholderStatus({
+        state: warnings.length ? 'warning' : 'success',
+        message: warnings.length
+          ? `Booking created${bookingId ? ` (${bookingId})` : ''}. ${warnings.join(' ')}`
+          : isPlaceholderConversion ? 'Placeholder converted to a real booking.' : 'Booking created.',
+      });
+      requestCalendarRefresh();
+    } catch (convertError) {
+      setPlaceholderStatus({ state: 'error', message: convertError.message || 'Unable to save booking.' });
+      throw convertError;
+    }
+  }
+
+  async function markBookingPaid(booking) {
+    setPlaceholderStatus({ state: 'loading', message: 'Marking booking paid...' });
+    try {
+      await apiRequest('/api/admin/pay-court-booking', {
+        method: 'POST',
+        body: JSON.stringify({
+          mitra_id: mitraId,
+          id: booking.id,
+          payment_method: 'offline',
+        }),
+      });
+      setPlaceholderStatus({ state: 'success', message: 'Booking marked paid.' });
+      requestCalendarRefresh();
+    } catch (error) {
+      setPlaceholderStatus({ state: 'error', message: error.message || 'Unable to mark booking paid.' });
+      throw error;
+    }
+  }
+
+  async function savePaymentProof(booking, form) {
+    if (!booking?.trans_id) throw new Error('This booking does not have a transaction ID for attachment upload.');
+    if (!form.receiptFile) throw new Error('Select a transfer receipt first.');
+    setPlaceholderStatus({ state: 'loading', message: 'Uploading receipt...' });
+    try {
+      await uploadBookingReceipt({ attachmentType: form.attachmentType, file: form.receiptFile, transId: booking.trans_id });
+      setBookingActionEditor({ mode: 'closed', booking: null, draft: null });
+      setPlaceholderStatus({ state: 'success', message: 'Receipt uploaded.' });
+      requestCalendarRefresh();
+    } catch (error) {
+      setPlaceholderStatus({ state: 'error', message: error.message || 'Unable to upload receipt.' });
+      throw error;
+    }
+  }
+
+  async function rescheduleBooking(booking, form) {
+    setPlaceholderStatus({ state: 'loading', message: 'Rescheduling booking...' });
+    try {
+      await apiRequest('/api/admin/reschedule-court-time', {
+        method: 'POST',
+        body: JSON.stringify({
+          mitra_id: mitraId,
+          id: booking.id,
+          date: form.date,
+          type: getCourtBookingWriteType(booking),
+          court_id: form.court_id,
+          start_hours: formatUpstreamTime(form.start_time),
+          duration: getTimeRangeDurationMinutes(form),
+          adjust_payment: true,
+          adjust_payment_method: 'offline',
+        }),
+      });
+      setBookingActionEditor({ mode: 'closed', booking: null, draft: null });
+      setSelectedBooking(null);
+      setPlaceholderStatus({ state: 'success', message: 'Booking rescheduled.' });
+      requestCalendarRefresh();
+    } catch (error) {
+      setPlaceholderStatus({ state: 'error', message: error.message || 'Unable to reschedule booking.' });
+      throw error;
+    }
+  }
+
+  async function cancelBooking(booking, form) {
+    setPlaceholderStatus({ state: 'loading', message: 'Canceling booking...' });
+    try {
+      await apiRequest('/api/admin/cancel-cal-court', {
+        method: 'POST',
+        body: JSON.stringify({
+          mitra_id: mitraId,
+          id: booking.id,
+          type: getCourtBookingWriteType(booking),
+          user_offline: booking.user_offline || null,
+          email_verified: true,
+          already_wd: false,
+          use_package: Boolean(booking.use_package),
+          email: booking.user_email || booking.email || '',
+          cancel_note: form.cancel_note || 'Cancel',
+          is_recurring: false,
+          start_date: null,
+          end_date: null,
+        }),
+      });
+      setBookingActionEditor({ mode: 'closed', booking: null, draft: null });
+      setSelectedBooking(null);
+      setPlaceholderStatus({ state: 'success', message: 'Booking canceled.' });
+      requestCalendarRefresh();
+    } catch (error) {
+      setPlaceholderStatus({ state: 'error', message: error.message || 'Unable to cancel booking.' });
+      throw error;
+    }
+  }
+
+  async function saveBookingNotes(booking, form) {
+    setPlaceholderStatus({ state: 'loading', message: 'Saving notes...' });
+    try {
+      await apiRequest('/api/admin/change-notes', {
+        method: 'POST',
+        body: JSON.stringify({
+          mitra_id: mitraId,
+          id: booking.id,
+          type: getCourtBookingWriteType(booking),
+          notes: form.notes || '',
+        }),
+      });
+      setBookingActionEditor({ mode: 'closed', booking: null, draft: null });
+      setPlaceholderStatus({ state: 'success', message: 'Booking notes saved.' });
+      requestCalendarRefresh();
+    } catch (error) {
+      setPlaceholderStatus({ state: 'error', message: error.message || 'Unable to save notes.' });
+      throw error;
+    }
+  }
+
   function findPlaceholderConflicts(form) {
     const bookings = state.bookingsByDate[form.date] || [];
     const selectedCourtIds = new Set(getSelectedCourtIds(form));
@@ -969,8 +1183,20 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
     });
   }
 
+  function findRealBookingConflicts(form, sourceBooking = null) {
+    const bookings = state.bookingsByDate[form.date] || [];
+    const candidate = {
+      time: `${form.start_time}-${form.end_time}`,
+    };
+    const sourceIds = new Set([sourceBooking?.id, sourceBooking?.placeholder_id].filter(Boolean));
+    return bookings.filter((booking) => {
+      if (sourceIds.has(booking.id) || sourceIds.has(booking.placeholder_id)) return false;
+      return booking.court_id === form.court_id && bookingsOverlap(candidate, booking);
+    });
+  }
+
   return (
-    <div className={`calendar-page ${view}-mode ${isMobileApp ? 'mobile-calendar-page' : ''}`}>
+    <div className={`calendar-page ${view}-mode ${showCalendarFeedback ? 'has-feedback' : ''} ${isMobileApp ? 'mobile-calendar-page' : ''}`}>
       <header className="calendar-topbar">
         <div>
           <h1>Calendar</h1>
@@ -1021,6 +1247,10 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
           <Plus size={16} />
           Placeholder
         </button>
+        <button className="real-booking-create-button" onClick={() => openCreateRealBooking()} type="button">
+          <CheckCircle2 size={16} />
+          Booking
+        </button>
         {!isMobileApp ? (
           <button
             className={`summary-toggle-button ${showSummaryPanel ? 'selected' : ''}`}
@@ -1039,10 +1269,29 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
         </div>
       </section>
 
-      {state.error ? (
-        <div className="calendar-error">
-          <strong>Could not load calendar.</strong>
-          <p>{state.error}</p>
+      {showCalendarFeedback ? (
+        <div className="calendar-feedback">
+          {state.error ? (
+            <div className="calendar-error">
+              <strong>Could not load calendar.</strong>
+              <p>{state.error}</p>
+            </div>
+          ) : null}
+
+          {placeholderStatus.message && !isPlaceholderEditorOpen && !isBookingActionEditorOpen ? (
+            <div className={`calendar-status-message ${placeholderStatus.state}`} role="status">
+              <span>{placeholderStatus.message}</span>
+              {placeholderStatus.state !== 'loading' ? (
+                <button
+                  aria-label="Dismiss status message"
+                  onClick={() => setPlaceholderStatus({ state: 'idle', message: '' })}
+                  type="button"
+                >
+                  <X size={14} />
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -1070,6 +1319,7 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
                 selectedDate={selectedDate}
                 weekDays={weekDays}
                 onCreatePlaceholder={openCreatePlaceholder}
+                onCreateRealBooking={openCreateRealBooking}
                 onSelectBooking={setSelectedBooking}
                 onSelectDate={setSelectedDate}
                 onSwitchDay={() => setView('day')}
@@ -1083,6 +1333,7 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
                 selectedBooking={selectedBooking}
                 selectedDate={selectedDate}
                 onCreatePlaceholder={openCreatePlaceholder}
+                onCreateRealBooking={openCreateRealBooking}
                 onSelectBooking={setSelectedBooking}
               />
             ) : (
@@ -1094,6 +1345,7 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
                 selectedDate={selectedDate}
                 weekDays={weekDays}
                 onCreatePlaceholder={openCreatePlaceholder}
+                onCreateRealBooking={openCreateRealBooking}
                 onSelectBooking={setSelectedBooking}
                 onSelectDate={setSelectedDate}
                 onSwitchDay={() => setView('day')}
@@ -1122,9 +1374,15 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
             view={view}
             weekSummary={weekSummary}
             onClose={closeCalendarDetail}
+            onCancelBooking={openCancelBooking}
+            onConvertPlaceholder={openConvertPlaceholder}
             onDeletePlaceholder={deletePlaceholder}
             onEditPlaceholder={openEditPlaceholder}
+            onEditBookingNotes={openBookingNotes}
+            onMarkBookingPaid={markBookingPaid}
             onOpenDay={() => setView('day')}
+            onRescheduleBooking={openRescheduleBooking}
+            onUploadPaymentProof={openPaymentProof}
           />
         ) : null}
       </section>
@@ -1150,6 +1408,57 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
           onSave={savePlaceholder}
         />
       ) : null}
+      {['create-booking', 'convert-placeholder'].includes(bookingActionEditor.mode) ? (
+        <BookingWriteDialog
+          actionMode={bookingActionEditor.mode}
+          booking={bookingActionEditor.booking}
+          canViewRevenue={canViewRevenue}
+          conflicts={findRealBookingConflicts}
+          courts={state.courts}
+          defaultDate={selectedDate}
+          draft={bookingActionEditor.draft}
+          isSaving={placeholderStatus.state === 'loading'}
+          openHour={state.openHour}
+          onClose={closeBookingActionEditor}
+          onSave={saveRealBooking}
+        />
+      ) : null}
+      {bookingActionEditor.mode === 'payment-proof' ? (
+        <PaymentProofDialog
+          booking={bookingActionEditor.booking}
+          isSaving={placeholderStatus.state === 'loading'}
+          onClose={closeBookingActionEditor}
+          onSave={savePaymentProof}
+        />
+      ) : null}
+      {bookingActionEditor.mode === 'reschedule' ? (
+        <RescheduleBookingDialog
+          booking={bookingActionEditor.booking}
+          canViewRevenue={canViewRevenue}
+          courts={state.courts}
+          isSaving={placeholderStatus.state === 'loading'}
+          mitraId={mitraId}
+          openHour={state.openHour}
+          onClose={closeBookingActionEditor}
+          onSave={rescheduleBooking}
+        />
+      ) : null}
+      {bookingActionEditor.mode === 'cancel' ? (
+        <CancelBookingDialog
+          booking={bookingActionEditor.booking}
+          isSaving={placeholderStatus.state === 'loading'}
+          onClose={closeBookingActionEditor}
+          onSave={cancelBooking}
+        />
+      ) : null}
+      {bookingActionEditor.mode === 'notes' ? (
+        <BookingNotesDialog
+          booking={bookingActionEditor.booking}
+          isSaving={placeholderStatus.state === 'loading'}
+          onClose={closeBookingActionEditor}
+          onSave={saveBookingNotes}
+        />
+      ) : null}
       {isMobileApp && selectedBooking ? (
         <div className="mobile-detail-backdrop" onClick={() => setSelectedBooking(null)}>
           <div onClick={(event) => event.stopPropagation()}>
@@ -1161,9 +1470,15 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
               view={view}
               weekSummary={weekSummary}
               onClose={() => setSelectedBooking(null)}
+              onCancelBooking={openCancelBooking}
+              onConvertPlaceholder={openConvertPlaceholder}
               onDeletePlaceholder={deletePlaceholder}
               onEditPlaceholder={openEditPlaceholder}
+              onEditBookingNotes={openBookingNotes}
+              onMarkBookingPaid={markBookingPaid}
               onOpenDay={() => setView('day')}
+              onRescheduleBooking={openRescheduleBooking}
+              onUploadPaymentProof={openPaymentProof}
             />
           </div>
         </div>
@@ -1500,10 +1815,28 @@ function WeekDayColumn({ bookings, canViewRevenue = true, courts, date, isSelect
   );
 }
 
-function CalendarDetailPanel({ booking, canViewRevenue = true, selectedDate, selectedDaySummary, view, weekSummary, onClose, onDeletePlaceholder, onEditPlaceholder, onOpenDay }) {
+function CalendarDetailPanel({
+  booking,
+  canViewRevenue = true,
+  selectedDate,
+  selectedDaySummary,
+  view,
+  weekSummary,
+  onCancelBooking,
+  onClose,
+  onConvertPlaceholder,
+  onDeletePlaceholder,
+  onEditBookingNotes,
+  onEditPlaceholder,
+  onMarkBookingPaid,
+  onOpenDay,
+  onRescheduleBooking,
+  onUploadPaymentProof,
+}) {
   if (booking) {
     const isPlaceholder = booking.is_placeholder;
     const conflictItems = getBookingConflictItems(booking);
+    const canConvertPlaceholder = isPlaceholder && canViewRevenue && !hasBookingConflict(booking);
     return (
       <aside className="calendar-detail">
         <div className="panel-label-row">
@@ -1546,14 +1879,26 @@ function CalendarDetailPanel({ booking, canViewRevenue = true, selectedDate, sel
         </dl>
         {isPlaceholder ? (
           <div className="detail-actions">
+            <button className="primary-detail-action" disabled={!canConvertPlaceholder} onClick={() => onConvertPlaceholder?.(booking)} type="button">
+              <CheckCircle2 size={15} /> Convert to booking
+            </button>
             <button onClick={() => onEditPlaceholder?.(booking)} type="button"><Pencil size={15} /> Edit placeholder</button>
-            <button disabled type="button"><ExternalLink size={15} /> Mark paid & confirm</button>
             <button className="danger-action" onClick={() => onDeletePlaceholder?.(booking)} type="button"><Trash2 size={15} /> Delete</button>
+            {!canViewRevenue ? <p className="detail-action-note">Revenue permission is required because the upstream booking payload needs a price.</p> : null}
+            {hasBookingConflict(booking) ? <p className="detail-action-note danger">Resolve the live-booking conflict before converting this placeholder.</p> : null}
           </div>
         ) : (
           <div className="detail-actions">
-            <button type="button"><ExternalLink size={15} /> View transaction</button>
+            {!booking.booking_paid ? (
+              <button className="primary-detail-action" onClick={() => onMarkBookingPaid?.(booking)} type="button">
+                <CheckCircle2 size={15} /> Mark paid
+              </button>
+            ) : null}
+            <button onClick={() => onUploadPaymentProof?.(booking)} type="button"><Upload size={15} /> Upload receipt</button>
+            <button onClick={() => onRescheduleBooking?.(booking)} type="button"><CalendarDays size={15} /> Reschedule</button>
+            <button onClick={() => onEditBookingNotes?.(booking)} type="button"><Pencil size={15} /> Edit notes</button>
             <button onClick={() => copyText(booking.trans_id)} type="button"><Copy size={15} /> Copy ID</button>
+            <button className="danger-action" onClick={() => onCancelBooking?.(booking)} type="button"><Trash2 size={15} /> Cancel booking</button>
           </div>
         )}
       </aside>
@@ -1583,6 +1928,746 @@ function CalendarDetailPanel({ booking, canViewRevenue = true, selectedDate, sel
         <button type="button"><ExternalLink size={15} /> Export week</button>
       </div>
     </aside>
+  );
+}
+
+function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, conflicts, courts, defaultDate, draft, isSaving, openHour, onClose, onSave }) {
+  const [form, setForm] = useState(() => buildBookingWriteForm({ booking, courts, defaultDate, draft, openHour }));
+  const [error, setError] = useState('');
+  const [playerState, setPlayerState] = useState({ error: '', loading: false, results: [] });
+  const isRegistered = form.customerMode === 'registered';
+  const searchQuery = form.playerSearch.trim();
+  const conflictList = conflicts(form, booking);
+  const hasConflict = conflictList.length > 0;
+  const isConversion = actionMode === 'convert-placeholder';
+  const title = isConversion ? 'Create real booking' : 'Create booking';
+  const panelLabel = isConversion ? 'Convert placeholder' : 'New real booking';
+
+  useEffect(() => {
+    if (!isRegistered || form.selectedPlayer || searchQuery.length < REGISTERED_PLAYER_SEARCH_MIN_LENGTH) {
+      setPlayerState({ error: '', loading: false, results: [] });
+      return undefined;
+    }
+
+    let active = true;
+    const timeout = window.setTimeout(() => {
+      setPlayerState((current) => ({ ...current, error: '', loading: true }));
+      apiRequest(`/api/admin/player/search-player-lists?per_page=100&search=${encodeURIComponent(searchQuery)}`)
+        .then((response) => {
+          if (!active) return;
+          setPlayerState({ error: '', loading: false, results: normalizePlayerSearchResults(response) });
+        })
+        .catch((searchError) => {
+          if (!active) return;
+          setPlayerState({ error: searchError.message, loading: false, results: [] });
+        });
+    }, 260);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+    };
+  }, [form.selectedPlayer, isRegistered, searchQuery]);
+
+  function updateField(field, value) {
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+      ...(field === 'court_id' ? { court_name: courts.find((court) => court.id === value)?.name || '' } : null),
+      ...(field === 'start_time' ? { end_time: shiftTime(value, getTimeRangeDurationMinutes(current)) } : null),
+      ...(field === 'end_time' ? { duration_mode: inferPlaceholderDurationMode(current.start_time, value) } : null),
+      ...(field === 'playerSearch' ? { selectedPlayer: null } : null),
+      ...(field === 'customerMode' && value === 'offline' ? { selectedPlayer: null } : null),
+    }));
+  }
+
+  function selectPlayer(player) {
+    setForm((current) => ({
+      ...current,
+      playerSearch: player.name || '',
+      selectedPlayer: player,
+    }));
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError('');
+
+    if (!canViewRevenue) {
+      setError('Revenue permission is required because the upstream booking payload needs a price.');
+      return;
+    }
+    if (!form.court_id) {
+      setError('Select a court.');
+      return;
+    }
+    if (!form.date) {
+      setError('Select a date.');
+      return;
+    }
+    if (parseTimeToMinutes(form.end_time) <= parseTimeToMinutes(form.start_time)) {
+      setError('End time must be after start time.');
+      return;
+    }
+    if (hasConflict) {
+      setError('This booking overlaps with another booking on the selected court.');
+      return;
+    }
+    if (isRegistered && !form.selectedPlayer?.id) {
+      setError('Select a registered player first.');
+      return;
+    }
+    if (!isRegistered && !form.offlineUser.trim()) {
+      setError('Enter the offline customer name.');
+      return;
+    }
+    if (Number(form.price) <= 0) {
+      setError('Enter the booking price.');
+      return;
+    }
+
+    try {
+      await onSave(booking, form);
+    } catch (convertError) {
+      setError(convertError.message || 'Unable to save booking.');
+    }
+  }
+
+  return (
+    <div className="placeholder-editor-backdrop" onClick={onClose}>
+      <aside className="placeholder-editor conversion-editor" onClick={(event) => event.stopPropagation()}>
+        <div className="panel-label-row">
+          <span className="panel-label">{panelLabel}</span>
+          <button aria-label="Close booking panel" onClick={onClose} type="button">
+            <X size={16} />
+          </button>
+        </div>
+        <h2>{title}</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="placeholder-editor-fields">
+            <div className="conversion-summary">
+              <span>{form.court_name || form.court_id || 'Court'}</span>
+              <strong>{form.date ? formatLongDate(form.date) : 'Select date'} · {form.start_time}-{form.end_time}</strong>
+              <small>{getTimeRangeDurationMinutes(form)} min · {formatMoney(form.price, canViewRevenue)}</small>
+            </div>
+
+            {hasConflict ? (
+              <div className="detail-conflict-alert">
+                <strong>Booking conflict</strong>
+                <span>Overlaps with {conflictList.slice(0, 2).map((item) => item.booking_owner || item.name).join(', ')}.</span>
+              </div>
+            ) : null}
+
+            {!canViewRevenue ? (
+              <div className="conversion-warning">
+                <AlertTriangle size={16} />
+                <span>Revenue permission is required before creating an upstream booking.</span>
+              </div>
+            ) : null}
+
+            <label>
+              Court
+              <select onChange={(event) => updateField('court_id', event.target.value)} required value={form.court_id}>
+                <option value="">Select court</option>
+                {courts.map((court) => <option key={court.id} value={court.id}>{court.name}</option>)}
+              </select>
+            </label>
+
+            <div className="form-grid time-grid">
+              <label>
+                Date
+                <input onChange={(event) => updateField('date', event.target.value)} required type="date" value={form.date} />
+              </label>
+              <label>
+                Start time
+                <input onChange={(event) => updateField('start_time', event.target.value)} required type="time" value={form.start_time} />
+              </label>
+              <label>
+                End time
+                <input onChange={(event) => updateField('end_time', event.target.value)} required type="time" value={form.end_time} />
+              </label>
+              <div className="duration-control">
+                <span>Duration</span>
+                <div className="duration-options">
+                  {PLACEHOLDER_DURATION_OPTIONS.map((option) => (
+                    <button
+                      className={form.duration_mode === String(option.minutes) ? 'selected' : ''}
+                      key={option.minutes}
+                      onClick={() => setBookingWriteDuration(option.minutes)}
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                  <button
+                    className={form.duration_mode === 'custom' ? 'selected' : ''}
+                    onClick={() => updateField('duration_mode', 'custom')}
+                    type="button"
+                  >
+                    Custom
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="conversion-mode-control">
+              <span>Customer</span>
+              <div>
+                <button
+                  className={form.customerMode === 'offline' ? 'selected' : ''}
+                  onClick={() => updateField('customerMode', 'offline')}
+                  type="button"
+                >
+                  Offline
+                </button>
+                <button
+                  className={form.customerMode === 'registered' ? 'selected' : ''}
+                  onClick={() => updateField('customerMode', 'registered')}
+                  type="button"
+                >
+                  Registered
+                </button>
+              </div>
+            </div>
+
+            {isRegistered ? (
+              <div className="registered-player-field">
+                <label>
+                  Search player
+                  <span className="search-input-wrap">
+                    <Search size={15} />
+                    <input
+                      onChange={(event) => updateField('playerSearch', event.target.value)}
+                      placeholder="Type customer name"
+                      value={form.playerSearch}
+                    />
+                  </span>
+                </label>
+                {form.selectedPlayer ? (
+                  <div className="selected-player">
+                    <UserCheck size={16} />
+                    <span>
+                      <strong>{form.selectedPlayer.name}</strong>
+                      <small>{form.selectedPlayer.mobile || form.selectedPlayer.email || 'Registered player'}</small>
+                    </span>
+                    <button onClick={() => updateField('playerSearch', form.selectedPlayer.name || '')} type="button">Change</button>
+                  </div>
+                ) : (
+                  <div className="player-results">
+                    {playerState.loading ? <span>Searching...</span> : null}
+                    {playerState.error ? <span className="error">{playerState.error}</span> : null}
+                    {!playerState.loading && !playerState.error && searchQuery.length >= REGISTERED_PLAYER_SEARCH_MIN_LENGTH && !playerState.results.length ? (
+                      <span>No players found.</span>
+                    ) : null}
+                    {playerState.results.slice(0, 6).map((player) => (
+                      <button key={player.id} onClick={() => selectPlayer(player)} type="button">
+                        <strong>{player.name}</strong>
+                        <small>{player.mobile || player.email || 'Registered player'}</small>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <label>
+                Offline customer name
+                <input
+                  onChange={(event) => updateField('offlineUser', event.target.value)}
+                  placeholder="Customer or group name"
+                  required
+                  value={form.offlineUser}
+                />
+              </label>
+            )}
+
+            <div className="form-grid two">
+              <label>
+                Booking price
+                <input
+                  inputMode="numeric"
+                  onChange={(event) => updateField('price', parseMoneyInput(event.target.value))}
+                  placeholder="Rp 0"
+                  value={formatMoneyInput(form.price)}
+                />
+              </label>
+              <label>
+                Payment
+                <input readOnly value="Paid offline" />
+              </label>
+            </div>
+
+            <label>
+              Transfer receipt
+              <span className="receipt-upload-control">
+                <Upload size={16} />
+                <span>{form.receiptFile?.name || 'No file selected'}</span>
+                <input
+                  accept="image/*"
+                  onChange={(event) => updateField('receiptFile', event.target.files?.[0] || null)}
+                  type="file"
+                />
+              </span>
+            </label>
+
+            <label>
+              Notes
+              <textarea onChange={(event) => updateField('notes', event.target.value)} rows={4} value={form.notes} />
+            </label>
+          </div>
+          <div className="editor-footer">
+            {error ? <p className="status-line error">{error}</p> : null}
+            <div className="editor-actions">
+              <button className="logout-button" onClick={onClose} type="button">Cancel</button>
+              <button className="primary-button" disabled={isSaving || hasConflict || !canViewRevenue} type="submit">
+                {isSaving ? 'Saving...' : title}
+              </button>
+            </div>
+          </div>
+        </form>
+      </aside>
+    </div>
+  );
+
+  function setBookingWriteDuration(minutes) {
+    setForm((current) => ({
+      ...current,
+      duration_mode: String(minutes),
+      end_time: shiftTime(current.start_time, minutes),
+    }));
+  }
+}
+
+function PaymentProofDialog({ booking, isSaving, onClose, onSave }) {
+  const [form, setForm] = useState(() => ({ attachmentType: RECEIPT_ATTACHMENT_TYPE, receiptFile: null }));
+  const [error, setError] = useState('');
+
+  function updateField(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError('');
+
+    if (!booking?.trans_id) {
+      setError('This booking does not have a transaction ID for attachment upload.');
+      return;
+    }
+    if (!form.receiptFile) {
+      setError('Select a transfer receipt first.');
+      return;
+    }
+
+    try {
+      await onSave(booking, form);
+    } catch (saveError) {
+      setError(saveError.message || 'Unable to upload receipt.');
+    }
+  }
+
+  return (
+    <div className="placeholder-editor-backdrop" onClick={onClose}>
+      <aside className="placeholder-editor compact-action-editor" onClick={(event) => event.stopPropagation()}>
+        <div className="panel-label-row">
+          <span className="panel-label">Payment proof</span>
+          <button aria-label="Close payment proof panel" onClick={onClose} type="button">
+            <X size={16} />
+          </button>
+        </div>
+        <h2>Upload receipt</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="placeholder-editor-fields">
+            <BookingActionSummary booking={booking} />
+            <label>
+              Attachment type
+              <input onChange={(event) => updateField('attachmentType', event.target.value)} required value={form.attachmentType} />
+            </label>
+            <label>
+              Transfer receipt
+              <span className="receipt-upload-control">
+                <Upload size={16} />
+                <span>{form.receiptFile?.name || 'No file selected'}</span>
+                <input
+                  accept="image/*,.pdf"
+                  onChange={(event) => updateField('receiptFile', event.target.files?.[0] || null)}
+                  required
+                  type="file"
+                />
+              </span>
+            </label>
+          </div>
+          <div className="editor-footer">
+            {error ? <p className="status-line error">{error}</p> : null}
+            <div className="editor-actions">
+              <button className="logout-button" onClick={onClose} type="button">Cancel</button>
+              <button className="primary-button" disabled={isSaving || !form.receiptFile} type="submit">
+                {isSaving ? 'Uploading...' : 'Upload receipt'}
+              </button>
+            </div>
+          </div>
+        </form>
+      </aside>
+    </div>
+  );
+}
+
+function RescheduleBookingDialog({ booking, canViewRevenue = true, courts, isSaving, mitraId, openHour, onClose, onSave }) {
+  const [form, setForm] = useState(() => buildRescheduleBookingForm({ booking, courts, openHour }));
+  const [error, setError] = useState('');
+  const [slotState, setSlotState] = useState({ closed: false, error: '', items: [], loading: false });
+  const [priceState, setPriceState] = useState({ data: null, error: '', loading: false });
+  const durationMinutes = getTimeRangeDurationMinutes(form);
+  const priceSummary = buildReschedulePriceSummary(priceState.data, canViewRevenue);
+
+  useEffect(() => {
+    if (!booking?.id || !mitraId || !form.date || !form.court_id) {
+      setSlotState({ closed: false, error: '', items: [], loading: false });
+      return undefined;
+    }
+
+    let active = true;
+    setSlotState((current) => ({ ...current, error: '', loading: true }));
+    apiRequest('/api/admin/reschedule-court-time-lists', {
+      method: 'POST',
+      body: JSON.stringify({
+        mitra_id: mitraId,
+        id: booking.id,
+        date: form.date,
+        court_id: form.court_id,
+      }),
+    })
+      .then((response) => {
+        if (!active) return;
+        setSlotState({
+          closed: Boolean(response?.closed),
+          error: '',
+          items: normalizeRescheduleSlots(response),
+          loading: false,
+        });
+      })
+      .catch((slotError) => {
+        if (!active) return;
+        setSlotState({ closed: false, error: slotError.message, items: [], loading: false });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [booking?.id, form.court_id, form.date, mitraId]);
+
+  useEffect(() => {
+    if (!booking?.id || !mitraId || !form.date || !form.court_id || durationMinutes <= 0) {
+      setPriceState({ data: null, error: '', loading: false });
+      return undefined;
+    }
+
+    let active = true;
+    const timeout = window.setTimeout(() => {
+      setPriceState((current) => ({ ...current, error: '', loading: true }));
+      apiRequest('/api/admin/check-reschedule-court-price', {
+        method: 'POST',
+        body: JSON.stringify({
+          mitra_id: mitraId,
+          id: booking.id,
+          date: form.date,
+          court_id: form.court_id,
+          start_hours: formatUpstreamTime(form.start_time),
+          duration: durationMinutes,
+        }),
+      })
+        .then((response) => {
+          if (!active) return;
+          setPriceState({ data: response, error: '', loading: false });
+        })
+        .catch((priceError) => {
+          if (!active) return;
+          setPriceState({ data: null, error: priceError.message, loading: false });
+        });
+    }, 180);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+    };
+  }, [booking?.id, durationMinutes, form.court_id, form.date, form.start_time, mitraId]);
+
+  function updateField(field, value) {
+    setForm((current) => {
+      if (field === 'court_id') {
+        return { ...current, court_id: value, court_name: courts.find((court) => court.id === value)?.name || '' };
+      }
+      if (field === 'start_time') {
+        return { ...current, start_time: value, end_time: shiftTime(value, getTimeRangeDurationMinutes(current)) };
+      }
+      if (field === 'end_time') {
+        return { ...current, end_time: value, duration_mode: inferPlaceholderDurationMode(current.start_time, value) };
+      }
+      return { ...current, [field]: value };
+    });
+  }
+
+  function setDuration(minutes) {
+    setForm((current) => ({
+      ...current,
+      duration_mode: String(minutes),
+      end_time: shiftTime(current.start_time, minutes),
+    }));
+  }
+
+  function selectSlot(time) {
+    setForm((current) => ({
+      ...current,
+      start_time: time,
+      end_time: shiftTime(time, getTimeRangeDurationMinutes(current)),
+    }));
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError('');
+
+    if (!form.court_id) {
+      setError('Select a court.');
+      return;
+    }
+    if (!form.date) {
+      setError('Select a date.');
+      return;
+    }
+    if (durationMinutes <= 0) {
+      setError('End time must be after start time.');
+      return;
+    }
+    if (slotState.closed) {
+      setError('The selected date is closed.');
+      return;
+    }
+
+    try {
+      await onSave(booking, form);
+    } catch (saveError) {
+      setError(saveError.message || 'Unable to reschedule booking.');
+    }
+  }
+
+  return (
+    <div className="placeholder-editor-backdrop" onClick={onClose}>
+      <aside className="placeholder-editor conversion-editor" onClick={(event) => event.stopPropagation()}>
+        <div className="panel-label-row">
+          <span className="panel-label">Reschedule</span>
+          <button aria-label="Close reschedule panel" onClick={onClose} type="button">
+            <X size={16} />
+          </button>
+        </div>
+        <h2>Move booking</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="placeholder-editor-fields">
+            <BookingActionSummary booking={booking} />
+
+            <label>
+              Court
+              <select onChange={(event) => updateField('court_id', event.target.value)} required value={form.court_id}>
+                <option value="">Select court</option>
+                {courts.map((court) => <option key={court.id} value={court.id}>{court.name}</option>)}
+              </select>
+            </label>
+
+            <div className="form-grid time-grid">
+              <label>
+                Date
+                <input onChange={(event) => updateField('date', event.target.value)} required type="date" value={form.date} />
+              </label>
+              <label>
+                Start time
+                <input onChange={(event) => updateField('start_time', event.target.value)} required type="time" value={form.start_time} />
+              </label>
+              <label>
+                End time
+                <input onChange={(event) => updateField('end_time', event.target.value)} required type="time" value={form.end_time} />
+              </label>
+              <div className="duration-control">
+                <span>Duration</span>
+                <div className="duration-options">
+                  {PLACEHOLDER_DURATION_OPTIONS.map((option) => (
+                    <button
+                      className={form.duration_mode === String(option.minutes) ? 'selected' : ''}
+                      key={option.minutes}
+                      onClick={() => setDuration(option.minutes)}
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                  <button
+                    className={form.duration_mode === 'custom' ? 'selected' : ''}
+                    onClick={() => updateField('duration_mode', 'custom')}
+                    type="button"
+                  >
+                    Custom
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="reschedule-slot-list">
+              <span>Available starts</span>
+              {slotState.loading ? <p>Loading slots...</p> : null}
+              {slotState.closed ? <p className="danger">Closed for selected date.</p> : null}
+              {slotState.error ? <p className="danger">{slotState.error}</p> : null}
+              {!slotState.loading && !slotState.closed && !slotState.error && !slotState.items.length ? <p>No slots returned.</p> : null}
+              {slotState.items.length ? (
+                <div>
+                  {slotState.items.slice(0, 18).map((slot) => (
+                    <button
+                      className={form.start_time === slot.time ? 'selected' : ''}
+                      key={slot.id}
+                      onClick={() => selectSlot(slot.time)}
+                      type="button"
+                    >
+                      {slot.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="price-check-card">
+              <span>Price check</span>
+              {priceState.loading ? <strong>Checking...</strong> : <strong>{priceSummary.heading}</strong>}
+              {priceSummary.lines.map((line) => <small key={line}>{line}</small>)}
+              {priceState.error ? <small className="danger">{priceState.error}</small> : null}
+            </div>
+          </div>
+          <div className="editor-footer">
+            {error ? <p className="status-line error">{error}</p> : null}
+            <div className="editor-actions">
+              <button className="logout-button" onClick={onClose} type="button">Cancel</button>
+              <button className="primary-button" disabled={isSaving || slotState.closed || durationMinutes <= 0} type="submit">
+                {isSaving ? 'Saving...' : 'Reschedule'}
+              </button>
+            </div>
+          </div>
+        </form>
+      </aside>
+    </div>
+  );
+}
+
+function CancelBookingDialog({ booking, isSaving, onClose, onSave }) {
+  const [form, setForm] = useState(() => ({ cancel_note: 'Cancel' }));
+  const [error, setError] = useState('');
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError('');
+
+    try {
+      await onSave(booking, form);
+    } catch (saveError) {
+      setError(saveError.message || 'Unable to cancel booking.');
+    }
+  }
+
+  return (
+    <div className="placeholder-editor-backdrop" onClick={onClose}>
+      <aside className="placeholder-editor compact-action-editor" onClick={(event) => event.stopPropagation()}>
+        <div className="panel-label-row">
+          <span className="panel-label">Cancel booking</span>
+          <button aria-label="Close cancel booking panel" onClick={onClose} type="button">
+            <X size={16} />
+          </button>
+        </div>
+        <h2>Cancel booking</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="placeholder-editor-fields">
+            <BookingActionSummary booking={booking} />
+            <div className="conversion-warning danger">
+              <AlertTriangle size={16} />
+              <span>This booking will be removed from the upstream schedule.</span>
+            </div>
+            <label>
+              Cancel note
+              <textarea
+                onChange={(event) => setForm({ cancel_note: event.target.value })}
+                rows={4}
+                value={form.cancel_note}
+              />
+            </label>
+          </div>
+          <div className="editor-footer">
+            {error ? <p className="status-line error">{error}</p> : null}
+            <div className="editor-actions">
+              <button className="logout-button" onClick={onClose} type="button">Keep booking</button>
+              <button className="primary-button danger-button" disabled={isSaving} type="submit">
+                {isSaving ? 'Canceling...' : 'Cancel booking'}
+              </button>
+            </div>
+          </div>
+        </form>
+      </aside>
+    </div>
+  );
+}
+
+function BookingNotesDialog({ booking, isSaving, onClose, onSave }) {
+  const [form, setForm] = useState(() => ({ notes: booking?.notes || '' }));
+  const [error, setError] = useState('');
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError('');
+
+    try {
+      await onSave(booking, form);
+    } catch (saveError) {
+      setError(saveError.message || 'Unable to save notes.');
+    }
+  }
+
+  return (
+    <div className="placeholder-editor-backdrop" onClick={onClose}>
+      <aside className="placeholder-editor compact-action-editor" onClick={(event) => event.stopPropagation()}>
+        <div className="panel-label-row">
+          <span className="panel-label">Booking notes</span>
+          <button aria-label="Close notes panel" onClick={onClose} type="button">
+            <X size={16} />
+          </button>
+        </div>
+        <h2>Edit notes</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="placeholder-editor-fields">
+            <BookingActionSummary booking={booking} />
+            <label>
+              Notes
+              <textarea
+                onChange={(event) => setForm({ notes: event.target.value })}
+                rows={6}
+                value={form.notes}
+              />
+            </label>
+          </div>
+          <div className="editor-footer">
+            {error ? <p className="status-line error">{error}</p> : null}
+            <div className="editor-actions">
+              <button className="logout-button" onClick={onClose} type="button">Cancel</button>
+              <button className="primary-button" disabled={isSaving} type="submit">
+                {isSaving ? 'Saving...' : 'Save notes'}
+              </button>
+            </div>
+          </div>
+        </form>
+      </aside>
+    </div>
+  );
+}
+
+function BookingActionSummary({ booking }) {
+  return (
+    <div className="conversion-summary">
+      <span>{booking?.court_name || booking?.court_id || 'Court'}</span>
+      <strong>{booking?.booking_owner || booking?.name || 'Booking'} · {booking?.time || getStartLabel(booking)}</strong>
+      <small>{booking?.date ? `${formatLongDate(booking.date)} · ` : ''}{booking?.trans_id || booking?.id || '-'}</small>
+    </div>
   );
 }
 
@@ -2035,6 +3120,161 @@ function buildPlaceholderForm({ booking, courts, defaultDate, defaultName, draft
   };
 }
 
+function buildBookingWriteForm({ booking, courts, defaultDate, draft, openHour }) {
+  const [bookingStart, bookingEnd] = String(booking?.time || '').split('-');
+  const startTime = draft?.start_time || bookingStart || openHour?.open_hours || '06:00';
+  const endTime = draft?.end_time || bookingEnd || shiftTime(startTime, 60);
+  const court = courts.find((item) => item.id === (draft?.court_id || booking?.court_id)) || courts[0];
+  return {
+    attachmentType: RECEIPT_ATTACHMENT_TYPE,
+    court_id: draft?.court_id || booking?.court_id || court?.id || '',
+    court_name: draft?.court_name || booking?.court_name || court?.name || '',
+    customerMode: 'offline',
+    date: draft?.date || booking?.date || defaultDate,
+    duration_mode: inferPlaceholderDurationMode(startTime, endTime),
+    end_time: endTime,
+    offlineUser: booking?.booking_owner || booking?.name || '',
+    playerSearch: booking?.booking_owner || booking?.name || '',
+    price: String(booking?.price || ''),
+    receiptFile: null,
+    selectedPlayer: null,
+    start_time: startTime,
+    notes: booking?.notes || '',
+  };
+}
+
+function buildRescheduleBookingForm({ booking, courts, openHour }) {
+  const [bookingStart, bookingEnd] = String(booking?.time || '').split('-');
+  const duration = getDurationMinutes(booking) || 60;
+  const startTime = bookingStart || openHour?.open_hours || '06:00';
+  const endTime = bookingEnd || shiftTime(startTime, duration);
+  const court = courts.find((item) => item.id === booking?.court_id) || courts[0];
+  return {
+    court_id: booking?.court_id || court?.id || '',
+    court_name: booking?.court_name || court?.name || '',
+    date: booking?.date || toDateInputValue(new Date()),
+    duration_mode: inferPlaceholderDurationMode(startTime, endTime),
+    end_time: endTime,
+    start_time: startTime,
+  };
+}
+
+function buildCourtBookingPayload({ form, mitraId }) {
+  const isRegistered = form.customerMode === 'registered';
+  return {
+    mitra_id: mitraId,
+    duration: getTimeRangeDurationMinutes(form),
+    date: form.date,
+    start_hours: formatUpstreamTime(form.start_time),
+    court_id: form.court_id,
+    harga: Number(form.price || 0),
+    diskon: 0,
+    notes: form.notes || '',
+    paid: true,
+    payment_method: 'offline',
+    registered: isRegistered,
+    user_id: isRegistered ? form.selectedPlayer?.id || null : null,
+    offline_user: isRegistered ? null : form.offlineUser.trim(),
+    is_recurring: false,
+    recurring_type: null,
+    end_date: null,
+    type: 'booking',
+    add_ons: [],
+    voucher: null,
+    voucher2: null,
+  };
+}
+
+function getTimeRangeDurationMinutes(form) {
+  const manualMinutes = parseTimeToMinutes(form.end_time) - parseTimeToMinutes(form.start_time);
+  return manualMinutes > 0 ? manualMinutes : 0;
+}
+
+function normalizePlayerSearchResults(response) {
+  if (Array.isArray(response?.data)) return response.data;
+  if (Array.isArray(response?.lists)) return response.lists;
+  if (Array.isArray(response)) return response;
+  return [];
+}
+
+function normalizeRescheduleSlots(response) {
+  const rows = Array.isArray(response?.data)
+    ? response.data
+    : Array.isArray(response?.lists)
+      ? response.lists
+      : Array.isArray(response)
+        ? response
+        : [];
+
+  return rows
+    .map((row, index) => {
+      const rawTime = typeof row === 'string'
+        ? row
+        : row?.time || row?.start_time || row?.start_hours || row?.label || '';
+      if (!rawTime) return null;
+      const time = formatTimeInput(parseTimeToMinutes(rawTime));
+      return {
+        id: row?.id || `${time}-${index}`,
+        label: formatCompactTime(parseTimeToMinutes(time)),
+        time,
+      };
+    })
+    .filter(Boolean);
+}
+
+function buildReschedulePriceSummary(response, canViewRevenue = true) {
+  if (!response) return { heading: 'Waiting for schedule', lines: ['Select a valid date, court, start time, and duration.'] };
+  const paymentCheck = response.payment_check || response.data?.payment_check || {};
+  const oldSchedule = response.old_schedule || response.data?.old_schedule || {};
+  const newSchedule = response.new_schedule || response.data?.new_schedule || {};
+  const status = paymentCheck.status || response.status || 'ready';
+  const oldPrice = oldSchedule.grand_total ?? oldSchedule.price ?? oldSchedule.total_price;
+  const newPrice = newSchedule.grand_total ?? newSchedule.price ?? newSchedule.total_price;
+  const adjustment = paymentCheck.adjustment_amount ?? response.adjustment_amount;
+  const lines = [];
+
+  if (oldPrice !== undefined || newPrice !== undefined) {
+    lines.push(`${formatMoney(oldPrice || 0, canViewRevenue)} -> ${formatMoney(newPrice || 0, canViewRevenue)}`);
+  }
+  if (adjustment !== undefined) {
+    lines.push(`Adjustment ${formatMoney(adjustment || 0, canViewRevenue)}`);
+  }
+  if (!lines.length && response.message) lines.push(response.message);
+  if (!lines.length) lines.push('Upstream price check returned no amount changes.');
+
+  return {
+    heading: formatStatusText(status),
+    lines,
+  };
+}
+
+function getCourtBookingWriteType(booking) {
+  const type = String(booking?.type || '').trim();
+  if (!type || type === 'booking') return 'booking-court';
+  return type;
+}
+
+function formatStatusText(value) {
+  return String(value || 'ready')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+async function uploadBookingReceipt({ attachmentType = RECEIPT_ATTACHMENT_TYPE, file, transId }) {
+  const formData = new FormData();
+  formData.append('trans_id', transId);
+  formData.append('attachment_type[0]', attachmentType || RECEIPT_ATTACHMENT_TYPE);
+  formData.append('attachment_file[0]', file);
+  return apiRequest('/api/admin/schedule/attachments', {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+function formatUpstreamTime(value) {
+  return String(value || '').replace(':', '.');
+}
+
 function getSelectedCourtIds(form) {
   if (Array.isArray(form.court_ids) && form.court_ids.length) return form.court_ids;
   return form.court_id ? [form.court_id] : [];
@@ -2183,7 +3423,7 @@ function parseTimeToMinutes(value) {
 }
 
 function getStartLabel(booking) {
-  return String(booking.time || '').split('-')[0] || '--:--';
+  return String(booking?.time || '').split('-')[0] || '--:--';
 }
 
 function getBookingPosition(booking, startMinutes, totalMinutes) {
@@ -2231,13 +3471,13 @@ function buildAvailabilityEntry(startMinutes, endMinutes) {
 }
 
 function getBookingStartMinutes(booking) {
-  const [start] = String(booking.time || '').split('-');
-  return start ? parseTimeToMinutes(start) : minutesFromEpoch(booking.start);
+  const [start] = String(booking?.time || '').split('-');
+  return start ? parseTimeToMinutes(start) : minutesFromEpoch(booking?.start);
 }
 
 function getBookingEndMinutes(booking) {
-  const [, end] = String(booking.time || '').split('-');
-  return end ? parseTimeToMinutes(end) : minutesFromEpoch(booking.end);
+  const [, end] = String(booking?.time || '').split('-');
+  return end ? parseTimeToMinutes(end) : minutesFromEpoch(booking?.end);
 }
 
 function formatAvailabilityRange(startMinutes, endMinutes) {
@@ -2302,13 +3542,17 @@ function bookingsOverlap(first, second) {
 }
 
 function minutesFromEpoch(value) {
+  if (value === undefined || value === null || value === '') return 0;
   const date = new Date(Number(value));
+  if (Number.isNaN(date.getTime())) return 0;
   return date.getHours() * 60 + date.getMinutes();
 }
 
 function getDurationMinutes(booking) {
-  const position = getBookingPosition(booking, 0, 24 * 60);
-  return Math.round((position.height / 100) * 24 * 60);
+  const duration = Number(booking?.duration || 0);
+  if (duration > 0) return duration;
+  const calculated = getBookingEndMinutes(booking) - getBookingStartMinutes(booking);
+  return Number.isFinite(calculated) ? Math.max(calculated, 0) : 0;
 }
 
 function buildHours(openHour) {

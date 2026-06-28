@@ -41,6 +41,14 @@ const VIRTUAL_ENDPOINT_RULES = [
   {
     permission: 'Calendar',
     matches: [
+      /^\/api\/admin\/cancel-cal-court(?:\/|$)/,
+      /^\/api\/admin\/change-notes(?:\/|$)/,
+      /^\/api\/admin\/check-reschedule-court-price(?:\/|$)/,
+      /^\/api\/admin\/court-booking(?:\/|$)/,
+      /^\/api\/admin\/pay-court-booking(?:\/|$)/,
+      /^\/api\/admin\/player\/search-player-lists(?:\/|$)/,
+      /^\/api\/admin\/reschedule-court-time(?:\/|$)/,
+      /^\/api\/admin\/reschedule-court-time-lists(?:\/|$)/,
       /^\/api\/admin\/schedule(?:\/|$|-)/,
       /^\/api\/admin\/schedule-cal-courts(?:\/|$)/,
       /^\/api\/admin\/mitra\/court\/[^/]+\/list$/,

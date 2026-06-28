@@ -12,7 +12,7 @@ Pagi Pagi Padel Panel is a React + Vite admin frontend. It is currently compact 
 6. `PanelShell` loads `/api/auth/me`, derives the display name and `mitraId`, applies virtual-user navigation visibility, and renders the active screen.
 7. Calendar is the only fully wired screen today. Settings exposes virtual user management only when the Worker confirms the real master account is signed in. Other navigation items render placeholders.
 
-Placeholder bookings and virtual users are wrapper-owned data models. They are stored in Cloudflare D1 through the Worker. Placeholder bookings are merged into Calendar responses on the frontend and deliberately do not call the upstream booking API until a future confirmation/payment flow is implemented. Virtual users allow multiple wrapper logins to share one real upstream account, but only a real `MASTER_USERNAME` session can manage them.
+Placeholder bookings and virtual users are wrapper-owned data models. They are stored in Cloudflare D1 through the Worker. Placeholder bookings are merged into Calendar responses on the frontend; staff can later convert a placeholder into a real upstream court booking, optionally uploading a payment receipt, after which the local placeholder is deleted. Virtual users allow multiple wrapper logins to share one real upstream account, but only a real `MASTER_USERNAME` session can manage them.
 
 Virtual permissions are enforced twice:
 
@@ -52,6 +52,8 @@ Calendar data uses a module-level in-memory cache with a 30-second TTL. Cache ke
 
 Placeholder create mode can target multiple courts at once. The frontend fans that out into one `/api/placeholder-bookings` POST per selected court. Edit mode updates a single placeholder row.
 
+Real booking create mode posts to the captured upstream `/api/admin/court-booking` endpoint for either offline customers or selected registered players. Existing real booking detail actions can mark paid, upload a transfer receipt, reschedule after checking available times/pricing, edit notes, and cancel through the captured upstream write endpoints.
+
 The Worker rejects placeholder create/update requests that overlap an existing placeholder row, and also rejects overlap with a live upstream booking when the upstream day schedule is available. On read, the frontend annotates any existing placeholder/live-booking overlap so both cards show a conflict state and the detail panel names the conflicting item.
 
 ## UI Structure
@@ -68,6 +70,7 @@ Current component structure inside `src/App.jsx`:
 - `WeekCalendar`
 - `CalendarDetailPanel`
 - `PlaceholderBookingEditor`
+- booking write/action drawers for create, conversion, payment proof, reschedule, cancellation, and notes
 
 The rest of the file contains date, time, booking, formatting, summary, and clipboard helpers.
 

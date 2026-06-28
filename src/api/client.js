@@ -19,7 +19,8 @@ export async function apiRequest(path, options = {}) {
     headers.set('X-Panel-Virtual-User', auth.virtualUser.id);
   }
 
-  if (options.body && !headers.has('Content-Type')) {
+  const isMultipartBody = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  if (options.body && !headers.has('Content-Type') && !isMultipartBody) {
     headers.set('Content-Type', 'application/json');
   }
 

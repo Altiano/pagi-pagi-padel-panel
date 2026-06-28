@@ -167,6 +167,292 @@ Important booking fields used by the UI:
 
 Calendar responses are cached in browser memory for 30 seconds per auth/revenue scope, `mitraId`, data type, and date. This cache is deliberately not persisted. The dashboard refresh button and placeholder mutations bypass the cache, and a browser reload naturally starts with an empty cache.
 
+The Calendar UI now uses the captured write endpoints below for direct real booking creation, placeholder-to-booking conversion, payment proof upload, mark-paid, reschedule, note edits, and cancellation. Each successful write refreshes calendar data so the visible schedule re-syncs from upstream and D1.
+
+### `POST /api/admin/court-booking`
+
+Captured from the upstream schedule create booking modal. This is the real admin/staff offline booking write endpoint, not the wrapper-owned placeholder flow.
+
+Before booking a registered Courtside user, the upstream modal searches players as staff type:
+
+```http
+GET /api/admin/player/search-player-lists?per_page=100&search=:query
+```
+
+The response has `data`, `links`, and `meta`. Each player row includes `id` and `name` plus personal fields such as email, mobile, birthday, and avatar metadata. The booking form uses the selected row's `id` as `user_id`.
+
+Representative offline-user request body:
+
+```json
+{
+  "mitra_id": "mitra-id",
+  "duration": 60,
+  "date": "2026-07-16",
+  "start_hours": "06.00",
+  "court_id": "court-id",
+  "harga": 185000,
+  "diskon": 0,
+  "notes": "altiano testing",
+  "paid": true,
+  "payment_method": "offline",
+  "registered": false,
+  "user_id": null,
+  "offline_user": "Altiano",
+  "is_recurring": false,
+  "recurring_type": null,
+  "end_date": null,
+  "type": "booking",
+  "add_ons": [],
+  "voucher": null,
+  "voucher2": null
+}
+```
+
+Registered/online Courtside users use the same endpoint and mostly the same body, with these field differences:
+
+```json
+{
+  "registered": true,
+  "user_id": "player-id",
+  "offline_user": null
+}
+```
+
+For unregistered/offline users, the captured body used:
+
+```json
+{
+  "registered": false,
+  "user_id": null,
+  "offline_user": "Altiano"
+}
+```
+
+The voucher preflight also changes by user mode. Offline users send `owner_info=:typedName&is_courtside_user=false`; registered users send `owner_id=:playerId&is_courtside_user=true`.
+
+Successful response:
+
+```json
+{
+  "status": true,
+  "trans_id": "transaction-id",
+  "booking_id": "booking-id"
+}
+```
+
+After a successful create, the upstream panel refreshes `GET /api/admin/schedule-cal-courts?mitra_id=:mitraId&date=:date`; the new row appears with `booking_type: "offline"`, `booking_paid: true`, `payment_method: "offline"`, `type: "booking-court"`, and the returned IDs as `id`/`trans_id`.
+
+### Booking payment, notes, details, and attachments
+
+Captured from the upstream schedule booking detail flow for an existing court booking.
+
+Marking a booking as paid offline:
+
+```http
+POST /api/admin/pay-court-booking
+```
+
+```json
+{
+  "mitra_id": "mitra-id",
+  "id": "booking-id",
+  "payment_method": "offline"
+}
+```
+
+Successful response:
+
+```json
+{
+  "status": true
+}
+```
+
+Changing booking notes:
+
+```http
+POST /api/admin/change-notes
+```
+
+```json
+{
+  "mitra_id": "mitra-id",
+  "id": "booking-id",
+  "type": "booking-court",
+  "notes": "altiano testing"
+}
+```
+
+Fetching booking detail:
+
+```http
+POST /api/admin/schedule-cal-courts-detail
+```
+
+```json
+{
+  "mitra_id": "mitra-id",
+  "id": "booking-id",
+  "type": "booking-court"
+}
+```
+
+Uploading transfer receipt/proof attachments:
+
+```http
+POST /api/admin/schedule/attachments
+Content-Type: multipart/form-data
+```
+
+Observed multipart fields:
+
+- `trans_id`: transaction ID from the booking row or create response.
+- `attachment_type[0]`: attachment type value selected by the upstream UI.
+- `attachment_file[0]`: receipt/proof file, observed as `image/jpeg`.
+
+Successful upload response:
+
+```json
+{
+  "status": true,
+  "message": "Attachments uploaded successfully",
+  "data": [
+    {
+      "id": "attachment-id",
+      "trans_id": "transaction-id",
+      "attachment_type": "type",
+      "attachment_path": "path",
+      "attachment_name": "filename",
+      "created_at": "2026-06-27T15:42:12.000000Z",
+      "updated_at": "2026-06-27T15:42:12.000000Z"
+    }
+  ]
+}
+```
+
+Fetching attachments and booking history:
+
+```http
+GET /api/admin/schedule/attachments/:transId
+GET /api/admin/schedule/history/:bookingId
+```
+
+An attempted "offline user to registered/online user" edit in the captured booking detail flow only produced registered-player search requests and detail/history/schedule refreshes. No persisted owner/user mutation endpoint was observed; the latest captured detail still had `booking_owner: "Altiano"`, null user contact fields, and an empty `players` array.
+
+### Booking reschedule and cancellation
+
+Captured from the upstream schedule booking detail flow.
+
+Listing available reschedule times:
+
+```http
+POST /api/admin/reschedule-court-time-lists
+```
+
+```json
+{
+  "mitra_id": "mitra-id",
+  "id": "booking-id",
+  "date": "2026-07-17",
+  "court_id": "court-id"
+}
+```
+
+Observed response shape:
+
+```json
+{
+  "closed": false,
+  "data": [
+    { "time": "06.00" },
+    { "time": "07.00" }
+  ]
+}
+```
+
+Checking the price impact of a reschedule:
+
+```http
+POST /api/admin/check-reschedule-court-price
+```
+
+```json
+{
+  "mitra_id": "mitra-id",
+  "id": "booking-id",
+  "date": "2026-07-17",
+  "court_id": "court-id",
+  "start_hours": "07.00",
+  "duration": 60
+}
+```
+
+The response includes `old_schedule`, `new_schedule`, and `payment_check`. The captured example moved from 185000 to 245000, with `payment_check.status: "underpayment"` and `adjustment_amount: 60000`.
+
+Saving the reschedule:
+
+```http
+POST /api/admin/reschedule-court-time
+```
+
+```json
+{
+  "mitra_id": "mitra-id",
+  "id": "booking-id",
+  "date": "2026-07-17",
+  "type": "booking-court",
+  "court_id": "court-id",
+  "start_hours": "07.00",
+  "duration": 60,
+  "adjust_payment": true,
+  "adjust_payment_method": "offline"
+}
+```
+
+Successful response:
+
+```json
+{
+  "status": true
+}
+```
+
+After rescheduling, the upstream panel refreshes `schedule-cal-courts`. The captured detail response for the rescheduled booking showed `has_adjustment: true`, `price_parent: 185000`, `price: 245000`, and `grand_total: 245000`.
+
+Canceling a court booking:
+
+```http
+POST /api/admin/cancel-cal-court
+```
+
+```json
+{
+  "mitra_id": "mitra-id",
+  "id": "booking-id",
+  "type": "booking-court",
+  "user_offline": null,
+  "email_verified": true,
+  "already_wd": false,
+  "use_package": false,
+  "email": "customer@example.com",
+  "cancel_note": "reason",
+  "is_recurring": false,
+  "start_date": null,
+  "end_date": null
+}
+```
+
+Successful response:
+
+```json
+{
+  "status": true,
+  "data": null
+}
+```
+
+After cancellation, the upstream panel refreshes `schedule-cal-courts`; the canceled booking was absent from the refreshed `lists` response.
+
 ## Placeholder Bookings
 
 Placeholder bookings are stored by this wrapper and are not sent to the upstream API. They are intended for tentative holds while staff negotiate or wait for payment.
@@ -204,7 +490,15 @@ Stored fields:
 }
 ```
 
-The frontend maps these rows into booking-like calendar entries with `is_placeholder: true`, `booking_type: "placeholder"`, and an amber dashed visual treatment. `confirmed_booking_id` is reserved for a future flow that creates a real upstream booking after payment.
+The frontend maps these rows into booking-like calendar entries with `is_placeholder: true`, `booking_type: "placeholder"`, and an amber dashed visual treatment.
+
+Placeholder conversion currently happens client-side from the placeholder detail panel:
+
+1. The frontend posts a real upstream booking to `POST /api/admin/court-booking`, using the placeholder court/date/start/duration/price and either an offline customer name or selected registered player ID.
+2. If staff selected a transfer receipt and the upstream response includes `trans_id`, the frontend uploads it to `POST /api/admin/schedule/attachments` as multipart form data.
+3. After the upstream booking exists, the frontend deletes the local placeholder with `DELETE /api/placeholder-bookings/:id` and refreshes calendar data so the real schedule row replaces the local hold.
+
+`confirmed_booking_id` remains stored on placeholder rows for future server-side/audit linking, but the current visible conversion cleanup is the soft-delete step after upstream create succeeds.
 
 The placeholder form can create the same tentative hold across multiple courts. The backend contract remains one row per request; the frontend sends one `POST /api/placeholder-bookings` request per selected court. Editing remains a single-row `PUT`.
 
@@ -242,7 +536,7 @@ The Worker records virtual-issued access token hashes in D1 so `/api/virtual-use
 Virtual endpoint authorization:
 
 - `Dashboard`: dashboard, mitra info/notifications, and dashboard transaction summary/list routes from the captured API map.
-- `Calendar`: schedule/open-hour, schedule calendar courts, mitra court list, mitra operation hours, and `/api/placeholder-bookings`.
+- `Calendar`: schedule/open-hour, schedule calendar courts, court booking write/payment/reschedule/cancel routes, schedule attachments, registered-player search for booking creation, mitra court list, mitra operation hours, and `/api/placeholder-bookings`.
 - `Court Prices`: `/api/admin/services`.
 - `Event`: `/api/admin/event`.
 - `Coach`: `/api/admin/coach`.
