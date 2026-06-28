@@ -1122,22 +1122,10 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
   async function cancelBooking(booking, form) {
     setPlaceholderStatus({ state: 'loading', message: 'Canceling booking...' });
     try {
+      const detailedBooking = await fetchBookingDetailForAction({ booking, mitraId }).catch(() => booking);
       await apiRequest('/api/admin/cancel-cal-court', {
         method: 'POST',
-        body: JSON.stringify({
-          mitra_id: mitraId,
-          id: booking.id,
-          type: getCourtBookingWriteType(booking),
-          user_offline: booking.user_offline || null,
-          email_verified: true,
-          already_wd: false,
-          use_package: Boolean(booking.use_package),
-          email: booking.user_email || booking.email || '',
-          cancel_note: form.cancel_note || 'Cancel',
-          is_recurring: false,
-          start_date: null,
-          end_date: null,
-        }),
+        body: JSON.stringify(buildCancelBookingPayload({ booking: detailedBooking, form, mitraId })),
       });
       setBookingActionEditor({ mode: 'closed', booking: null, draft: null });
       setSelectedBooking(null);
@@ -3185,6 +3173,27 @@ function buildCourtBookingPayload({ form, mitraId }) {
   };
 }
 
+function buildCancelBookingPayload({ booking, form, mitraId }) {
+  const email = getBookingEmail(booking);
+  const offlineName = getOfflineBookingName(booking);
+  const payload = {
+    mitra_id: mitraId,
+    id: booking.id,
+    type: getCourtBookingWriteType(booking),
+    user_offline: !email && offlineName ? offlineName : null,
+    email_verified: Boolean(email),
+    already_wd: false,
+    use_package: Boolean(booking.use_package),
+    cancel_note: form.cancel_note || 'Cancel',
+    is_recurring: false,
+    start_date: null,
+    end_date: null,
+  };
+
+  if (email) payload.email = email;
+  return payload;
+}
+
 function getTimeRangeDurationMinutes(form) {
   const manualMinutes = parseTimeToMinutes(form.end_time) - parseTimeToMinutes(form.start_time);
   return manualMinutes > 0 ? manualMinutes : 0;
@@ -3248,10 +3257,61 @@ function buildReschedulePriceSummary(response, canViewRevenue = true) {
   };
 }
 
+async function fetchBookingDetailForAction({ booking, mitraId }) {
+  if (!booking?.id) return booking;
+  const response = await apiRequest('/api/admin/schedule-cal-courts-detail', {
+    method: 'POST',
+    body: JSON.stringify({
+      mitra_id: mitraId,
+      id: booking.id,
+      type: getCourtBookingWriteType(booking),
+    }),
+  });
+  const detail = normalizeBookingDetailResponse(response);
+  return detail && typeof detail === 'object' ? { ...booking, ...detail } : booking;
+}
+
+function normalizeBookingDetailResponse(response) {
+  if (response?.data?.booking && typeof response.data.booking === 'object') return response.data.booking;
+  if (response?.data && typeof response.data === 'object' && !Array.isArray(response.data)) return response.data;
+  if (response?.booking && typeof response.booking === 'object') return response.booking;
+  if (response?.detail && typeof response.detail === 'object') return response.detail;
+  return response;
+}
+
 function getCourtBookingWriteType(booking) {
   const type = String(booking?.type || '').trim();
   if (!type || type === 'booking') return 'booking-court';
   return type;
+}
+
+function getBookingEmail(booking) {
+  return [
+    booking?.user_email,
+    booking?.email,
+    booking?.customer_email,
+    booking?.player_email,
+    booking?.user?.email,
+    Array.isArray(booking?.players) ? booking.players.find((player) => player?.email)?.email : '',
+  ].map((value) => String(value || '').trim()).find(Boolean) || '';
+}
+
+function getOfflineBookingName(booking) {
+  const hasRegisteredIdentity = Boolean(
+    booking?.user_id
+    || booking?.user?.id
+    || booking?.player_id
+    || (Array.isArray(booking?.players) && booking.players.length),
+  );
+
+  if (hasRegisteredIdentity) return '';
+  return String(
+    booking?.user_offline
+    || booking?.offline_user
+    || booking?.booking_owner
+    || booking?.name
+    || '',
+  ).trim();
 }
 
 function formatStatusText(value) {

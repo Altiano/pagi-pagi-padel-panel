@@ -442,6 +442,8 @@ POST /api/admin/cancel-cal-court
 }
 ```
 
+The frontend follows the upstream detail flow by reading `POST /api/admin/schedule-cal-courts-detail` before canceling. If the enriched booking has an email, the cancel payload includes `email` and `email_verified: true`. For unregistered/offline rows with no email, the frontend sends the offline booking owner as `user_offline`, sets `email_verified: false`, and omits `email`; sending `email: ""` makes the upstream reject the request with `Email required !`.
+
 Successful response:
 
 ```json
