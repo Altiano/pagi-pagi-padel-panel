@@ -3484,15 +3484,46 @@ function getCourtBookingWriteType(booking) {
   return type;
 }
 
+const EMAIL_VALUE_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Some booking-detail shapes nest the customer email under keys we don't list
+// explicitly (e.g. `customer.email`, `member.email`, `owner.email`). This is the
+// case for placeholder-converted registered bookings: the row reads as offline,
+// so without finding the email we wrongly cancel with `user_offline` and upstream
+// rejects it with "Email required !". Fall back to a key-scoped deep scan.
+function findNestedBookingEmail(value, keyHint = '', depth = 0) {
+  if (value == null || depth > 6) return '';
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return /email/i.test(keyHint) && EMAIL_VALUE_PATTERN.test(trimmed) ? trimmed : '';
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findNestedBookingEmail(item, keyHint, depth + 1);
+      if (found) return found;
+    }
+    return '';
+  }
+  if (typeof value === 'object') {
+    for (const [key, nested] of Object.entries(value)) {
+      const found = findNestedBookingEmail(nested, key, depth + 1);
+      if (found) return found;
+    }
+  }
+  return '';
+}
+
 function getBookingEmail(booking) {
-  return [
+  const explicit = [
     booking?.user_email,
     booking?.email,
     booking?.customer_email,
     booking?.player_email,
     booking?.user?.email,
     Array.isArray(booking?.players) ? booking.players.find((player) => player?.email)?.email : '',
-  ].map((value) => String(value || '').trim()).find(Boolean) || '';
+  ].map((value) => String(value || '').trim()).find(Boolean);
+  if (explicit) return explicit;
+  return findNestedBookingEmail(booking);
 }
 
 function getOfflineBookingName(booking) {
