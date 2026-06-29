@@ -53,14 +53,15 @@ VITE_BASE_PATH=/
 - `VITE_USE_LOCAL_PLACEHOLDERS`: optional escape hatch for browser-local placeholder storage. Leave unset for D1-backed testing.
 - `VITE_BASE_PATH`: base path for static deployments.
 - `UPSTREAM_ORIGIN`: Worker secret/var for the upstream API origin.
+- `ALLOWED_ORIGINS`: comma-separated browser origins that may call the Worker. Keep this set locally too; an empty value intentionally does not reflect arbitrary origins.
 - `MASTER_USERNAME`: Worker secret for the real upstream account used by virtual users.
 - `MASTER_PASSWORD`: Worker secret for the real upstream account used by virtual users.
 
 ## Worker And D1
 
-The Worker proxies ordinary `/api/*` requests to the configured upstream service. `/api/placeholder-bookings` and `/api/virtual-users` are handled locally by the Worker and stored in Cloudflare D1. Virtual users sign in with usernames like `_frontdesk`; the Worker validates that virtual user password, then signs into upstream using `MASTER_USERNAME` and `MASTER_PASSWORD`.
+The Worker proxies ordinary `/api/*` requests to the configured upstream service. `/api/placeholder-bookings` and `/api/virtual-users` are handled locally by the Worker and stored in Cloudflare D1. Virtual users sign in with usernames like `_frontdesk`; the Worker validates that virtual user password, then returns a Worker-owned opaque session token while keeping the upstream master token server-side in D1.
 
-Virtual-user permissions are enforced in the Worker before upstream proxying. Screen permissions map to captured endpoint groups, and the separate `Calendar revenue` permission controls whether calendar money fields are returned. Placeholder booking audit names are server-stamped for virtual users, so they cannot submit another PIC name as creator/updater.
+Virtual-user permissions are enforced in the Worker before upstream proxying. Screen permissions map to captured endpoint groups, and the separate `Calendar revenue` permission controls whether calendar money fields are returned from schedule, booking detail, and reschedule price endpoints. Placeholder booking audit names are server-stamped for virtual users, so they cannot submit another PIC name as creator/updater.
 
 The current `wrangler.toml` is bound to the project D1 database. To create a new database for another environment:
 

@@ -1,3 +1,4 @@
 UPSTREAM_ORIGIN=https://api.example.com
+ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 MASTER_USERNAME=admin@example.com
 MASTER_PASSWORD=change-me

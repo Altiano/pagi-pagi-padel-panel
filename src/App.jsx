@@ -61,6 +61,7 @@ const FALLBACK_MITRA_ID = 'a074e244-76c0-4587-9dff-0c7833f0bfa3';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MOBILE_VIEW_STORAGE_KEY = 'ppp-panel-view-mode';
 const MOBILE_MEDIA_QUERY = '(max-width: 760px)';
+const VENUE_TIME_ZONE = 'Asia/Jakarta';
 const PLACEHOLDER_STATUSES = [
   { label: 'Negotiating', value: 'negotiating' },
   { label: 'Awaiting payment', value: 'awaiting_payment' },
@@ -232,12 +233,24 @@ function PanelShell({ auth, isMobileRoute = false, onLogout }) {
   }, [activeNav, allowedNav, firstAllowedNav]);
 
   const displayName = auth.virtualUser?.display_name || meState.data?.data?.name || meState.data?.name || auth.username || 'Owner';
-  const mitraId = findMitraId(meState.data) || FALLBACK_MITRA_ID;
+  const resolvedMitraId = findMitraId(meState.data);
+  const mitraId = resolvedMitraId || (isVirtualUser ? '' : FALLBACK_MITRA_ID);
+  const isWaitingForVirtualMitra = isVirtualUser && currentNav === 'Calendar' && meState.loading && !resolvedMitraId;
+  const virtualMitraError = isVirtualUser && currentNav === 'Calendar' && !meState.loading && !resolvedMitraId
+    ? meState.error || 'Unable to determine the venue for this virtual session.'
+    : '';
   const calendarCacheScope = getCalendarCacheScope(auth, canViewCalendarRevenue);
   const shellClassName = `panel-shell ${mobileView.isMobileApp ? 'mobile-app' : ''}`;
 
   const content = !currentNav ? (
     <NoAccessPage displayName={displayName} onLogout={onLogout} />
+  ) : isWaitingForVirtualMitra || virtualMitraError ? (
+    <SessionStatusPage
+      displayName={displayName}
+      message={virtualMitraError || 'Checking venue...'}
+      onLogout={onLogout}
+      title={virtualMitraError ? 'Session needs attention' : 'Checking session'}
+    />
   ) : currentNav === 'Calendar' ? (
     <CalendarPage
       cacheScope={calendarCacheScope}
@@ -763,6 +776,31 @@ function NoAccessPage({ displayName, onLogout }) {
           <span>Permissions</span>
           <strong>No screens selected</strong>
           <p>Ask the master account to update this virtual user's visible screens.</p>
+        </article>
+      </section>
+    </>
+  );
+}
+
+function SessionStatusPage({ displayName, message, onLogout, title }) {
+  return (
+    <>
+      <header className="topbar">
+        <div>
+          <h1>{title}</h1>
+          <p>{displayName}</p>
+        </div>
+        <button className="logout-button" onClick={onLogout} type="button">
+          <LogOut size={17} />
+          Logout
+        </button>
+      </header>
+
+      <section className="handoff-grid">
+        <article>
+          <span>Venue</span>
+          <strong>{message}</strong>
+          <p>Sign in again if this does not clear shortly.</p>
         </article>
       </section>
     </>
@@ -3605,7 +3643,15 @@ function minutesFromEpoch(value) {
   if (value === undefined || value === null || value === '') return 0;
   const date = new Date(Number(value));
   if (Number.isNaN(date.getTime())) return 0;
-  return date.getHours() * 60 + date.getMinutes();
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    hourCycle: 'h23',
+    minute: '2-digit',
+    timeZone: VENUE_TIME_ZONE,
+  }).formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value || 0);
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value || 0);
+  return hour * 60 + minute;
 }
 
 function getDurationMinutes(booking) {
