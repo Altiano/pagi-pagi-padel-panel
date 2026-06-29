@@ -2059,100 +2059,153 @@ textarea:focus {
   height: 17px;
 }
 
-.bulk-date-picker {
+.booking-calendar {
   display: grid;
   gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  background: #fbfcf8;
   color: #39433b;
   font-size: 13px;
   font-weight: 650;
 }
 
-.bulk-date-heading,
-.bulk-date-add-row,
-.bulk-date-list span {
+.booking-calendar-heading {
   display: flex;
   align-items: center;
-}
-
-.bulk-date-heading {
   justify-content: space-between;
   gap: 10px;
 }
 
-.bulk-date-heading strong {
+.booking-calendar-heading strong {
+  border-radius: 999px;
+  padding: 3px 10px;
+  background: #edf4e5;
   color: var(--green);
   font-size: 12px;
 }
 
-.bulk-date-add-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+.booking-calendar-hint {
+  margin: -4px 0 0;
+  color: #6b776c;
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.booking-calendar-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
 }
 
-.bulk-date-add-row input {
-  min-height: 42px;
+.booking-calendar-nav strong {
+  color: var(--green);
+  font-size: 14px;
 }
 
-.bulk-date-add-row button {
-  display: inline-flex;
-  min-height: 42px;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  border: 1px solid rgba(40, 99, 69, 0.22);
-  border-radius: 11px;
-  padding: 0 12px;
-  background: #edf4e5;
+.booking-calendar-nav button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 0;
+  background: #fff;
   color: var(--green);
   cursor: pointer;
-  font-weight: 750;
 }
 
-.bulk-date-add-row button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
+.booking-calendar-nav button:hover {
+  border-color: rgba(40, 99, 69, 0.3);
+  background: #edf4e5;
 }
 
-.bulk-date-list {
+.booking-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.booking-calendar-dow {
+  padding-bottom: 2px;
+  color: #97a298;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.booking-calendar-day {
+  display: grid;
+  aspect-ratio: 1;
+  min-height: 34px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  padding: 0;
+  background: #fff;
+  color: #39433b;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.booking-calendar-day:hover {
+  border-color: rgba(40, 99, 69, 0.3);
+  background: #edf4e5;
+}
+
+.booking-calendar-day.muted {
+  color: #b8c0b8;
+  background: transparent;
+}
+
+.booking-calendar-day.today {
+  border-color: rgba(40, 99, 69, 0.35);
+}
+
+.booking-calendar-day.selected {
+  border-color: var(--green);
+  background: var(--green);
+  color: #fff;
+}
+
+.booking-calendar-day.selected:hover {
+  background: #1f5440;
+}
+
+.booking-calendar-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin-top: 2px;
 }
 
-.bulk-date-list span {
+.booking-calendar-chips span {
+  display: inline-flex;
+  align-items: center;
   gap: 7px;
-  min-height: 34px;
-  border: 1px solid var(--line);
+  min-height: 32px;
+  border: 1px solid rgba(40, 99, 69, 0.22);
   border-radius: 999px;
-  padding: 5px 7px 5px 11px;
-  background: #fbfcf8;
-  color: #526052;
-}
-
-.bulk-date-list span.primary {
-  border-color: rgba(40, 99, 69, 0.22);
+  padding: 4px 6px 4px 11px;
   background: #edf4e5;
   color: var(--green);
+  font-size: 12px;
 }
 
-.bulk-date-list em {
-  border-radius: 999px;
-  padding: 3px 7px;
-  background: rgba(255, 255, 255, 0.72);
-  font-size: 11px;
-  font-style: normal;
-}
-
-.bulk-date-list button {
+.booking-calendar-chips button {
   display: grid;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   place-items: center;
   border: 0;
   border-radius: 999px;
   padding: 0;
-  background: rgba(40, 99, 69, 0.1);
+  background: rgba(40, 99, 69, 0.14);
   color: var(--green);
   cursor: pointer;
 }
@@ -2916,7 +2969,6 @@ textarea:focus {
   .form-grid.two,
   .time-grid,
   .editor-actions,
-  .bulk-date-add-row,
   .court-choice-grid,
   .permission-section > div {
     grid-template-columns: 1fr;

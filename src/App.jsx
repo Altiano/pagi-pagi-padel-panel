@@ -2055,12 +2055,15 @@ function CalendarDetailPanel({
 function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, conflicts, courts, defaultDate, draft, isSaving, openHour, onClose, onSave }) {
   const [form, setForm] = useState(() => buildBookingWriteForm({ booking, courts, defaultDate, draft, openHour }));
   const [error, setError] = useState('');
-  const [bulkDateInput, setBulkDateInput] = useState('');
+  const [calendarMonth, setCalendarMonth] = useState(() => form.date || defaultDate || toDateInputValue(new Date()));
   const [playerState, setPlayerState] = useState({ error: '', loading: false, results: [] });
   const isRegistered = form.customerMode === 'registered';
   const searchQuery = form.playerSearch.trim();
   const isConversion = actionMode === 'convert-placeholder';
   const bookingDates = isConversion ? [form.date].filter(Boolean) : getBookingFormDates(form);
+  const selectedDateSet = new Set(bookingDates);
+  const monthCells = buildMonthMatrix(calendarMonth);
+  const todayValue = toDateInputValue(new Date());
   const conflictList = conflicts(form, booking);
   const hasConflict = conflictList.length > 0;
   const title = isConversion ? 'Create real booking' : bookingDates.length > 1 ? 'Create bookings' : 'Create booking';
@@ -2113,20 +2116,32 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
     }));
   }
 
-  function addBookingDate() {
-    if (!bulkDateInput) return;
-    setForm((current) => ({
-      ...current,
-      additional_dates: normalizeAdditionalBookingDates([...(current.additional_dates || []), bulkDateInput], current.date),
-    }));
-    setBulkDateInput('');
+  function applyBookingDates(dates) {
+    const sorted = [...new Set(dates.map((date) => String(date || '').trim()).filter(Boolean))].sort();
+    if (!sorted.length) return;
+    const [anchor, ...rest] = sorted;
+    setForm((current) => ({ ...current, date: anchor, additional_dates: rest }));
   }
 
-  function removeBookingDate(dateValue) {
-    setForm((current) => ({
-      ...current,
-      additional_dates: normalizeAdditionalBookingDates((current.additional_dates || []).filter((date) => date !== dateValue), current.date),
-    }));
+  function toggleBookingDate(dateValue) {
+    if (!dateValue) return;
+    if (isConversion) {
+      updateField('date', dateValue);
+      return;
+    }
+    const next = new Set(getBookingFormDates(form));
+    if (next.has(dateValue)) {
+      if (next.size === 1) return; // keep at least one date
+      next.delete(dateValue);
+    } else {
+      next.add(dateValue);
+    }
+    applyBookingDates([...next]);
+  }
+
+  function shiftCalendarMonth(delta) {
+    const base = new Date(`${calendarMonth}T00:00:00`);
+    setCalendarMonth(toDateInputValue(new Date(base.getFullYear(), base.getMonth() + delta, 1)));
   }
 
   async function handleSubmit(event) {
@@ -2205,10 +2220,6 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
 
             <div className="form-grid time-grid">
               <label>
-                Date
-                <input onChange={(event) => updateField('date', event.target.value)} required type="date" value={form.date} />
-              </label>
-              <label>
                 Start time
                 <input onChange={(event) => updateField('start_time', event.target.value)} required type="time" value={form.start_time} />
               </label>
@@ -2240,40 +2251,64 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
               </div>
             </div>
 
-            {!isConversion ? (
-              <div className="bulk-date-picker">
-                <div className="bulk-date-heading">
-                  <span>Booking dates</span>
-                  <strong>{bookingDates.length} selected</strong>
-                </div>
-                <div className="bulk-date-add-row">
-                  <input
-                    aria-label="Additional booking date"
-                    onChange={(event) => setBulkDateInput(event.target.value)}
-                    type="date"
-                    value={bulkDateInput}
-                  />
-                  <button disabled={!bulkDateInput || bookingDates.includes(bulkDateInput)} onClick={addBookingDate} type="button">
-                    <Plus size={15} />
-                    Add date
-                  </button>
-                </div>
-                <div className="bulk-date-list">
+            <div className="booking-calendar">
+              <div className="booking-calendar-heading">
+                <span>{isConversion ? 'Booking date' : 'Booking dates'}</span>
+                {isConversion ? null : (
+                  <strong>{bookingDates.length} {bookingDates.length === 1 ? 'day' : 'days'}</strong>
+                )}
+              </div>
+              {isConversion ? null : (
+                <p className="booking-calendar-hint">Tap days to book this court &amp; time on each.</p>
+              )}
+              <div className="booking-calendar-nav">
+                <button aria-label="Previous month" onClick={() => shiftCalendarMonth(-1)} type="button">
+                  <ChevronLeft size={16} />
+                </button>
+                <strong>{formatMonthLabel(calendarMonth)}</strong>
+                <button aria-label="Next month" onClick={() => shiftCalendarMonth(1)} type="button">
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+              <div className="booking-calendar-grid">
+                {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((day) => (
+                  <span className="booking-calendar-dow" key={day}>{day}</span>
+                ))}
+                {monthCells.map((cell) => {
+                  const isSelected = selectedDateSet.has(cell.value);
+                  const classes = [
+                    'booking-calendar-day',
+                    cell.inMonth ? '' : 'muted',
+                    isSelected ? 'selected' : '',
+                    cell.value === todayValue ? 'today' : '',
+                  ].filter(Boolean).join(' ');
+                  return (
+                    <button
+                      aria-label={`${isSelected ? 'Remove' : 'Add'} ${formatLongDate(cell.value)}`}
+                      aria-pressed={isSelected}
+                      className={classes}
+                      key={cell.value}
+                      onClick={() => toggleBookingDate(cell.value)}
+                      type="button"
+                    >
+                      {Number(cell.value.slice(8, 10))}
+                    </button>
+                  );
+                })}
+              </div>
+              {!isConversion && bookingDates.length > 1 ? (
+                <div className="booking-calendar-chips">
                   {bookingDates.map((date) => (
-                    <span className={date === form.date ? 'primary' : ''} key={date}>
+                    <span key={date}>
                       {formatDayNumber(date)}
-                      {date === form.date ? (
-                        <em>Primary</em>
-                      ) : (
-                        <button aria-label={`Remove ${formatLongDate(date)}`} onClick={() => removeBookingDate(date)} type="button">
-                          <X size={13} />
-                        </button>
-                      )}
+                      <button aria-label={`Remove ${formatLongDate(date)}`} onClick={() => toggleBookingDate(date)} type="button">
+                        <X size={13} />
+                      </button>
                     </span>
                   ))}
                 </div>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
 
             <div className="conversion-mode-control">
               <span>Customer</span>
@@ -3617,6 +3652,24 @@ function formatWeekday(dateValue) {
 
 function formatDayNumber(dateValue) {
   return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short' }).format(new Date(`${dateValue}T00:00:00`));
+}
+
+function formatMonthLabel(dateValue) {
+  return new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(new Date(`${dateValue}T00:00:00`));
+}
+
+function buildMonthMatrix(dateValue) {
+  const base = new Date(`${dateValue}T00:00:00`);
+  const year = base.getFullYear();
+  const month = base.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const mondayOffset = firstDay === 0 ? -6 : 1 - firstDay;
+  const start = new Date(year, month, 1 + mondayOffset);
+  return Array.from({ length: 42 }, (_, index) => {
+    const cell = new Date(start);
+    cell.setDate(start.getDate() + index);
+    return { value: toDateInputValue(cell), inMonth: cell.getMonth() === month };
+  });
 }
 
 function formatWeekRange(dateValue) {
