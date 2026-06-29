@@ -991,14 +991,6 @@ async function handlePlaceholderRequest(request, env, virtualContext = null) {
     if (validationError) {
       return withCors(Response.json({ error: validationError }, { status: 400 }), request, env);
     }
-    const overlap = await findPlaceholderOverlap(env.PLACEHOLDER_DB, payload);
-    if (overlap) {
-      return placeholderOverlapResponse(request, env, overlap, canViewMoney);
-    }
-    const bookingOverlap = await findUpstreamBookingOverlap(request, env, payload);
-    if (bookingOverlap) {
-      return upstreamBookingOverlapResponse(request, env, bookingOverlap);
-    }
 
     const now = new Date().toISOString();
     const newId = crypto.randomUUID();
@@ -1050,14 +1042,6 @@ async function handlePlaceholderRequest(request, env, virtualContext = null) {
     const validationError = validatePlaceholder(payload);
     if (validationError) {
       return withCors(Response.json({ error: validationError }, { status: 400 }), request, env);
-    }
-    const overlap = await findPlaceholderOverlap(env.PLACEHOLDER_DB, payload, id);
-    if (overlap) {
-      return placeholderOverlapResponse(request, env, overlap, canViewMoney);
-    }
-    const bookingOverlap = await findUpstreamBookingOverlap(request, env, payload);
-    if (bookingOverlap) {
-      return upstreamBookingOverlapResponse(request, env, bookingOverlap);
     }
 
     const now = new Date().toISOString();

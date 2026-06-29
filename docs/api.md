@@ -508,9 +508,9 @@ Placeholder conversion currently happens client-side from the placeholder detail
 
 The placeholder form can create the same tentative hold across multiple courts. The backend contract remains one row per request; the frontend sends one `POST /api/placeholder-bookings` request per selected court. Editing remains a single-row `PUT`.
 
-`POST` and `PUT` validate overlap server-side before writing. The Worker rejects a placeholder if it overlaps another non-deleted D1 placeholder for the same `mitra_id`, `court_id`, and `date`, returning `409` with `code: "PLACEHOLDER_OVERLAP"` and the conflicting placeholder row. When `UPSTREAM_ORIGIN` is configured and the schedule endpoint can be read, the Worker also rejects overlap with a live upstream booking using `409` with `code: "BOOKING_OVERLAP"` and a compact conflict summary.
+`POST` and `PUT` intentionally allow overlap. Multiple D1 placeholders for the same `mitra_id`, `court_id`, `date`, and time range are valid and render as a placeholder stack. A placeholder may also overlap a live upstream booking; the frontend treats that row as a waitlist hold instead of an available slot.
 
-When calendar data is loaded, the frontend also compares live upstream bookings and local placeholders. If a live booking now overlaps an existing placeholder hold, both cards receive a conflict treatment and the booking detail panel lists the item they conflict with.
+When calendar data is loaded, the frontend compares live upstream bookings and local placeholders. If a live booking overlaps a placeholder hold, the live booking remains visually primary and shows a `+N waitlist` badge. The placeholder is marked as waitlist/blocked, and conversion is disabled until the live booking no longer overlaps. Local placeholders do not block real booking creation or conversion; only live upstream bookings do.
 
 ## Virtual Users
 

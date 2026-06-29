@@ -1229,7 +1229,7 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
       const bookings = state.bookingsByDate[date] || [];
       return bookings.filter((booking) => {
         if (sourceIds.has(booking.id) || sourceIds.has(booking.placeholder_id)) return false;
-        return booking.court_id === form.court_id && bookingsOverlap(candidate, booking);
+        return !booking.is_placeholder && booking.court_id === form.court_id && bookingsOverlap(candidate, booking);
       }).map((booking) => ({ ...booking, conflict_date: date }));
     });
   }
@@ -1418,6 +1418,7 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
             onClose={closeCalendarDetail}
             onCancelBooking={openCancelBooking}
             onConvertPlaceholder={openConvertPlaceholder}
+            onCreatePlaceholder={openCreatePlaceholder}
             onDeletePlaceholder={deletePlaceholder}
             onEditPlaceholder={openEditPlaceholder}
             onEditBookingNotes={openBookingNotes}
@@ -1515,6 +1516,7 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
               onClose={() => setSelectedBooking(null)}
               onCancelBooking={openCancelBooking}
               onConvertPlaceholder={openConvertPlaceholder}
+              onCreatePlaceholder={openCreatePlaceholder}
               onDeletePlaceholder={deletePlaceholder}
               onEditPlaceholder={openEditPlaceholder}
               onEditBookingNotes={openBookingNotes}
@@ -1533,8 +1535,8 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
 function MobileDayAgenda({ bookings, canViewRevenue = true, courts, openHour, selectedBooking, selectedDate, onSelectBooking }) {
   const courtBookings = courts.length ? courts.map((court) => ({
     court,
-    entries: buildCourtTimelineEntries(bookings.filter((booking) => booking.court_id === court.id), openHour),
-  })) : [{ court: { id: 'all', name: 'All courts' }, entries: buildCourtTimelineEntries(bookings, openHour) }];
+    entries: buildCourtTimelineEntries(buildCalendarDisplayBookings(bookings.filter((booking) => booking.court_id === court.id)), openHour),
+  })) : [{ court: { id: 'all', name: 'All courts' }, entries: buildCourtTimelineEntries(buildCalendarDisplayBookings(bookings), openHour) }];
 
   return (
     <div className="mobile-agenda">
@@ -1566,11 +1568,11 @@ function MobileDayAgenda({ bookings, canViewRevenue = true, courts, openHour, se
                 >
                   <span className="mobile-booking-time">{entry.booking.time || getStartLabel(entry.booking)}</span>
                   <span className="mobile-booking-main">
-                    <strong>{entry.booking.booking_owner || entry.booking.name}</strong>
+                    <strong>{getBookingTitle(entry.booking)}</strong>
                     <small>{getBookingMeta(entry.booking, canViewRevenue)}</small>
                   </span>
                   <span className="mobile-payment-pill">
-                    {hasBookingConflict(entry.booking) ? 'Conflict' : entry.booking.is_placeholder ? 'Placeholder' : entry.booking.booking_paid ? 'Paid' : 'Unpaid'}
+                    {getBookingPillLabel(entry.booking) || (entry.booking.booking_paid ? 'Paid' : 'Unpaid')}
                   </span>
                 </button>
               )
@@ -1612,14 +1614,14 @@ function MobileWeekCalendar({ bookingsByDate, canViewRevenue = true, courts, ope
             {date === selectedDate ? (
               <div className="mobile-week-detail">
                 {courts.slice(0, 4).map((court) => {
-                  const courtBookings = bookings.filter((booking) => booking.court_id === court.id);
+                  const courtBookings = buildCalendarDisplayBookings(bookings.filter((booking) => booking.court_id === court.id));
                   return (
                     <div className="mobile-week-court" key={court.id}>
                       <span>{court.name}</span>
                       {courtBookings.length ? courtBookings.slice(0, 2).map((booking) => (
                         <button className={getBookingTone(booking)} key={booking.id} onClick={() => onSelectBooking(booking)} type="button">
                           <strong>{getStartLabel(booking)}</strong>
-                          <span>{booking.booking_owner || booking.name}</span>
+                          <span>{getBookingTitle(booking)}</span>
                         </button>
                       )) : (
                         <button
@@ -1709,7 +1711,7 @@ function DayCalendar({ bookings, canViewRevenue = true, courts, openHour, select
                 </button>
               );
             })}
-            {bookings.filter((booking) => booking.court_id === court.id).map((booking) => {
+            {buildCalendarDisplayBookings(bookings.filter((booking) => booking.court_id === court.id)).map((booking) => {
               const position = getBookingPosition(booking, startMinutes, totalMinutes);
               return (
                 <button
@@ -1719,10 +1721,12 @@ function DayCalendar({ bookings, canViewRevenue = true, courts, openHour, select
                   style={{ top: `${position.top}%`, height: `${position.height}%` }}
                   type="button"
                 >
-                  <strong>{booking.booking_owner || booking.name}</strong>
+                  <strong>{getBookingTitle(booking)}</strong>
                   <span>{booking.time}</span>
                   <small>{getBookingMeta(booking, canViewRevenue)}</small>
-                  {hasBookingConflict(booking) ? <em className="conflict-pill">Conflict</em> : booking.is_placeholder ? <em>Placeholder</em> : booking.notes ? <em>Notes</em> : null}
+                  {getBookingPillLabel(booking) ? (
+                    <em className={booking.is_waitlist ? 'waitlist-pill' : ''}>{getBookingPillLabel(booking)}</em>
+                  ) : null}
                 </button>
               );
             })}
@@ -1804,7 +1808,7 @@ function WeekDayColumn({ bookings, canViewRevenue = true, courts, date, isSelect
         <div className="week-court-list" ref={courtListRef}>
           {courts.map((court) => {
             const courtBookings = bookings.filter((booking) => booking.court_id === court.id);
-            const timelineEntries = buildCourtTimelineEntries(courtBookings, openHour);
+            const timelineEntries = buildCourtTimelineEntries(buildCalendarDisplayBookings(courtBookings), openHour);
             return (
               <div className="week-court" key={court.id}>
                 <p>{court.name}</p>
@@ -1828,8 +1832,10 @@ function WeekDayColumn({ bookings, canViewRevenue = true, courts, date, isSelect
                   ) : (
                     <button className={`week-booking-card ${getBookingTone(entry.booking)}`} key={entry.booking.id} onClick={() => onSelectBooking(entry.booking)} type="button">
                       <span>{getStartLabel(entry.booking)}</span>
-                      <strong>{entry.booking.booking_owner || entry.booking.name}</strong>
-                      {hasBookingConflict(entry.booking) ? <small className="conflict-pill">Conflict</small> : entry.booking.is_placeholder ? <small>Placeholder</small> : null}
+                      <strong>{getBookingTitle(entry.booking)}</strong>
+                      {getBookingPillLabel(entry.booking) ? (
+                        <small className={entry.booking.is_waitlist ? 'waitlist-pill' : ''}>{getBookingPillLabel(entry.booking)}</small>
+                      ) : null}
                     </button>
                   )
                 )) : <span className="empty-slot">Available</span>}
@@ -1869,6 +1875,7 @@ function CalendarDetailPanel({
   onCancelBooking,
   onClose,
   onConvertPlaceholder,
+  onCreatePlaceholder,
   onDeletePlaceholder,
   onEditBookingNotes,
   onEditPlaceholder,
@@ -1880,25 +1887,53 @@ function CalendarDetailPanel({
   if (booking) {
     const isPlaceholder = booking.is_placeholder;
     const conflictItems = getBookingConflictItems(booking);
+    const placeholderStack = getPlaceholderStackItems(booking);
+    const waitlistItems = getWaitlistItems(booking);
+    const hasPlaceholderStack = placeholderStack.length > 1;
     const canConvertPlaceholder = canWriteBookings && isPlaceholder && !hasBookingConflict(booking);
     return (
       <aside className="calendar-detail">
         <div className="panel-label-row">
-          <span className="panel-label">{isPlaceholder ? 'Placeholder booking' : 'Booking detail'}</span>
+          <span className="panel-label">{isPlaceholder ? hasPlaceholderStack ? 'Placeholder stack' : 'Placeholder booking' : 'Booking detail'}</span>
           {onClose ? (
             <button aria-label="Close booking detail" onClick={onClose} type="button">
               <X size={16} />
             </button>
           ) : null}
         </div>
-        <h2>{booking.booking_owner || booking.name}</h2>
-        {conflictItems.length ? (
+        <h2>{getBookingTitle(booking)}</h2>
+        {isPlaceholder && conflictItems.length ? (
           <div className="detail-conflict-alert">
-            <strong>{isPlaceholder ? 'Conflicts with live booking' : 'Conflicts with placeholder hold'}</strong>
+            <strong>Blocked by live booking</strong>
             {conflictItems.slice(0, 3).map((item) => (
               <span key={`${item.type}-${item.id}-${item.time}`}>
                 {item.name} · {item.court} · {item.time}
               </span>
+            ))}
+          </div>
+        ) : null}
+        {!isPlaceholder && waitlistItems.length ? (
+          <div className="detail-conflict-alert waitlist">
+            <strong>{waitlistItems.length} waitlist placeholder{waitlistItems.length > 1 ? 's' : ''}</strong>
+            {waitlistItems.slice(0, 4).map((item) => (
+              <span key={`${item.type}-${item.id}-${item.time}`}>
+                {item.name} · {item.time}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        {hasPlaceholderStack ? (
+          <div className="detail-stack-list">
+            <strong>Placeholder candidates</strong>
+            {placeholderStack.map((item) => (
+              <div key={item.placeholder_id || item.id}>
+                <span>
+                  <b>{item.booking_owner || item.name}</b>
+                  <small>{formatStatus(item.status)} · {item.customer_contact || 'No contact'}</small>
+                </span>
+                <button onClick={() => onEditPlaceholder?.(item)} type="button"><Pencil size={14} /> Edit</button>
+                <button className="danger-action" onClick={() => onDeletePlaceholder?.(item)} type="button"><Trash2 size={14} /> Delete</button>
+              </div>
             ))}
           </div>
         ) : null}
@@ -1907,7 +1942,7 @@ function CalendarDetailPanel({
           {isPlaceholder ? <div><dt>Date</dt><dd>{formatLongDate(booking.date)}</dd></div> : null}
           <div><dt>Time</dt><dd>{booking.time}</dd></div>
           <div><dt>Duration</dt><dd>{booking.duration || getDurationMinutes(booking)} min</dd></div>
-          <div><dt>Type</dt><dd>{isPlaceholder ? 'Local placeholder' : booking.booking_type || booking.type}</dd></div>
+          <div><dt>Type</dt><dd>{isPlaceholder ? booking.is_waitlist ? 'Waitlist placeholder' : hasPlaceholderStack ? 'Placeholder stack' : 'Local placeholder' : booking.booking_type || booking.type}</dd></div>
           <div><dt>Payment</dt><dd>{isPlaceholder ? formatStatus(booking.status) : booking.booking_paid ? 'Paid' : 'Unpaid'}</dd></div>
           <div><dt>Price</dt><dd>{formatMoney(booking.price, canViewRevenue)}</dd></div>
           {isPlaceholder ? <div><dt>Contact</dt><dd>{booking.customer_contact || '-'}</dd></div> : null}
@@ -1928,9 +1963,10 @@ function CalendarDetailPanel({
                 <CheckCircle2 size={15} /> Convert to booking
               </button>
             ) : null}
+            <button onClick={() => onCreatePlaceholder?.(getSlotDraftFromBooking(booking, selectedDate))} type="button"><Plus size={15} /> Add another placeholder</button>
             <button onClick={() => onEditPlaceholder?.(booking)} type="button"><Pencil size={15} /> Edit placeholder</button>
             <button className="danger-action" onClick={() => onDeletePlaceholder?.(booking)} type="button"><Trash2 size={15} /> Delete</button>
-            {canWriteBookings && hasBookingConflict(booking) ? <p className="detail-action-note danger">Resolve the live-booking conflict before converting this placeholder.</p> : null}
+            {canWriteBookings && hasBookingConflict(booking) ? <p className="detail-action-note danger">A live booking already owns this slot. Move or cancel that booking before converting this placeholder.</p> : null}
           </div>
         ) : canWriteBookings ? (
           <div className="detail-actions">
@@ -1939,6 +1975,7 @@ function CalendarDetailPanel({
                 <CheckCircle2 size={15} /> Mark paid
               </button>
             ) : null}
+            <button onClick={() => onCreatePlaceholder?.(getSlotDraftFromBooking(booking, selectedDate))} type="button"><Plus size={15} /> Add waitlist placeholder</button>
             <button onClick={() => onUploadPaymentProof?.(booking)} type="button"><Upload size={15} /> Upload receipt</button>
             <button onClick={() => onRescheduleBooking?.(booking)} type="button"><CalendarDays size={15} /> Reschedule</button>
             <button onClick={() => onEditBookingNotes?.(booking)} type="button"><Pencil size={15} /> Edit notes</button>
@@ -2769,8 +2806,9 @@ function BookingActionSummary({ booking }) {
 function PlaceholderBookingEditor({ booking, canViewRevenue = true, conflicts, courts, defaultDate, defaultName, draft, isSaving, isVirtualUser = false, mode, openHour, onClose, onSave }) {
   const [form, setForm] = useState(() => buildPlaceholderForm({ booking, courts, defaultDate, defaultName, draft, isVirtualUser, openHour }));
   const [error, setError] = useState('');
-  const conflictList = conflicts(form);
-  const hasConflict = conflictList.length > 0;
+  const overlapList = conflicts(form);
+  const liveOverlapCount = overlapList.filter((item) => !item.is_placeholder).length;
+  const placeholderOverlapCount = overlapList.filter((item) => item.is_placeholder).length;
   const selectedCourtIds = getSelectedCourtIds(form);
 
   function updateField(field, value) {
@@ -2825,11 +2863,6 @@ function PlaceholderBookingEditor({ booking, canViewRevenue = true, conflicts, c
       setError('End time must be after start time.');
       return;
     }
-    if (hasConflict) {
-      setError('This placeholder overlaps with an existing booking.');
-      return;
-    }
-
     try {
       await onSave(form);
     } catch (saveError) {
@@ -2963,13 +2996,19 @@ function PlaceholderBookingEditor({ booking, canViewRevenue = true, conflicts, c
             </label>
           </div>
           <div className="editor-footer">
-            {hasConflict ? (
-              <p className="status-line error">Overlaps with {conflictList.length} booking{conflictList.length > 1 ? 's' : ''} on this court.</p>
+            {liveOverlapCount ? (
+              <p className="status-line warning">
+                A live booking already uses this slot. This placeholder will be saved as waitlist.
+              </p>
+            ) : placeholderOverlapCount ? (
+              <p className="status-line warning">
+                Stacks with {placeholderOverlapCount} existing placeholder{placeholderOverlapCount > 1 ? 's' : ''} in this slot.
+              </p>
             ) : null}
             {error ? <p className="status-line error">{error}</p> : null}
             <div className="editor-actions">
               <button className="logout-button" onClick={onClose} type="button">Cancel</button>
-              <button className="primary-button" disabled={isSaving || hasConflict} type="submit">
+              <button className="primary-button" disabled={isSaving} type="submit">
                 {isSaving ? 'Saving...' : mode === 'edit' ? 'Save changes' : 'Create placeholder'}
               </button>
             </div>
@@ -3127,35 +3166,38 @@ function normalizePlaceholderBooking(placeholder) {
 
 function annotatePlaceholderConflicts(upstreamBookings, localPlaceholders) {
   const annotatedUpstream = upstreamBookings.map((booking) => ({ ...booking }));
-  const placeholderSummariesByBookingId = new Map();
+  const waitlistSummariesByBookingId = new Map();
 
   const annotatedPlaceholders = localPlaceholders.map((placeholder) => {
-    const conflicts = annotatedUpstream
+    const blockedByBookings = annotatedUpstream
       .filter((booking) => booking.court_id === placeholder.court_id && bookingsOverlap(placeholder, booking))
       .map((booking) => {
         const summary = buildBookingConflictSummary(booking);
-        const existing = placeholderSummariesByBookingId.get(booking.id) || [];
-        placeholderSummariesByBookingId.set(booking.id, [...existing, buildBookingConflictSummary(placeholder)]);
+        const existing = waitlistSummariesByBookingId.get(booking.id) || [];
+        waitlistSummariesByBookingId.set(booking.id, [...existing, buildBookingConflictSummary(placeholder)]);
         return summary;
       });
 
-    if (!conflicts.length) return placeholder;
+    if (!blockedByBookings.length) return placeholder;
     return {
       ...placeholder,
-      conflict_bookings: conflicts,
+      blocked_by_bookings: blockedByBookings,
+      conflict_bookings: blockedByBookings,
       has_conflict: true,
+      is_waitlist: true,
     };
   });
 
   return {
     localPlaceholders: annotatedPlaceholders,
     upstreamBookings: annotatedUpstream.map((booking) => {
-      const conflictPlaceholders = placeholderSummariesByBookingId.get(booking.id) || [];
-      if (!conflictPlaceholders.length) return booking;
+      const waitlistPlaceholders = waitlistSummariesByBookingId.get(booking.id) || [];
+      if (!waitlistPlaceholders.length) return booking;
       return {
         ...booking,
-        conflict_placeholders: conflictPlaceholders,
-        has_placeholder_conflict: true,
+        conflict_placeholders: waitlistPlaceholders,
+        has_waitlist_placeholders: true,
+        waitlist_placeholders: waitlistPlaceholders,
       };
     }),
   };
@@ -3642,6 +3684,44 @@ function buildCourtTimelineEntries(bookings, openHour) {
   return entries;
 }
 
+function buildCalendarDisplayBookings(bookings) {
+  const liveBookings = bookings.filter((booking) => !booking.is_placeholder);
+  const placeholdersBySlot = new Map();
+
+  bookings
+    .filter((booking) => booking.is_placeholder && !booking.is_waitlist)
+    .forEach((booking) => {
+      const slotKey = [
+        booking.date || '',
+        booking.court_id || '',
+        getBookingStartMinutes(booking),
+        getBookingEndMinutes(booking),
+      ].join('|');
+      const existing = placeholdersBySlot.get(slotKey) || [];
+      placeholdersBySlot.set(slotKey, [...existing, booking]);
+    });
+
+  const placeholderStacks = [...placeholdersBySlot.values()].map((stack) => {
+    const sortedStack = [...stack].sort((first, second) => {
+      const firstUpdated = String(first.updated_at || first.created_at || '');
+      const secondUpdated = String(second.updated_at || second.created_at || '');
+      return secondUpdated.localeCompare(firstUpdated);
+    });
+    const representative = sortedStack[0];
+    return {
+      ...representative,
+      placeholder_stack: sortedStack,
+      stack_count: sortedStack.length,
+    };
+  });
+
+  return [...liveBookings, ...placeholderStacks].sort((first, second) => {
+    const startDifference = getBookingStartMinutes(first) - getBookingStartMinutes(second);
+    if (startDifference) return startDifference;
+    return getBookingEndMinutes(second) - getBookingEndMinutes(first);
+  });
+}
+
 function buildAvailabilityEntry(startMinutes, endMinutes) {
   return {
     id: `availability-${startMinutes}-${endMinutes}`,
@@ -3675,8 +3755,8 @@ function formatCompactTime(totalMinutes) {
 }
 
 function getBookingTone(booking) {
+  if (booking.is_placeholder && booking.is_waitlist) return 'tone-placeholder-waitlist';
   if (booking.is_placeholder && booking.has_conflict) return 'tone-placeholder-conflict';
-  if (booking.has_placeholder_conflict) return 'tone-booking-conflict';
   if (booking.is_placeholder) return 'tone-placeholder';
   if (booking.booking_paid) return 'tone-blue';
   if (booking.is_paylink || booking.booking_type === 'online') return 'tone-blue';
@@ -3687,18 +3767,59 @@ function getBookingTone(booking) {
 }
 
 function getBookingMeta(booking, canViewRevenue = true) {
-  if (booking.has_conflict || booking.has_placeholder_conflict) return 'Conflict';
+  if (booking.is_placeholder && booking.is_waitlist) return `Waitlist · ${formatStatus(booking.status)}`;
+  if (booking.is_placeholder && booking.stack_count > 1) {
+    const stackNames = getPlaceholderStackItems(booking).map((item) => item.booking_owner || item.name).filter(Boolean);
+    return `${stackNames.slice(0, 2).join(', ')}${stackNames.length > 2 ? ` +${stackNames.length - 2}` : ''}`;
+  }
+  if (booking.has_conflict) return 'Blocked';
   if (booking.is_placeholder) return `${formatMoney(booking.price, canViewRevenue)} · ${formatStatus(booking.status)}`;
   return `${booking.booking_type || booking.type || 'booking'} · ${formatMoney(booking.price, canViewRevenue)}`;
 }
 
 function hasBookingConflict(booking) {
-  return Boolean(booking?.has_conflict || booking?.has_placeholder_conflict);
+  return Boolean(booking?.has_conflict);
 }
 
 function getBookingConflictItems(booking) {
-  if (booking?.is_placeholder) return booking.conflict_bookings || [];
-  return booking?.conflict_placeholders || [];
+  if (booking?.is_placeholder) return booking.blocked_by_bookings || booking.conflict_bookings || [];
+  return booking?.waitlist_placeholders || booking?.conflict_placeholders || [];
+}
+
+function getWaitlistItems(booking) {
+  return booking?.waitlist_placeholders || booking?.conflict_placeholders || [];
+}
+
+function getPlaceholderStackItems(booking) {
+  if (!booking?.is_placeholder) return [];
+  return Array.isArray(booking.placeholder_stack) && booking.placeholder_stack.length ? booking.placeholder_stack : [booking];
+}
+
+function getBookingTitle(booking) {
+  if (booking?.is_placeholder && booking.stack_count > 1) return `${booking.stack_count} placeholders`;
+  return booking?.booking_owner || booking?.name || 'Booking';
+}
+
+function getBookingPillLabel(booking) {
+  const waitlistCount = getWaitlistItems(booking).length;
+  if (!booking?.is_placeholder && waitlistCount) return `+${waitlistCount} waitlist`;
+  if (booking?.is_placeholder && booking.is_waitlist) return 'Waitlist';
+  if (booking?.is_placeholder && booking.stack_count > 1) return `${booking.stack_count} holds`;
+  if (booking?.is_placeholder) return 'Placeholder';
+  if (booking?.notes) return 'Notes';
+  return '';
+}
+
+function getSlotDraftFromBooking(booking, fallbackDate = '') {
+  const [startTime, endTime] = String(booking?.time || '').split('-');
+  const safeStartTime = startTime || '06:00';
+  return {
+    court_id: booking?.court_id || '',
+    court_name: booking?.court_name || '',
+    date: booking?.date || fallbackDate || toDateInputValue(new Date()),
+    end_time: endTime || shiftTime(safeStartTime, getDurationMinutes(booking) || 60),
+    start_time: safeStartTime,
+  };
 }
 
 function formatConflictError(error) {
@@ -3751,7 +3872,15 @@ function buildHours(openHour) {
 
 function summarizeDay(bookings, openHour, courtCount = 1, canViewRevenue = true) {
   const openMinutes = parseTimeToMinutes(openHour?.close_hours || '24:00') - parseTimeToMinutes(openHour?.open_hours || '06:00');
-  const bookedMinutes = bookings.reduce((sum, booking) => sum + Number(booking.duration || getDurationMinutes(booking)), 0);
+  const bookingsByCourt = bookings.reduce((map, booking) => {
+    const courtId = booking.court_id || 'all';
+    const courtBookings = map.get(courtId) || [];
+    map.set(courtId, [...courtBookings, booking]);
+    return map;
+  }, new Map());
+  const bookedMinutes = [...bookingsByCourt.values()].reduce((sum, courtBookings) => (
+    sum + buildCalendarDisplayBookings(courtBookings).reduce((courtSum, booking) => courtSum + Number(booking.duration || getDurationMinutes(booking)), 0)
+  ), 0);
   const revenue = canViewRevenue ? bookings.reduce((sum, booking) => sum + Number(booking.price || 0), 0) : null;
   const capacityMinutes = openMinutes * Math.max(Number(courtCount) || 1, 1);
   return {
