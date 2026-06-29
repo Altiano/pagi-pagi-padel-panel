@@ -1655,7 +1655,7 @@ function MobileWeekCalendar({ bookingsByDate, canViewRevenue = true, courts, ope
                       <span>{court.name}</span>
                       {courtBookings.length ? courtBookings.slice(0, 2).map((booking) => (
                         <button className={getBookingTone(booking)} key={booking.id} onClick={() => onSelectBooking(booking)} type="button">
-                          <strong>{getStartLabel(booking)}</strong>
+                          <strong>{getCompactStartLabel(booking)}</strong>
                           <span>{getBookingTitle(booking)}</span>
                         </button>
                       )) : (
@@ -1866,7 +1866,7 @@ function WeekDayColumn({ bookings, canViewRevenue = true, courts, date, isSelect
                     </button>
                   ) : (
                     <button className={`week-booking-card ${getBookingTone(entry.booking)}`} key={entry.booking.id} onClick={() => onSelectBooking(entry.booking)} type="button">
-                      <span>{getStartLabel(entry.booking)}</span>
+                      <span>{getCompactStartLabel(entry.booking)}</span>
                       <strong>{getBookingTitle(entry.booking)}</strong>
                       {getBookingPillLabel(entry.booking) ? (
                         <small className={entry.booking.is_waitlist ? 'waitlist-pill' : ''}>{getBookingPillLabel(entry.booking)}</small>
@@ -3792,6 +3792,13 @@ function parseTimeToMinutes(value) {
 
 function getStartLabel(booking) {
   return String(booking?.time || '').split('-')[0] || '--:--';
+}
+
+function getCompactStartLabel(booking) {
+  const [start, end] = String(booking?.time || '').split('-');
+  if (!start) return '--:--';
+  const startLabel = formatCompactTime(parseTimeToMinutes(start));
+  return end ? `${startLabel}-${formatCompactTime(parseTimeToMinutes(end))}` : startLabel;
 }
 
 function getBookingPosition(booking, startMinutes, totalMinutes) {
