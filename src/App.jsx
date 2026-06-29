@@ -68,6 +68,7 @@ const PLACEHOLDER_STATUSES = [
   { label: 'Cancelled', value: 'cancelled' },
 ];
 const CALENDAR_REVENUE_PERMISSION = 'Calendar revenue';
+const CALENDAR_BOOKING_PERMISSION = 'Calendar booking';
 const CALENDAR_DATA_CACHE_TTL_MS = 30 * 1000;
 const PLACEHOLDER_DURATION_OPTIONS = [
   { label: '1h', minutes: 60 },
@@ -90,6 +91,7 @@ const mobileNavItems = [
 const screenPermissionOptions = navGroups.flatMap((group) => group.items.map((item) => item.label));
 const virtualPermissionGroups = [
   { label: 'Visible screens', options: screenPermissionOptions },
+  { label: 'Calendar actions', options: [CALENDAR_BOOKING_PERMISSION] },
   { label: 'Calendar data', options: [CALENDAR_REVENUE_PERMISSION] },
 ];
 const virtualPermissionOptions = virtualPermissionGroups.flatMap((group) => group.options);
@@ -208,6 +210,7 @@ function PanelShell({ auth, isMobileRoute = false, onLogout }) {
   const firstAllowedNav = getFirstAllowedNav(allowedNav);
   const currentNav = isNavAllowed(activeNav, allowedNav) ? activeNav : firstAllowedNav;
   const canViewCalendarRevenue = hasPermission(auth, CALENDAR_REVENUE_PERMISSION);
+  const canWriteCalendarBookings = hasPermission(auth, CALENDAR_BOOKING_PERMISSION);
   const isVirtualUser = Boolean(auth.virtualUser);
 
   useEffect(() => {
@@ -242,6 +245,7 @@ function PanelShell({ auth, isMobileRoute = false, onLogout }) {
     <CalendarPage
       cacheScope={calendarCacheScope}
       canViewRevenue={canViewCalendarRevenue}
+      canWriteBookings={canWriteCalendarBookings}
       displayName={displayName}
       isVirtualUser={isVirtualUser}
       isMobileApp={mobileView.isMobileApp}
@@ -656,52 +660,56 @@ function VirtualUserEditor({ mode, user, onClose, onSave }) {
         </div>
         <h2>{mode === 'edit' ? 'Update access' : 'Create wrapper login'}</h2>
         <form onSubmit={handleSubmit}>
-          <div className="form-grid two">
+          <div className="placeholder-editor-fields">
+            <div className="form-grid two">
+              <label>
+                Username
+                <input onChange={(event) => updateField('username', event.target.value)} placeholder="_frontdesk" required value={form.username} />
+              </label>
+              <label>
+                Display name
+                <input onChange={(event) => updateField('display_name', event.target.value)} placeholder="Front desk" required value={form.display_name} />
+              </label>
+            </div>
             <label>
-              Username
-              <input onChange={(event) => updateField('username', event.target.value)} placeholder="_frontdesk" required value={form.username} />
+              {mode === 'edit' ? 'New password' : 'Password'}
+              <input
+                autoComplete="new-password"
+                onChange={(event) => updateField('password', event.target.value)}
+                placeholder={mode === 'edit' ? 'Leave blank to keep current password' : 'Set password'}
+                required={mode === 'create'}
+                type="password"
+                value={form.password}
+              />
             </label>
-            <label>
-              Display name
-              <input onChange={(event) => updateField('display_name', event.target.value)} placeholder="Front desk" required value={form.display_name} />
+            <label className="check-row">
+              <input checked={form.is_active} onChange={(event) => updateField('is_active', event.target.checked)} type="checkbox" />
+              Active
             </label>
-          </div>
-          <label>
-            {mode === 'edit' ? 'New password' : 'Password'}
-            <input
-              autoComplete="new-password"
-              onChange={(event) => updateField('password', event.target.value)}
-              placeholder={mode === 'edit' ? 'Leave blank to keep current password' : 'Set password'}
-              required={mode === 'create'}
-              type="password"
-              value={form.password}
-            />
-          </label>
-          <label className="check-row">
-            <input checked={form.is_active} onChange={(event) => updateField('is_active', event.target.checked)} type="checkbox" />
-            Active
-          </label>
-          <div className="permission-picker">
-            {virtualPermissionGroups.map((group) => (
-              <div className="permission-section" key={group.label}>
-                <span>{group.label}</span>
-                <div>
-                  {group.options.map((permission) => (
-                    <label className="check-row" key={permission}>
-                      <input checked={form.permissions.includes(permission)} onChange={() => togglePermission(permission)} type="checkbox" />
-                      {permission}
-                    </label>
-                  ))}
+            <div className="permission-picker">
+              {virtualPermissionGroups.map((group) => (
+                <div className="permission-section" key={group.label}>
+                  <span>{group.label}</span>
+                  <div>
+                    {group.options.map((permission) => (
+                      <label className="check-row" key={permission}>
+                        <input checked={form.permissions.includes(permission)} onChange={() => togglePermission(permission)} type="checkbox" />
+                        {permission}
+                      </label>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-          {error ? <p className="status-line error">{error}</p> : null}
-          <div className="editor-actions">
-            <button className="logout-button" onClick={onClose} type="button">Cancel</button>
-            <button className="primary-button" disabled={saving} type="submit">
-              {saving ? 'Saving...' : mode === 'edit' ? 'Save changes' : 'Create user'}
-            </button>
+          <div className="editor-footer">
+            {error ? <p className="status-line error">{error}</p> : null}
+            <div className="editor-actions">
+              <button className="logout-button" onClick={onClose} type="button">Cancel</button>
+              <button className="primary-button" disabled={saving} type="submit">
+                {saving ? 'Saving...' : mode === 'edit' ? 'Save changes' : 'Create user'}
+              </button>
+            </div>
           </div>
         </form>
       </aside>
@@ -769,7 +777,7 @@ function NoAccessPage({ displayName, onLogout }) {
   );
 }
 
-function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayName, isMobileApp = false, isVirtualUser = false, mitraId, onLogout, onUseMobileView }) {
+function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteBookings = true, displayName, isMobileApp = false, isVirtualUser = false, mitraId, onLogout, onUseMobileView }) {
   const [view, setView] = useState(() => (isMobileApp ? 'day' : 'week'));
   const [selectedDate, setSelectedDate] = useState(() => toDateInputValue(new Date()));
   const [refreshKey, setRefreshKey] = useState(0);
@@ -915,32 +923,47 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
     setPlaceholderEditor({ mode: 'edit', booking });
   }
 
+  function requireBookingWriteAccess() {
+    if (canWriteBookings) return true;
+    setPlaceholderStatus({
+      state: 'error',
+      message: 'This virtual user needs Calendar booking permission to write real bookings.',
+    });
+    return false;
+  }
+
   function openCreateRealBooking(draft = null) {
+    if (!requireBookingWriteAccess()) return;
     setPlaceholderStatus({ state: 'idle', message: '' });
     setBookingActionEditor({ mode: 'create-booking', booking: null, draft });
   }
 
   function openConvertPlaceholder(booking) {
+    if (!requireBookingWriteAccess()) return;
     setPlaceholderStatus({ state: 'idle', message: '' });
     setBookingActionEditor({ mode: 'convert-placeholder', booking, draft: null });
   }
 
   function openPaymentProof(booking) {
+    if (!requireBookingWriteAccess()) return;
     setPlaceholderStatus({ state: 'idle', message: '' });
     setBookingActionEditor({ mode: 'payment-proof', booking, draft: null });
   }
 
   function openRescheduleBooking(booking) {
+    if (!requireBookingWriteAccess()) return;
     setPlaceholderStatus({ state: 'idle', message: '' });
     setBookingActionEditor({ mode: 'reschedule', booking, draft: null });
   }
 
   function openCancelBooking(booking) {
+    if (!requireBookingWriteAccess()) return;
     setPlaceholderStatus({ state: 'idle', message: '' });
     setBookingActionEditor({ mode: 'cancel', booking, draft: null });
   }
 
   function openBookingNotes(booking) {
+    if (!requireBookingWriteAccess()) return;
     setPlaceholderStatus({ state: 'idle', message: '' });
     setBookingActionEditor({ mode: 'notes', booking, draft: null });
   }
@@ -1006,30 +1029,47 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
   }
 
   async function saveRealBooking(booking, form) {
+    if (!canWriteBookings) throw new Error('This virtual user needs Calendar booking permission to write real bookings.');
     const isPlaceholderConversion = Boolean(booking?.is_placeholder);
     const placeholderId = booking?.placeholder_id || booking?.id;
     if (isPlaceholderConversion && !placeholderId) throw new Error('Placeholder booking ID is missing.');
 
-    setPlaceholderStatus({ state: 'loading', message: isPlaceholderConversion ? 'Converting placeholder...' : 'Creating booking...' });
+    const bookingDates = isPlaceholderConversion ? [form.date].filter(Boolean) : getBookingFormDates(form);
+    const bulkCount = bookingDates.length;
+    const createdBookings = [];
+    let currentDate = '';
+    if (!bookingDates.length) throw new Error('Select at least one date.');
+
+    setPlaceholderStatus({
+      state: 'loading',
+      message: isPlaceholderConversion ? 'Converting placeholder...' : bulkCount > 1 ? `Creating ${bulkCount} bookings...` : 'Creating booking...',
+    });
 
     try {
-      const response = await apiRequest('/api/admin/court-booking', {
-        method: 'POST',
-        body: JSON.stringify(buildCourtBookingPayload({ form, mitraId })),
-      });
+      for (const date of bookingDates) {
+        currentDate = date;
+        const response = await apiRequest('/api/admin/court-booking', {
+          method: 'POST',
+          body: JSON.stringify(buildCourtBookingPayload({ form: { ...form, date }, mitraId })),
+        });
 
-      const bookingId = response?.booking_id || response?.data?.booking_id || response?.id || '';
-      const transId = response?.trans_id || response?.data?.trans_id || '';
+        const bookingId = response?.booking_id || response?.data?.booking_id || response?.id || '';
+        const transId = response?.trans_id || response?.data?.trans_id || '';
+        createdBookings.push({ bookingId, date, transId });
+      }
+
       const warnings = [];
 
       if (form.receiptFile) {
-        if (!transId) {
-          warnings.push('Receipt was not uploaded because the booking response did not include a transaction ID.');
-        } else {
-          try {
-            await uploadBookingReceipt({ attachmentType: form.attachmentType, file: form.receiptFile, transId });
-          } catch (uploadError) {
-            warnings.push(`Receipt upload failed: ${uploadError.message}`);
+        for (const createdBooking of createdBookings) {
+          if (!createdBooking.transId) {
+            warnings.push(`Receipt was not uploaded for ${formatLongDate(createdBooking.date)} because the booking response did not include a transaction ID.`);
+          } else {
+            try {
+              await uploadBookingReceipt({ attachmentType: form.attachmentType, file: form.receiptFile, transId: createdBooking.transId });
+            } catch (uploadError) {
+              warnings.push(`Receipt upload failed for ${formatLongDate(createdBooking.date)}: ${uploadError.message}`);
+            }
           }
         }
       }
@@ -1047,17 +1087,23 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
       setPlaceholderStatus({
         state: warnings.length ? 'warning' : 'success',
         message: warnings.length
-          ? `Booking created${bookingId ? ` (${bookingId})` : ''}. ${warnings.join(' ')}`
-          : isPlaceholderConversion ? 'Placeholder converted to a real booking.' : 'Booking created.',
+          ? `${bulkCount > 1 ? `${bulkCount} bookings created` : `Booking created${createdBookings[0]?.bookingId ? ` (${createdBookings[0].bookingId})` : ''}`}. ${warnings.join(' ')}`
+          : isPlaceholderConversion ? 'Placeholder converted to a real booking.' : bulkCount > 1 ? `${bulkCount} bookings created.` : 'Booking created.',
       });
       requestCalendarRefresh();
     } catch (convertError) {
-      setPlaceholderStatus({ state: 'error', message: convertError.message || 'Unable to save booking.' });
-      throw convertError;
+      const partialMessage = createdBookings.length
+        ? `${createdBookings.length} of ${bulkCount} bookings were created before ${formatLongDate(currentDate)} failed. `
+        : '';
+      const message = `${partialMessage}${convertError.message || 'Unable to save booking.'}`;
+      setPlaceholderStatus({ state: 'error', message });
+      if (createdBookings.length) requestCalendarRefresh();
+      throw new Error(message);
     }
   }
 
   async function markBookingPaid(booking) {
+    if (!canWriteBookings) throw new Error('This virtual user needs Calendar booking permission to write real bookings.');
     setPlaceholderStatus({ state: 'loading', message: 'Marking booking paid...' });
     try {
       await apiRequest('/api/admin/pay-court-booking', {
@@ -1077,6 +1123,7 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
   }
 
   async function savePaymentProof(booking, form) {
+    if (!canWriteBookings) throw new Error('This virtual user needs Calendar booking permission to write real bookings.');
     if (!booking?.trans_id) throw new Error('This booking does not have a transaction ID for attachment upload.');
     if (!form.receiptFile) throw new Error('Select a transfer receipt first.');
     setPlaceholderStatus({ state: 'loading', message: 'Uploading receipt...' });
@@ -1092,6 +1139,7 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
   }
 
   async function rescheduleBooking(booking, form) {
+    if (!canWriteBookings) throw new Error('This virtual user needs Calendar booking permission to write real bookings.');
     setPlaceholderStatus({ state: 'loading', message: 'Rescheduling booking...' });
     try {
       await apiRequest('/api/admin/reschedule-court-time', {
@@ -1119,6 +1167,7 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
   }
 
   async function cancelBooking(booking, form) {
+    if (!canWriteBookings) throw new Error('This virtual user needs Calendar booking permission to write real bookings.');
     setPlaceholderStatus({ state: 'loading', message: 'Canceling booking...' });
     try {
       const detailedBooking = await fetchBookingDetailForAction({ booking, mitraId }).catch(() => booking);
@@ -1137,6 +1186,7 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
   }
 
   async function saveBookingNotes(booking, form) {
+    if (!canWriteBookings) throw new Error('This virtual user needs Calendar booking permission to write real bookings.');
     setPlaceholderStatus({ state: 'loading', message: 'Saving notes...' });
     try {
       await apiRequest('/api/admin/change-notes', {
@@ -1171,14 +1221,16 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
   }
 
   function findRealBookingConflicts(form, sourceBooking = null) {
-    const bookings = state.bookingsByDate[form.date] || [];
     const candidate = {
       time: `${form.start_time}-${form.end_time}`,
     };
     const sourceIds = new Set([sourceBooking?.id, sourceBooking?.placeholder_id].filter(Boolean));
-    return bookings.filter((booking) => {
-      if (sourceIds.has(booking.id) || sourceIds.has(booking.placeholder_id)) return false;
-      return booking.court_id === form.court_id && bookingsOverlap(candidate, booking);
+    return getBookingFormDates(form).flatMap((date) => {
+      const bookings = state.bookingsByDate[date] || [];
+      return bookings.filter((booking) => {
+        if (sourceIds.has(booking.id) || sourceIds.has(booking.placeholder_id)) return false;
+        return booking.court_id === form.court_id && bookingsOverlap(candidate, booking);
+      }).map((booking) => ({ ...booking, conflict_date: date }));
     });
   }
 
@@ -1234,10 +1286,12 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
           <Plus size={16} />
           Placeholder
         </button>
-        <button className="real-booking-create-button" onClick={() => openCreateRealBooking()} type="button">
-          <CheckCircle2 size={16} />
-          Booking
-        </button>
+        {canWriteBookings ? (
+          <button className="real-booking-create-button" onClick={() => openCreateRealBooking()} type="button">
+            <CheckCircle2 size={16} />
+            Booking
+          </button>
+        ) : null}
         {!isMobileApp ? (
           <button
             className={`summary-toggle-button ${showSummaryPanel ? 'selected' : ''}`}
@@ -1356,6 +1410,7 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
           <CalendarDetailPanel
             booking={selectedBooking}
             canViewRevenue={canViewRevenue}
+            canWriteBookings={canWriteBookings}
             selectedDate={selectedDate}
             selectedDaySummary={selectedDaySummary}
             view={view}
@@ -1452,6 +1507,7 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
             <CalendarDetailPanel
               booking={selectedBooking}
               canViewRevenue={canViewRevenue}
+              canWriteBookings={canWriteBookings}
               selectedDate={selectedDate}
               selectedDaySummary={selectedDaySummary}
               view={view}
@@ -1805,6 +1861,7 @@ function WeekDayColumn({ bookings, canViewRevenue = true, courts, date, isSelect
 function CalendarDetailPanel({
   booking,
   canViewRevenue = true,
+  canWriteBookings = true,
   selectedDate,
   selectedDaySummary,
   view,
@@ -1823,7 +1880,7 @@ function CalendarDetailPanel({
   if (booking) {
     const isPlaceholder = booking.is_placeholder;
     const conflictItems = getBookingConflictItems(booking);
-    const canConvertPlaceholder = isPlaceholder && !hasBookingConflict(booking);
+    const canConvertPlaceholder = canWriteBookings && isPlaceholder && !hasBookingConflict(booking);
     return (
       <aside className="calendar-detail">
         <div className="panel-label-row">
@@ -1866,14 +1923,16 @@ function CalendarDetailPanel({
         </dl>
         {isPlaceholder ? (
           <div className="detail-actions">
-            <button className="primary-detail-action" disabled={!canConvertPlaceholder} onClick={() => onConvertPlaceholder?.(booking)} type="button">
-              <CheckCircle2 size={15} /> Convert to booking
-            </button>
+            {canWriteBookings ? (
+              <button className="primary-detail-action" disabled={!canConvertPlaceholder} onClick={() => onConvertPlaceholder?.(booking)} type="button">
+                <CheckCircle2 size={15} /> Convert to booking
+              </button>
+            ) : null}
             <button onClick={() => onEditPlaceholder?.(booking)} type="button"><Pencil size={15} /> Edit placeholder</button>
             <button className="danger-action" onClick={() => onDeletePlaceholder?.(booking)} type="button"><Trash2 size={15} /> Delete</button>
-            {hasBookingConflict(booking) ? <p className="detail-action-note danger">Resolve the live-booking conflict before converting this placeholder.</p> : null}
+            {canWriteBookings && hasBookingConflict(booking) ? <p className="detail-action-note danger">Resolve the live-booking conflict before converting this placeholder.</p> : null}
           </div>
-        ) : (
+        ) : canWriteBookings ? (
           <div className="detail-actions">
             {!booking.booking_paid ? (
               <button className="primary-detail-action" onClick={() => onMarkBookingPaid?.(booking)} type="button">
@@ -1885,6 +1944,10 @@ function CalendarDetailPanel({
             <button onClick={() => onEditBookingNotes?.(booking)} type="button"><Pencil size={15} /> Edit notes</button>
             <button onClick={() => copyText(booking.trans_id)} type="button"><Copy size={15} /> Copy ID</button>
             <button className="danger-action" onClick={() => onCancelBooking?.(booking)} type="button"><Trash2 size={15} /> Cancel booking</button>
+          </div>
+        ) : (
+          <div className="detail-actions">
+            <button onClick={() => copyText(booking.trans_id)} type="button"><Copy size={15} /> Copy ID</button>
           </div>
         )}
       </aside>
@@ -1920,13 +1983,15 @@ function CalendarDetailPanel({
 function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, conflicts, courts, defaultDate, draft, isSaving, openHour, onClose, onSave }) {
   const [form, setForm] = useState(() => buildBookingWriteForm({ booking, courts, defaultDate, draft, openHour }));
   const [error, setError] = useState('');
+  const [bulkDateInput, setBulkDateInput] = useState('');
   const [playerState, setPlayerState] = useState({ error: '', loading: false, results: [] });
   const isRegistered = form.customerMode === 'registered';
   const searchQuery = form.playerSearch.trim();
+  const isConversion = actionMode === 'convert-placeholder';
+  const bookingDates = isConversion ? [form.date].filter(Boolean) : getBookingFormDates(form);
   const conflictList = conflicts(form, booking);
   const hasConflict = conflictList.length > 0;
-  const isConversion = actionMode === 'convert-placeholder';
-  const title = isConversion ? 'Create real booking' : 'Create booking';
+  const title = isConversion ? 'Create real booking' : bookingDates.length > 1 ? 'Create bookings' : 'Create booking';
   const panelLabel = isConversion ? 'Convert placeholder' : 'New real booking';
 
   useEffect(() => {
@@ -1960,6 +2025,7 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
       ...current,
       [field]: value,
       ...(field === 'court_id' ? { court_name: courts.find((court) => court.id === value)?.name || '' } : null),
+      ...(field === 'date' ? { additional_dates: normalizeAdditionalBookingDates(current.additional_dates, value) } : null),
       ...(field === 'start_time' ? { end_time: shiftTime(value, getTimeRangeDurationMinutes(current)) } : null),
       ...(field === 'end_time' ? { duration_mode: inferPlaceholderDurationMode(current.start_time, value) } : null),
       ...(field === 'playerSearch' ? { selectedPlayer: null } : null),
@@ -1975,16 +2041,33 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
     }));
   }
 
+  function addBookingDate() {
+    if (!bulkDateInput) return;
+    setForm((current) => ({
+      ...current,
+      additional_dates: normalizeAdditionalBookingDates([...(current.additional_dates || []), bulkDateInput], current.date),
+    }));
+    setBulkDateInput('');
+  }
+
+  function removeBookingDate(dateValue) {
+    setForm((current) => ({
+      ...current,
+      additional_dates: normalizeAdditionalBookingDates((current.additional_dates || []).filter((date) => date !== dateValue), current.date),
+    }));
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
     setError('');
+    const selectedDates = isConversion ? [form.date].filter(Boolean) : getBookingFormDates(form);
 
     if (!form.court_id) {
       setError('Select a court.');
       return;
     }
-    if (!form.date) {
-      setError('Select a date.');
+    if (!selectedDates.length) {
+      setError('Select at least one date.');
       return;
     }
     if (parseTimeToMinutes(form.end_time) <= parseTimeToMinutes(form.start_time)) {
@@ -2029,14 +2112,14 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
           <div className="placeholder-editor-fields">
             <div className="conversion-summary">
               <span>{form.court_name || form.court_id || 'Court'}</span>
-              <strong>{form.date ? formatLongDate(form.date) : 'Select date'} · {form.start_time}-{form.end_time}</strong>
-              <small>{getTimeRangeDurationMinutes(form)} min{canViewRevenue ? ` · ${formatMoney(form.price, canViewRevenue)}` : ''}</small>
+              <strong>{bookingDates.length > 1 ? `${bookingDates.length} dates` : form.date ? formatLongDate(form.date) : 'Select date'} · {form.start_time}-{form.end_time}</strong>
+              <small>{bookingDates.length > 1 ? `${formatDayNumber(bookingDates[0])} - ${formatDayNumber(bookingDates[bookingDates.length - 1])} · ` : ''}{getTimeRangeDurationMinutes(form)} min{canViewRevenue ? ` · ${formatMoney(form.price, canViewRevenue)}` : ''}</small>
             </div>
 
             {hasConflict ? (
               <div className="detail-conflict-alert">
                 <strong>Booking conflict</strong>
-                <span>Overlaps with {conflictList.slice(0, 2).map((item) => item.booking_owner || item.name).join(', ')}.</span>
+                <span>Overlaps with {conflictList.slice(0, 2).map((item) => `${item.booking_owner || item.name}${item.conflict_date ? ` on ${formatDayNumber(item.conflict_date)}` : ''}`).join(', ')}.</span>
               </div>
             ) : null}
 
@@ -2084,6 +2167,41 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
                 </div>
               </div>
             </div>
+
+            {!isConversion ? (
+              <div className="bulk-date-picker">
+                <div className="bulk-date-heading">
+                  <span>Booking dates</span>
+                  <strong>{bookingDates.length} selected</strong>
+                </div>
+                <div className="bulk-date-add-row">
+                  <input
+                    aria-label="Additional booking date"
+                    onChange={(event) => setBulkDateInput(event.target.value)}
+                    type="date"
+                    value={bulkDateInput}
+                  />
+                  <button disabled={!bulkDateInput || bookingDates.includes(bulkDateInput)} onClick={addBookingDate} type="button">
+                    <Plus size={15} />
+                    Add date
+                  </button>
+                </div>
+                <div className="bulk-date-list">
+                  {bookingDates.map((date) => (
+                    <span className={date === form.date ? 'primary' : ''} key={date}>
+                      {formatDayNumber(date)}
+                      {date === form.date ? (
+                        <em>Primary</em>
+                      ) : (
+                        <button aria-label={`Remove ${formatLongDate(date)}`} onClick={() => removeBookingDate(date)} type="button">
+                          <X size={13} />
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             <div className="conversion-mode-control">
               <span>Customer</span>
@@ -2877,7 +2995,7 @@ function buildVirtualUserForm(user) {
     username: '',
     display_name: '',
     password: '',
-    permissions: ['Calendar', 'Setting'],
+    permissions: ['Calendar', CALENDAR_BOOKING_PERMISSION, 'Setting'],
     is_active: true,
   };
 }
@@ -3103,6 +3221,7 @@ function buildBookingWriteForm({ booking, courts, defaultDate, draft, openHour }
   const endTime = draft?.end_time || bookingEnd || shiftTime(startTime, 60);
   const court = courts.find((item) => item.id === (draft?.court_id || booking?.court_id)) || courts[0];
   return {
+    additional_dates: [],
     attachmentType: RECEIPT_ATTACHMENT_TYPE,
     court_id: draft?.court_id || booking?.court_id || court?.id || '',
     court_name: draft?.court_name || booking?.court_name || court?.name || '',
@@ -3118,6 +3237,20 @@ function buildBookingWriteForm({ booking, courts, defaultDate, draft, openHour }
     start_time: startTime,
     notes: booking?.notes || '',
   };
+}
+
+function getBookingFormDates(form) {
+  const dates = [
+    form?.date,
+    ...(Array.isArray(form?.additional_dates) ? form.additional_dates : []),
+  ].map((date) => String(date || '').trim()).filter(Boolean);
+  return [...new Set(dates)].sort();
+}
+
+function normalizeAdditionalBookingDates(dates, primaryDate) {
+  return [...new Set((dates || []).map((date) => String(date || '').trim()).filter(Boolean))]
+    .filter((date) => date !== primaryDate)
+    .sort();
 }
 
 function buildRescheduleBookingForm({ booking, courts, openHour }) {

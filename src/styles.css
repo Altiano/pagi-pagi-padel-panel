@@ -1595,6 +1595,10 @@ textarea:focus {
   box-shadow: -24px 0 70px rgba(23, 33, 27, 0.13);
 }
 
+.placeholder-editor.virtual-user-editor {
+  width: min(100%, 680px);
+}
+
 .placeholder-editor h2 {
   margin: 0;
   font-size: 28px;
@@ -1620,6 +1624,7 @@ textarea:focus {
 
 .placeholder-editor-fields {
   display: grid;
+  align-content: start;
   gap: 15px;
   min-height: 0;
   overflow: auto;
@@ -1946,6 +1951,104 @@ textarea:focus {
 .court-choice input {
   width: 17px;
   height: 17px;
+}
+
+.bulk-date-picker {
+  display: grid;
+  gap: 10px;
+  color: #39433b;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.bulk-date-heading,
+.bulk-date-add-row,
+.bulk-date-list span {
+  display: flex;
+  align-items: center;
+}
+
+.bulk-date-heading {
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.bulk-date-heading strong {
+  color: var(--green);
+  font-size: 12px;
+}
+
+.bulk-date-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.bulk-date-add-row input {
+  min-height: 42px;
+}
+
+.bulk-date-add-row button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid rgba(40, 99, 69, 0.22);
+  border-radius: 11px;
+  padding: 0 12px;
+  background: #edf4e5;
+  color: var(--green);
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.bulk-date-add-row button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.bulk-date-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.bulk-date-list span {
+  gap: 7px;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 7px 5px 11px;
+  background: #fbfcf8;
+  color: #526052;
+}
+
+.bulk-date-list span.primary {
+  border-color: rgba(40, 99, 69, 0.22);
+  background: #edf4e5;
+  color: var(--green);
+}
+
+.bulk-date-list em {
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.bulk-date-list button {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: rgba(40, 99, 69, 0.1);
+  color: var(--green);
+  cursor: pointer;
 }
 
 .form-grid {
@@ -2707,6 +2810,7 @@ textarea:focus {
   .form-grid.two,
   .time-grid,
   .editor-actions,
+  .bulk-date-add-row,
   .court-choice-grid,
   .permission-section > div {
     grid-template-columns: 1fr;

@@ -8,10 +8,10 @@ This app provides the browser UI for managing Pagi Pagi Padel admin workflows. I
 
 - Login with panel credentials.
 - Virtual account login with an underscore-prefixed username, backed by Worker-managed users.
-- Virtual account screen permissions, Worker endpoint authorization, and optional Calendar revenue visibility.
+- Virtual account screen/action permissions, Worker endpoint authorization, and optional Calendar revenue visibility.
 - Authenticated session storage in the browser.
 - A wired Calendar screen with day/week views, 30-second in-memory date caching, court bookings, booking details, write actions, and summary metrics.
-- Real court booking create flows for offline customers and registered Courtside users, plus payment receipt upload, mark-paid, reschedule, notes, and cancellation actions from captured upstream APIs.
+- Real court booking create flows for offline customers and registered Courtside users, including bulk creation across selected dates, plus payment receipt upload, mark-paid, reschedule, notes, and cancellation actions from captured upstream APIs.
 - D1-backed placeholder bookings for tentative holds before payment or upstream confirmation, including multi-court create from the same form and conversion into real upstream bookings.
 - Placeholder screens for Dashboard, Court Prices, Event, Coach, Add On, Customers, and Setting.
 
@@ -60,7 +60,7 @@ VITE_BASE_PATH=/
 
 The Worker proxies ordinary `/api/*` requests to the configured upstream service. `/api/placeholder-bookings` and `/api/virtual-users` are handled locally by the Worker and stored in Cloudflare D1. Virtual users sign in with usernames like `_frontdesk`; the Worker validates that virtual user password, then signs into upstream using `MASTER_USERNAME` and `MASTER_PASSWORD`.
 
-Virtual-user permissions are enforced in the Worker before upstream proxying. Screen permissions map to captured endpoint groups, and the separate `Calendar revenue` permission controls whether calendar money fields are returned. Calendar booking writes, including real booking creation and placeholder conversion, only require the `Calendar` screen permission; hidden or blank booking prices are submitted as zero. Placeholder booking audit names are server-stamped for virtual users, so they cannot submit another PIC name as creator/updater.
+Virtual-user permissions are enforced in the Worker before upstream proxying. Screen permissions map to captured endpoint groups, `Calendar booking` controls real booking write actions, and `Calendar revenue` controls whether calendar money fields are returned. Real booking creation and placeholder conversion require `Calendar` plus `Calendar booking`, but do not require `Calendar revenue`; hidden or blank booking prices are submitted as zero. Placeholder booking audit names are server-stamped for virtual users, so they cannot submit another PIC name as creator/updater.
 
 The current `wrangler.toml` is bound to the project D1 database. To create a new database for another environment:
 

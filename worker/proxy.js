@@ -12,6 +12,7 @@ const PLACEHOLDER_PREFIX = '/api/placeholder-bookings';
 const VIRTUAL_USERS_PREFIX = '/api/virtual-users';
 const VIRTUAL_LOGIN_PREFIX = '_';
 const CALENDAR_REVENUE_PERMISSION = 'Calendar revenue';
+const CALENDAR_BOOKING_PERMISSION = 'Calendar booking';
 const MONEY_FIELD_NAMES = new Set([
   'amount',
   'balance',
@@ -27,6 +28,17 @@ const MONEY_FIELD_NAMES = new Set([
   'total_balance',
   'total_price',
 ]);
+const CALENDAR_BOOKING_ENDPOINT_PATTERNS = [
+  /^\/api\/admin\/cancel-cal-court(?:\/|$)/,
+  /^\/api\/admin\/change-notes(?:\/|$)/,
+  /^\/api\/admin\/check-reschedule-court-price(?:\/|$)/,
+  /^\/api\/admin\/court-booking(?:\/|$)/,
+  /^\/api\/admin\/pay-court-booking(?:\/|$)/,
+  /^\/api\/admin\/player\/search-player-lists(?:\/|$)/,
+  /^\/api\/admin\/reschedule-court-time(?:\/|$|-)/,
+  /^\/api\/admin\/schedule\/attachments(?:\/|$)/,
+  /^\/api\/admin\/schedule-cal-courts-detail(?:\/|$)/,
+];
 const VIRTUAL_ENDPOINT_RULES = [
   {
     permission: 'Dashboard',
@@ -471,6 +483,10 @@ function findEndpointPermission(pathname) {
   return VIRTUAL_ENDPOINT_RULES.find((rule) => rule.matches.some((pattern) => pattern.test(pathname)))?.permission || '';
 }
 
+function requiresCalendarBookingPermission(pathname) {
+  return CALENDAR_BOOKING_ENDPOINT_PATTERNS.some((pattern) => pattern.test(pathname));
+}
+
 function authorizeVirtualProxyRequest(request, virtualContext) {
   if (!virtualContext) return null;
   if (virtualContext.error) return virtualContext.error;
@@ -479,11 +495,19 @@ function authorizeVirtualProxyRequest(request, virtualContext) {
   if (pathname === '/api/auth/me' || pathname === '/api/auth/logout') return null;
 
   const requiredPermission = findEndpointPermission(pathname);
-  if (requiredPermission && hasVirtualPermission(virtualContext.user, requiredPermission)) {
-    return null;
+  if (!requiredPermission) {
+    return responseWithStatus('This virtual user does not have permission to access that endpoint.', 403);
   }
 
-  return responseWithStatus('This virtual user does not have permission to access that endpoint.', 403);
+  if (!hasVirtualPermission(virtualContext.user, requiredPermission)) {
+    return responseWithStatus('This virtual user does not have permission to access that endpoint.', 403);
+  }
+
+  if (requiresCalendarBookingPermission(pathname) && !hasVirtualPermission(virtualContext.user, CALENDAR_BOOKING_PERMISSION)) {
+    return responseWithStatus('This virtual user does not have permission to write calendar bookings.', 403);
+  }
+
+  return null;
 }
 
 function shouldMaskCalendarMoney(pathname, virtualContext) {

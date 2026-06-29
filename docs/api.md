@@ -58,7 +58,7 @@ If `username` starts with `_`, the Worker treats it as a virtual account login. 
     "username": "frontdesk",
     "login_username": "_frontdesk",
     "display_name": "Front desk",
-    "permissions": ["Calendar", "Calendar revenue"],
+    "permissions": ["Calendar", "Calendar booking"],
     "is_active": true
   }
 }
@@ -208,7 +208,9 @@ Representative offline-user request body:
 }
 ```
 
-`harga` may be `0` when staff creates an offline booking without a quoted price, or when a virtual user can write Calendar bookings but cannot view `Calendar revenue`.
+`harga` may be `0` when staff creates an offline booking without a quoted price, or when a virtual user has `Calendar booking` permission but cannot view `Calendar revenue`.
+
+The real booking create drawer can select additional dates. This does not use the upstream recurring fields; the frontend sends one independent `POST /api/admin/court-booking` request per selected date, with `is_recurring: false` on each request. The same court, start/end time, customer, price, payment method, receipt, and notes are reused for every selected date. If a transfer receipt is selected, the frontend attempts one receipt upload per successful create response that includes a `trans_id`. Client-side overlap warnings only cover selected dates that are currently loaded in calendar state; the upstream create response remains the final result for dates outside the visible loaded week.
 
 Registered/online Courtside users use the same endpoint and mostly the same body, with these field differences:
 
@@ -528,7 +530,7 @@ Create/update payload:
   "username": "frontdesk",
   "display_name": "Front desk",
   "password": "virtual-password",
-  "permissions": ["Calendar", "Setting"],
+  "permissions": ["Calendar", "Calendar booking", "Setting"],
   "is_active": true
 }
 ```
@@ -540,14 +542,15 @@ The Worker records virtual-issued access token hashes in D1 so `/api/virtual-use
 Virtual endpoint authorization:
 
 - `Dashboard`: dashboard, mitra info/notifications, and dashboard transaction summary/list routes from the captured API map.
-- `Calendar`: schedule/open-hour, schedule calendar courts, court booking write/payment/reschedule/cancel routes, schedule attachments, registered-player search for booking creation, mitra court list, mitra operation hours, and `/api/placeholder-bookings`.
+- `Calendar`: schedule/open-hour, schedule calendar courts, mitra court list, mitra operation hours, and `/api/placeholder-bookings`.
+- `Calendar booking`: real booking create/convert support, booking payment, notes, detail, attachment, reschedule, cancel, and registered-player search routes. Virtual users also need `Calendar` because these actions operate inside the Calendar screen.
 - `Court Prices`: `/api/admin/services`.
 - `Event`: `/api/admin/event`.
 - `Coach`: `/api/admin/coach`.
 - `Add On`: `/api/admin/addons`.
 - `Customers`: player, voucher, promotion, membership, and mitra discount routes.
 - `Setting`: admin user routes and image lookup.
-- `Calendar revenue`: data permission, not a screen. Without it, the Worker strips money fields from calendar schedule responses and placeholder responses for virtual sessions. Booking writes still require only `Calendar`, and hidden or blank prices are sent as zero.
+- `Calendar revenue`: data permission, not a screen. Without it, the Worker strips money fields from calendar schedule responses and placeholder responses for virtual sessions. Booking writes require `Calendar` plus `Calendar booking`, not `Calendar revenue`, and hidden or blank prices are sent as zero.
 
 Placeholder audit fields are also server-owned for virtual sessions. On create, the Worker sets both `created_by_name` and `updated_by_name` to the virtual user's display name. On update, it preserves the original creator and sets `updated_by_name` to the virtual user's display name.
 
