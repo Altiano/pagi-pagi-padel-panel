@@ -2210,6 +2210,47 @@ textarea:focus {
   cursor: pointer;
 }
 
+.booking-date-single {
+  display: grid;
+  gap: 8px;
+}
+
+.booking-date-advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 7px;
+  border: 0;
+  border-radius: 9px;
+  padding: 4px 2px;
+  background: transparent;
+  color: var(--green);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.booking-date-advanced-toggle:hover {
+  text-decoration: underline;
+}
+
+.booking-calendar-collapse {
+  justify-self: start;
+  margin-top: 2px;
+  border: 0;
+  padding: 4px 2px;
+  background: transparent;
+  color: #6b776c;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.booking-calendar-collapse:hover {
+  color: var(--green);
+  text-decoration: underline;
+}
+
 .form-grid {
   display: grid;
   gap: 12px;

@@ -2056,6 +2056,7 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
   const [form, setForm] = useState(() => buildBookingWriteForm({ booking, courts, defaultDate, draft, openHour }));
   const [error, setError] = useState('');
   const [calendarMonth, setCalendarMonth] = useState(() => form.date || defaultDate || toDateInputValue(new Date()));
+  const [multiDate, setMultiDate] = useState(() => (form.additional_dates?.length || 0) > 0);
   const [playerState, setPlayerState] = useState({ error: '', loading: false, results: [] });
   const isRegistered = form.customerMode === 'registered';
   const searchQuery = form.playerSearch.trim();
@@ -2142,6 +2143,16 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
   function shiftCalendarMonth(delta) {
     const base = new Date(`${calendarMonth}T00:00:00`);
     setCalendarMonth(toDateInputValue(new Date(base.getFullYear(), base.getMonth() + delta, 1)));
+  }
+
+  function enableMultiDate() {
+    setCalendarMonth(form.date || calendarMonth);
+    setMultiDate(true);
+  }
+
+  function collapseToSingleDate() {
+    setForm((current) => ({ ...current, additional_dates: [] }));
+    setMultiDate(false);
   }
 
   async function handleSubmit(event) {
@@ -2251,16 +2262,26 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
               </div>
             </div>
 
-            <div className="booking-calendar">
-              <div className="booking-calendar-heading">
-                <span>{isConversion ? 'Booking date' : 'Booking dates'}</span>
+            {isConversion || !multiDate ? (
+              <div className="booking-date-single">
+                <label>
+                  Date
+                  <input onChange={(event) => updateField('date', event.target.value)} required type="date" value={form.date} />
+                </label>
                 {isConversion ? null : (
-                  <strong>{bookingDates.length} {bookingDates.length === 1 ? 'day' : 'days'}</strong>
+                  <button className="booking-date-advanced-toggle" onClick={enableMultiDate} type="button">
+                    <CalendarDays size={15} />
+                    Book on multiple dates
+                  </button>
                 )}
               </div>
-              {isConversion ? null : (
-                <p className="booking-calendar-hint">Tap days to book this court &amp; time on each.</p>
-              )}
+            ) : (
+            <div className="booking-calendar">
+              <div className="booking-calendar-heading">
+                <span>Booking dates</span>
+                <strong>{bookingDates.length} {bookingDates.length === 1 ? 'day' : 'days'}</strong>
+              </div>
+              <p className="booking-calendar-hint">Tap days to book this court &amp; time on each.</p>
               <div className="booking-calendar-nav">
                 <button aria-label="Previous month" onClick={() => shiftCalendarMonth(-1)} type="button">
                   <ChevronLeft size={16} />
@@ -2296,7 +2317,7 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
                   );
                 })}
               </div>
-              {!isConversion && bookingDates.length > 1 ? (
+              {bookingDates.length > 1 ? (
                 <div className="booking-calendar-chips">
                   {bookingDates.map((date) => (
                     <span key={date}>
@@ -2308,7 +2329,11 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
                   ))}
                 </div>
               ) : null}
+              <button className="booking-calendar-collapse" onClick={collapseToSingleDate} type="button">
+                Use a single date
+              </button>
             </div>
+            )}
 
             <div className="conversion-mode-control">
               <span>Customer</span>
