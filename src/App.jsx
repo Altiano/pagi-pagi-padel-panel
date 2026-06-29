@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   CalendarCheck,
@@ -1755,12 +1756,15 @@ function DayCalendar({ bookings, canViewRevenue = true, courts, openHour, select
             {buildCalendarDisplayBookings(bookings.filter((booking) => booking.court_id === court.id)).map((booking) => {
               const position = getBookingPosition(booking, startMinutes, totalMinutes);
               return (
-                <button
+                <CalendarBookingButton
+                  booking={booking}
+                  canViewRevenue={canViewRevenue}
                   className={`booking-block ${getBookingTone(booking)} ${selectedBooking?.id === booking.id ? 'selected' : ''}`}
+                  courtName={court.name}
+                  date={selectedDate}
                   key={booking.id}
                   onClick={() => onSelectBooking(booking)}
                   style={{ top: `${position.top}%`, height: `${position.height}%` }}
-                  type="button"
                 >
                   <strong>{getBookingTitle(booking)}</strong>
                   <span>{booking.time}</span>
@@ -1768,7 +1772,7 @@ function DayCalendar({ bookings, canViewRevenue = true, courts, openHour, select
                   {getBookingPillLabel(booking) ? (
                     <em className={booking.is_waitlist ? 'waitlist-pill' : ''}>{getBookingPillLabel(booking)}</em>
                   ) : null}
-                </button>
+                </CalendarBookingButton>
               );
             })}
           </div>
@@ -1871,13 +1875,13 @@ function WeekDayColumn({ bookings, canViewRevenue = true, courts, date, isSelect
                       <strong>{entry.label}</strong>
                     </button>
                   ) : (
-                    <button className={`week-booking-card ${getBookingTone(entry.booking)}`} key={entry.booking.id} onClick={() => onSelectBooking(entry.booking)} type="button">
+                    <CalendarBookingButton booking={entry.booking} canViewRevenue={canViewRevenue} className={`week-booking-card ${getBookingTone(entry.booking)}`} courtName={court.name} date={date} key={entry.booking.id} onClick={() => onSelectBooking(entry.booking)}>
                       <span>{getCompactStartLabel(entry.booking)}</span>
                       <strong>{getBookingTitle(entry.booking)}</strong>
                       {getBookingPillLabel(entry.booking) ? (
                         <small className={entry.booking.is_waitlist ? 'waitlist-pill' : ''}>{getBookingPillLabel(entry.booking)}</small>
                       ) : null}
-                    </button>
+                    </CalendarBookingButton>
                   )
                 )) : <span className="empty-slot">Available</span>}
               </div>
@@ -1903,6 +1907,112 @@ function WeekDayColumn({ bookings, canViewRevenue = true, courts, date, isSelect
       }} type="button">Open day view</button>
     </article>
   );
+}
+
+function CalendarBookingButton({ booking, canViewRevenue = true, className, courtName, date, onClick, style, children }) {
+  const anchorRef = useRef(null);
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        className={className}
+        onBlur={() => setOpen(false)}
+        onClick={onClick}
+        onFocus={() => setOpen(true)}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        ref={anchorRef}
+        style={style}
+        type="button"
+      >
+        {children}
+      </button>
+      {open ? (
+        <CalendarCardTooltip
+          anchorRef={anchorRef}
+          booking={booking}
+          canViewRevenue={canViewRevenue}
+          courtName={courtName}
+          date={date}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function CalendarCardTooltip({ anchorRef, booking, canViewRevenue = true, courtName, date }) {
+  const tooltipRef = useRef(null);
+  const [position, setPosition] = useState({ left: 0, top: 0, ready: false });
+
+  useLayoutEffect(() => {
+    const updatePosition = () => {
+      const anchor = anchorRef.current;
+      const tooltip = tooltipRef.current;
+      if (!anchor || !tooltip) return;
+      const anchorRect = anchor.getBoundingClientRect();
+      const tooltipRect = tooltip.getBoundingClientRect();
+      const gap = 10;
+      const margin = 8;
+
+      let left = anchorRect.right + gap;
+      if (left + tooltipRect.width > window.innerWidth - margin) {
+        left = anchorRect.left - gap - tooltipRect.width;
+      }
+      left = Math.max(margin, Math.min(left, window.innerWidth - margin - tooltipRect.width));
+
+      let top = anchorRect.top;
+      top = Math.max(margin, Math.min(top, window.innerHeight - margin - tooltipRect.height));
+
+      setPosition({ left, top, ready: true });
+    };
+
+    updatePosition();
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [anchorRef, booking, courtName, date]);
+
+  const waitlistItems = getWaitlistItems(booking);
+  const stackItems = booking?.is_placeholder && booking.stack_count > 1 ? getPlaceholderStackItems(booking) : [];
+  const stackNames = stackItems.map((item) => item.booking_owner || item.name).filter(Boolean);
+
+  return createPortal(
+    <div
+      className="card-tooltip"
+      ref={tooltipRef}
+      role="tooltip"
+      style={{ left: position.left, top: position.top, visibility: position.ready ? 'visible' : 'hidden' }}
+    >
+      <strong className="card-tooltip-title">{getBookingTitle(booking)}</strong>
+      <span className="card-tooltip-meta">{getBookingMeta(booking, canViewRevenue)}</span>
+      <dl className="card-tooltip-rows">
+        <div><dt>When</dt><dd>{formatLongDate(date)}</dd></div>
+        <div><dt>Time</dt><dd>{formatBookingTimeRange(booking)}</dd></div>
+        <div><dt>Court</dt><dd>{courtName || booking.court_name || '—'}</dd></div>
+        {stackNames.length ? (
+          <div><dt>Holds</dt><dd>{stackNames.join(', ')}</dd></div>
+        ) : null}
+        {waitlistItems.length ? (
+          <div><dt>Waitlist</dt><dd>{waitlistItems.length} placeholder{waitlistItems.length > 1 ? 's' : ''}</dd></div>
+        ) : null}
+        {booking?.notes ? (
+          <div><dt>Notes</dt><dd>{booking.notes}</dd></div>
+        ) : null}
+      </dl>
+    </div>,
+    document.body,
+  );
+}
+
+function formatBookingTimeRange(booking) {
+  const start = getBookingStartMinutes(booking);
+  const end = getBookingEndMinutes(booking);
+  if (Number.isNaN(start) || Number.isNaN(end)) return booking?.time || '—';
+  return `${formatCompactTime(start)} – ${formatCompactTime(end)}`;
 }
 
 function CalendarDetailPanel({
