@@ -998,24 +998,59 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
       return payload;
     };
 
-    const savedItems = editingId ? [
-      await apiRequest(`/api/placeholder-bookings/${editingId}`, {
-        method: 'PUT',
-        body: JSON.stringify(buildPayload(form.court_id || selectedCourtIds[0])),
-      }),
-    ] : await Promise.all(selectedCourtIds.map((courtId) => apiRequest('/api/placeholder-bookings', {
-      method: 'POST',
-      body: JSON.stringify(buildPayload(courtId)),
-    })));
+    try {
+      if (editingId) {
+        const saved = await apiRequest(`/api/placeholder-bookings/${editingId}`, {
+          method: 'PUT',
+          body: JSON.stringify(buildPayload(form.court_id || selectedCourtIds[0])),
+        });
+        setPlaceholderStatus({ state: 'success', message: 'Placeholder saved.' });
+        setPlaceholderEditor({ mode: 'closed', booking: null, draft: null });
+        requestCalendarRefresh();
+        if (saved?.data) setSelectedBooking(normalizePlaceholderBooking(saved.data));
+        return;
+      }
 
-    setPlaceholderStatus({
-      state: 'success',
-      message: selectedCourtIds.length > 1 ? `${selectedCourtIds.length} placeholders saved.` : 'Placeholder saved.',
-    });
-    setPlaceholderEditor({ mode: 'closed', booking: null, draft: null });
-    requestCalendarRefresh();
-    const firstSaved = savedItems.map((item) => item?.data).find(Boolean);
-    if (firstSaved) setSelectedBooking(normalizePlaceholderBooking(firstSaved));
+      // Each court is an independent POST. Use allSettled so one failure does
+      // not discard the placeholders that did save (Promise.all would still
+      // fire every request but report the whole batch as failed).
+      const results = await Promise.allSettled(selectedCourtIds.map((courtId) => apiRequest('/api/placeholder-bookings', {
+        method: 'POST',
+        body: JSON.stringify(buildPayload(courtId)),
+      })));
+      const saved = results.filter((result) => result.status === 'fulfilled').map((result) => result.value);
+      const failed = results.filter((result) => result.status === 'rejected');
+
+      // Nothing saved: surface the error in the still-open editor so the user
+      // can retry without creating duplicates.
+      if (!saved.length) throw failed[0].reason;
+
+      requestCalendarRefresh();
+      const firstSaved = saved.map((item) => item?.data).find(Boolean);
+      if (firstSaved) setSelectedBooking(normalizePlaceholderBooking(firstSaved));
+
+      // Partial success: the saved courts are committed, so close the editor to
+      // avoid duplicate re-submits and report which courts still need attention.
+      if (failed.length) {
+        setPlaceholderStatus({
+          state: 'error',
+          message: `Saved ${saved.length} of ${selectedCourtIds.length} placeholders. ${failed.length} failed: ${failed[0].reason?.message || 'unknown error'}`,
+        });
+        setPlaceholderEditor({ mode: 'closed', booking: null, draft: null });
+        return;
+      }
+
+      setPlaceholderStatus({
+        state: 'success',
+        message: saved.length > 1 ? `${saved.length} placeholders saved.` : 'Placeholder saved.',
+      });
+      setPlaceholderEditor({ mode: 'closed', booking: null, draft: null });
+    } catch (error) {
+      // Clear the loading state so the submit button recovers; rethrow so the
+      // editor can surface the friendly conflict message inline.
+      setPlaceholderStatus({ state: 'error', message: error.message || 'Unable to save placeholder.' });
+      throw error;
+    }
   }
 
   async function deletePlaceholder(booking) {
