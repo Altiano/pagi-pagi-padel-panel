@@ -1697,7 +1697,7 @@ function DayCalendar({ bookings, canViewRevenue = true, courts, openHour, select
     <div className="day-calendar">
       <div className="day-calendar-header">
         <div>
-          <span>{formatLongDate(selectedDate)}</span>
+          <span>{formatCompactDate(selectedDate)}</span>
           <strong>{bookings.length} bookings</strong>
         </div>
         {courts.map((court) => <div key={court.id}>{court.name}</div>)}
@@ -3705,6 +3705,10 @@ function formatLongDate(dateValue) {
 
 function formatWeekday(dateValue) {
   return new Intl.DateTimeFormat('en-GB', { weekday: 'short' }).format(new Date(`${dateValue}T00:00:00`));
+}
+
+function formatCompactDate(dateValue) {
+  return new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(`${dateValue}T00:00:00`));
 }
 
 function formatDayNumber(dateValue) {

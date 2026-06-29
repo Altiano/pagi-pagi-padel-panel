@@ -909,6 +909,7 @@ textarea:focus {
   color: var(--muted);
   font-size: 12px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .day-calendar-header strong {
