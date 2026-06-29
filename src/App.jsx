@@ -69,7 +69,7 @@ const PLACEHOLDER_STATUSES = [
 ];
 const CALENDAR_REVENUE_PERMISSION = 'Calendar revenue';
 const CALENDAR_BOOKING_PERMISSION = 'Calendar booking';
-const CALENDAR_DATA_CACHE_TTL_MS = 30 * 1000;
+const CALENDAR_DATA_CACHE_TTL_MS = 2 * 60 * 1000;
 const PLACEHOLDER_DURATION_OPTIONS = [
   { label: '1h', minutes: 60 },
   { label: '2h', minutes: 120 },
