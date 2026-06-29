@@ -1607,7 +1607,7 @@ function MobileDayAgenda({ bookings, canViewRevenue = true, courts, openHour, se
                     <small>{getBookingMeta(entry.booking, canViewRevenue)}</small>
                   </span>
                   <span className="mobile-payment-pill">
-                    {getBookingPillLabel(entry.booking) || (entry.booking.booking_paid ? 'Paid' : 'Unpaid')}
+                    {getBookingPillLabel(entry.booking) || (entry.booking.is_placeholder ? '' : entry.booking.booking_paid ? 'Paid' : 'Unpaid')}
                   </span>
                 </button>
               )
@@ -3949,7 +3949,7 @@ function getBookingPillLabel(booking) {
   if (!booking?.is_placeholder && waitlistCount) return `+${waitlistCount} waitlist`;
   if (booking?.is_placeholder && booking.is_waitlist) return 'Waitlist';
   if (booking?.is_placeholder && booking.stack_count > 1) return `${booking.stack_count} holds`;
-  if (booking?.is_placeholder) return 'Placeholder';
+  if (booking?.is_placeholder) return '';
   if (booking?.notes) return 'Notes';
   return '';
 }
