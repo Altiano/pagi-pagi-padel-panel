@@ -208,6 +208,8 @@ Representative offline-user request body:
 }
 ```
 
+`harga` may be `0` when staff creates an offline booking without a quoted price, or when a virtual user can write Calendar bookings but cannot view `Calendar revenue`.
+
 Registered/online Courtside users use the same endpoint and mostly the same body, with these field differences:
 
 ```json
@@ -496,7 +498,7 @@ The frontend maps these rows into booking-like calendar entries with `is_placeho
 
 Placeholder conversion currently happens client-side from the placeholder detail panel:
 
-1. The frontend posts a real upstream booking to `POST /api/admin/court-booking`, using the placeholder court/date/start/duration/price and either an offline customer name or selected registered player ID.
+1. The frontend posts a real upstream booking to `POST /api/admin/court-booking`, using the placeholder court/date/start/duration and either an offline customer name or selected registered player ID. If the placeholder price is hidden or the booking price is blank, the frontend sends `harga: 0`.
 2. If staff selected a transfer receipt and the upstream response includes `trans_id`, the frontend uploads it to `POST /api/admin/schedule/attachments` as multipart form data.
 3. After the upstream booking exists, the frontend deletes the local placeholder with `DELETE /api/placeholder-bookings/:id` and refreshes calendar data so the real schedule row replaces the local hold.
 
@@ -545,7 +547,7 @@ Virtual endpoint authorization:
 - `Add On`: `/api/admin/addons`.
 - `Customers`: player, voucher, promotion, membership, and mitra discount routes.
 - `Setting`: admin user routes and image lookup.
-- `Calendar revenue`: data permission, not a screen. Without it, the Worker strips money fields from calendar schedule responses and placeholder responses for virtual sessions.
+- `Calendar revenue`: data permission, not a screen. Without it, the Worker strips money fields from calendar schedule responses and placeholder responses for virtual sessions. Booking writes still require only `Calendar`, and hidden or blank prices are sent as zero.
 
 Placeholder audit fields are also server-owned for virtual sessions. On create, the Worker sets both `created_by_name` and `updated_by_name` to the virtual user's display name. On update, it preserves the original creator and sets `updated_by_name` to the virtual user's display name.
 

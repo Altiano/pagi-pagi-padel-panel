@@ -60,7 +60,7 @@ VITE_BASE_PATH=/
 
 The Worker proxies ordinary `/api/*` requests to the configured upstream service. `/api/placeholder-bookings` and `/api/virtual-users` are handled locally by the Worker and stored in Cloudflare D1. Virtual users sign in with usernames like `_frontdesk`; the Worker validates that virtual user password, then signs into upstream using `MASTER_USERNAME` and `MASTER_PASSWORD`.
 
-Virtual-user permissions are enforced in the Worker before upstream proxying. Screen permissions map to captured endpoint groups, and the separate `Calendar revenue` permission controls whether calendar money fields are returned. Placeholder booking audit names are server-stamped for virtual users, so they cannot submit another PIC name as creator/updater.
+Virtual-user permissions are enforced in the Worker before upstream proxying. Screen permissions map to captured endpoint groups, and the separate `Calendar revenue` permission controls whether calendar money fields are returned. Calendar booking writes, including real booking creation and placeholder conversion, only require the `Calendar` screen permission; hidden or blank booking prices are submitted as zero. Placeholder booking audit names are server-stamped for virtual users, so they cannot submit another PIC name as creator/updater.
 
 The current `wrangler.toml` is bound to the project D1 database. To create a new database for another environment:
 

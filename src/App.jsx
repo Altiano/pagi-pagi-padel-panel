@@ -1009,7 +1009,6 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, displayNa
     const isPlaceholderConversion = Boolean(booking?.is_placeholder);
     const placeholderId = booking?.placeholder_id || booking?.id;
     if (isPlaceholderConversion && !placeholderId) throw new Error('Placeholder booking ID is missing.');
-    if (!canViewRevenue) throw new Error('Calendar revenue permission is required to create a real booking.');
 
     setPlaceholderStatus({ state: 'loading', message: isPlaceholderConversion ? 'Converting placeholder...' : 'Creating booking...' });
 
@@ -1824,7 +1823,7 @@ function CalendarDetailPanel({
   if (booking) {
     const isPlaceholder = booking.is_placeholder;
     const conflictItems = getBookingConflictItems(booking);
-    const canConvertPlaceholder = isPlaceholder && canViewRevenue && !hasBookingConflict(booking);
+    const canConvertPlaceholder = isPlaceholder && !hasBookingConflict(booking);
     return (
       <aside className="calendar-detail">
         <div className="panel-label-row">
@@ -1872,7 +1871,6 @@ function CalendarDetailPanel({
             </button>
             <button onClick={() => onEditPlaceholder?.(booking)} type="button"><Pencil size={15} /> Edit placeholder</button>
             <button className="danger-action" onClick={() => onDeletePlaceholder?.(booking)} type="button"><Trash2 size={15} /> Delete</button>
-            {!canViewRevenue ? <p className="detail-action-note">Revenue permission is required because the upstream booking payload needs a price.</p> : null}
             {hasBookingConflict(booking) ? <p className="detail-action-note danger">Resolve the live-booking conflict before converting this placeholder.</p> : null}
           </div>
         ) : (
@@ -1981,10 +1979,6 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
     event.preventDefault();
     setError('');
 
-    if (!canViewRevenue) {
-      setError('Revenue permission is required because the upstream booking payload needs a price.');
-      return;
-    }
     if (!form.court_id) {
       setError('Select a court.');
       return;
@@ -2009,8 +2003,8 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
       setError('Enter the offline customer name.');
       return;
     }
-    if (Number(form.price) <= 0) {
-      setError('Enter the booking price.');
+    if (Number.isNaN(Number(form.price || 0)) || Number(form.price || 0) < 0) {
+      setError('Booking price must be zero or greater.');
       return;
     }
 
@@ -2036,20 +2030,13 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
             <div className="conversion-summary">
               <span>{form.court_name || form.court_id || 'Court'}</span>
               <strong>{form.date ? formatLongDate(form.date) : 'Select date'} · {form.start_time}-{form.end_time}</strong>
-              <small>{getTimeRangeDurationMinutes(form)} min · {formatMoney(form.price, canViewRevenue)}</small>
+              <small>{getTimeRangeDurationMinutes(form)} min{canViewRevenue ? ` · ${formatMoney(form.price, canViewRevenue)}` : ''}</small>
             </div>
 
             {hasConflict ? (
               <div className="detail-conflict-alert">
                 <strong>Booking conflict</strong>
                 <span>Overlaps with {conflictList.slice(0, 2).map((item) => item.booking_owner || item.name).join(', ')}.</span>
-              </div>
-            ) : null}
-
-            {!canViewRevenue ? (
-              <div className="conversion-warning">
-                <AlertTriangle size={16} />
-                <span>Revenue permission is required before creating an upstream booking.</span>
               </div>
             ) : null}
 
@@ -2169,15 +2156,17 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
             )}
 
             <div className="form-grid two">
-              <label>
-                Booking price
-                <input
-                  inputMode="numeric"
-                  onChange={(event) => updateField('price', parseMoneyInput(event.target.value))}
-                  placeholder="Rp 0"
-                  value={formatMoneyInput(form.price)}
-                />
-              </label>
+              {canViewRevenue ? (
+                <label>
+                  Booking price
+                  <input
+                    inputMode="numeric"
+                    onChange={(event) => updateField('price', parseMoneyInput(event.target.value))}
+                    placeholder="Rp 0"
+                    value={formatMoneyInput(form.price)}
+                  />
+                </label>
+              ) : null}
               <label>
                 Payment
                 <input readOnly value="Paid offline" />
@@ -2206,7 +2195,7 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
             {error ? <p className="status-line error">{error}</p> : null}
             <div className="editor-actions">
               <button className="logout-button" onClick={onClose} type="button">Cancel</button>
-              <button className="primary-button" disabled={isSaving || hasConflict || !canViewRevenue} type="submit">
+              <button className="primary-button" disabled={isSaving || hasConflict} type="submit">
                 {isSaving ? 'Saving...' : title}
               </button>
             </div>

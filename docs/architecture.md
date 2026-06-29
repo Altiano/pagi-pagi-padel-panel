@@ -16,7 +16,7 @@ Placeholder bookings and virtual users are wrapper-owned data models. They are s
 
 Virtual permissions are enforced twice:
 
-- The React shell filters visible screens and hides calendar money when `Calendar revenue` is absent.
+- The React shell filters visible screens and hides calendar money when `Calendar revenue` is absent. Calendar booking writes still use the `Calendar` screen permission; when a price is hidden or left blank, the frontend sends `harga: 0`.
 - The Worker maps bearer tokens back to D1 virtual sessions before proxying, rejects upstream endpoints outside the user's allowed screens, strips calendar money fields without `Calendar revenue`, and stamps virtual placeholder audit names from the virtual user's display name.
 
 ## API Flow
@@ -52,7 +52,7 @@ Calendar data uses a module-level in-memory cache with a 30-second TTL. Cache ke
 
 Placeholder create mode can target multiple courts at once. The frontend fans that out into one `/api/placeholder-bookings` POST per selected court. Edit mode updates a single placeholder row.
 
-Real booking create mode posts to the captured upstream `/api/admin/court-booking` endpoint for either offline customers or selected registered players. Existing real booking detail actions can mark paid, upload a transfer receipt, reschedule after checking available times/pricing, edit notes, and cancel through the captured upstream write endpoints.
+Real booking create mode posts to the captured upstream `/api/admin/court-booking` endpoint for either offline customers or selected registered players. Booking prices are optional and may be submitted as zero, including for virtual users without `Calendar revenue`. Existing real booking detail actions can mark paid, upload a transfer receipt, reschedule after checking available times/pricing, edit notes, and cancel through the captured upstream write endpoints.
 
 The Worker rejects placeholder create/update requests that overlap an existing placeholder row, and also rejects overlap with a live upstream booking when the upstream day schedule is available. On read, the frontend annotates any existing placeholder/live-booking overlap so both cards show a conflict state and the detail panel names the conflicting item.
 
