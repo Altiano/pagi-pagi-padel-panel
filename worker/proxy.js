@@ -11,22 +11,49 @@ const DEFAULT_ALLOWED_HEADERS = 'authorization,content-type,x-requested-with,x-p
 const PLACEHOLDER_PREFIX = '/api/placeholder-bookings';
 const VIRTUAL_USERS_PREFIX = '/api/virtual-users';
 const VIRTUAL_LOGIN_PREFIX = '_';
+const VIRTUAL_SESSION_TOKEN_PREFIX = 'ppp_vsession_';
 const CALENDAR_REVENUE_PERMISSION = 'Calendar revenue';
+const VENUE_TIME_ZONE = 'Asia/Jakarta';
 const MONEY_FIELD_NAMES = new Set([
+  'additional_price',
+  'adjustment',
+  'adjustment_amount',
+  'admin_fee',
   'amount',
   'balance',
+  'booking_price',
+  'discount',
+  'discount_amount',
   'estimated_price',
+  'grand_total',
+  'harga',
   'income',
   'nominal',
+  'new_price',
+  'old_price',
   'paid_amount',
+  'payment_amount',
+  'platform_fee',
   'price',
+  'price_parent',
+  'refund_amount',
   'remaining_amount',
   'revenue',
+  'service_fee',
   'subtotal',
+  'tax',
+  'tax_amount',
   'total',
   'total_balance',
   'total_price',
 ]);
+const CALENDAR_MONEY_ENDPOINT_PATTERNS = [
+  /^\/api\/admin\/schedule-cal-courts(?:\/|$)/,
+  /^\/api\/admin\/schedule-cal-courts-detail(?:\/|$)/,
+  /^\/api\/admin\/check-reschedule-court-price(?:\/|$)/,
+  /^\/api\/admin\/reschedule-court-time(?:\/|$)/,
+  /^\/api\/admin\/reschedule-court-time-lists(?:\/|$)/,
+];
 const VIRTUAL_ENDPOINT_RULES = [
   {
     permission: 'Dashboard',
@@ -99,7 +126,7 @@ function getAllowedOrigin(request, env) {
     .map((value) => value.trim())
     .filter(Boolean);
 
-  return allowedOrigins.includes(origin) ? origin : allowedOrigins[0] || origin;
+  return allowedOrigins.includes(origin) ? origin : allowedOrigins[0] || 'null';
 }
 
 function corsHeaders(request, env) {
@@ -112,7 +139,7 @@ function corsHeaders(request, env) {
   };
 }
 
-function buildUpstreamHeaders(request, upstreamOrigin) {
+function buildUpstreamHeaders(request, upstreamOrigin, { authorization } = {}) {
   const headers = new Headers();
 
   for (const [key, value] of request.headers.entries()) {
@@ -123,11 +150,14 @@ function buildUpstreamHeaders(request, upstreamOrigin) {
 
   headers.set('Origin', upstreamOrigin);
   headers.set('Referer', `${upstreamOrigin}/`);
+  if (authorization) {
+    headers.set('Authorization', authorization);
+  }
 
   return headers;
 }
 
-async function proxyApiRequest(request, env, { transformResponse } = {}) {
+async function proxyApiRequest(request, env, { transformResponse, upstreamAuthorization } = {}) {
   if (!env.UPSTREAM_ORIGIN) {
     return Response.json({ error: 'Proxy upstream is not configured.' }, { status: 500 });
   }
@@ -142,7 +172,7 @@ async function proxyApiRequest(request, env, { transformResponse } = {}) {
 
   const response = await fetch(upstreamUrl, {
     method: request.method,
-    headers: buildUpstreamHeaders(request, upstreamOrigin),
+    headers: buildUpstreamHeaders(request, upstreamOrigin, { authorization: upstreamAuthorization }),
     body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
     redirect: 'manual',
   });
@@ -246,15 +276,34 @@ async function ensureVirtualUsersTable(db) {
   await db.prepare('CREATE INDEX IF NOT EXISTS idx_virtual_users_username ON virtual_users (username)').run();
 }
 
+async function ensureTableColumns(db, tableName, columnDefinitions) {
+  const { results = [] } = await db.prepare(`PRAGMA table_info(${tableName})`).all();
+  const existingColumns = new Set(results.map((column) => String(column.name || '').toLowerCase()));
+
+  for (const [columnName, definition] of Object.entries(columnDefinitions)) {
+    if (!existingColumns.has(columnName.toLowerCase())) {
+      await db.prepare(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`).run();
+    }
+  }
+}
+
 async function ensureVirtualSessionsTable(db) {
   await db.prepare(`
     CREATE TABLE IF NOT EXISTS virtual_sessions (
       token_hash TEXT PRIMARY KEY,
       virtual_user_id TEXT NOT NULL,
+      upstream_access_token TEXT,
+      upstream_token_type TEXT,
+      upstream_refresh_token TEXT,
       expires_at TEXT,
       created_at TEXT NOT NULL
     )
   `).run();
+  await ensureTableColumns(db, 'virtual_sessions', {
+    upstream_access_token: 'TEXT',
+    upstream_token_type: 'TEXT',
+    upstream_refresh_token: 'TEXT',
+  });
   await db.prepare('CREATE INDEX IF NOT EXISTS idx_virtual_sessions_expires_at ON virtual_sessions (expires_at)').run();
 }
 
@@ -342,6 +391,16 @@ function getBearerToken(request) {
   return match ? match[1].trim() : '';
 }
 
+function buildAuthorizationHeader(tokenType = 'Bearer', token = '') {
+  if (!token) return '';
+  return `${tokenType || 'Bearer'} ${token}`;
+}
+
+function getVirtualUpstreamAuthorization(virtualContext) {
+  if (!virtualContext?.user || !virtualContext.upstreamAccessToken) return '';
+  return buildAuthorizationHeader(virtualContext.upstreamTokenType, virtualContext.upstreamAccessToken);
+}
+
 function hasVirtualPermission(virtualUser, permission) {
   const permissions = Array.isArray(virtualUser?.permissions) ? virtualUser.permissions : [];
   return permissions.includes(permission);
@@ -364,6 +423,17 @@ function findIdentityValues(value, depth = 0) {
   return identities;
 }
 
+function findMitraId(value, depth = 0) {
+  if (!value || depth > 5 || typeof value !== 'object') return '';
+  if (typeof value.mitra_id === 'string' && value.mitra_id.trim()) return value.mitra_id.trim();
+  if (typeof value.mitraId === 'string' && value.mitraId.trim()) return value.mitraId.trim();
+  for (const nested of Object.values(value)) {
+    const found = findMitraId(nested, depth + 1);
+    if (found) return found;
+  }
+  return '';
+}
+
 async function getVirtualSessionContext(request, env) {
   const token = getBearerToken(request);
   if (!token || !env.PLACEHOLDER_DB) return null;
@@ -373,18 +443,26 @@ async function getVirtualSessionContext(request, env) {
   await env.PLACEHOLDER_DB.prepare('DELETE FROM virtual_sessions WHERE expires_at IS NOT NULL AND expires_at <= ?').bind(now).run();
   const tokenHash = await hashValue(token);
   const row = await env.PLACEHOLDER_DB.prepare(`
-    SELECT vu.*
+    SELECT vu.*, vs.upstream_access_token, vs.upstream_token_type, vs.upstream_refresh_token
     FROM virtual_sessions vs
     LEFT JOIN virtual_users vu ON vu.id = vs.virtual_user_id
     WHERE vs.token_hash = ? AND (vs.expires_at IS NULL OR vs.expires_at > ?)
   `).bind(tokenHash, now).first();
 
   if (!row) return null;
+  if (!row.upstream_access_token) {
+    return { error: responseWithStatus('Virtual session must be refreshed. Please sign in again.', 401) };
+  }
   if (!row.id || row.deleted_at || !row.is_active) {
     return { error: responseWithStatus('Virtual user was not found or is inactive.', 403) };
   }
 
-  return { user: rowToVirtualUser(row) };
+  return {
+    user: rowToVirtualUser(row),
+    upstreamAccessToken: row.upstream_access_token,
+    upstreamTokenType: row.upstream_token_type || 'Bearer',
+    upstreamRefreshToken: row.upstream_refresh_token || null,
+  };
 }
 
 async function isVirtualSession(request, env) {
@@ -416,6 +494,89 @@ async function storeMasterSession(env, payload) {
     INSERT OR REPLACE INTO master_sessions (token_hash, expires_at, created_at)
     VALUES (?, ?, ?)
   `).bind(await hashValue(payload.access_token), expiresAt, now).run();
+}
+
+function getExpiresAtFromPayload(payload) {
+  const expiresInMs = Number(payload?.expires_in || 0) * 1000;
+  return expiresInMs ? new Date(Date.now() + expiresInMs).toISOString() : null;
+}
+
+function getExpiresInFromDate(expiresAt) {
+  if (!expiresAt) return undefined;
+  const expiresAtMs = Date.parse(expiresAt);
+  if (!Number.isFinite(expiresAtMs)) return undefined;
+  return Math.max(Math.floor((expiresAtMs - Date.now()) / 1000), 1);
+}
+
+async function isUpstreamSessionUsable(env, upstreamSession) {
+  if (!env.UPSTREAM_ORIGIN || !upstreamSession?.accessToken) return false;
+  const upstreamOrigin = env.UPSTREAM_ORIGIN.replace(/\/$/, '');
+
+  try {
+    const response = await fetch(`${upstreamOrigin}/api/auth/me`, {
+      headers: {
+        Accept: 'application/json, text/plain, */*',
+        Authorization: buildAuthorizationHeader(upstreamSession.tokenType, upstreamSession.accessToken),
+        Origin: upstreamOrigin,
+        Referer: `${upstreamOrigin}/`,
+      },
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function getReusableVirtualUpstreamSession(env) {
+  await ensureVirtualSessionsTable(env.PLACEHOLDER_DB);
+  const now = new Date().toISOString();
+  await env.PLACEHOLDER_DB.prepare('DELETE FROM virtual_sessions WHERE expires_at IS NOT NULL AND expires_at <= ?').bind(now).run();
+  const row = await env.PLACEHOLDER_DB.prepare(`
+    SELECT upstream_access_token, upstream_token_type, upstream_refresh_token, expires_at
+    FROM virtual_sessions
+    WHERE upstream_access_token IS NOT NULL
+      AND upstream_access_token != ''
+      AND (expires_at IS NULL OR expires_at > ?)
+    ORDER BY created_at DESC
+    LIMIT 1
+  `).bind(now).first();
+
+  if (!row?.upstream_access_token) return null;
+  const upstreamSession = {
+    accessToken: row.upstream_access_token,
+    tokenType: row.upstream_token_type || 'Bearer',
+    refreshToken: row.upstream_refresh_token || null,
+    expiresAt: row.expires_at || null,
+  };
+
+  if (await isUpstreamSessionUsable(env, upstreamSession)) {
+    return upstreamSession;
+  }
+
+  await env.PLACEHOLDER_DB.prepare('DELETE FROM virtual_sessions WHERE upstream_access_token = ?').bind(upstreamSession.accessToken).run();
+  return null;
+}
+
+async function createVirtualSession(env, virtualUserId, upstreamSession) {
+  const sessionToken = `${VIRTUAL_SESSION_TOKEN_PREFIX}${randomHex(32)}`;
+  const now = new Date().toISOString();
+  await env.PLACEHOLDER_DB.prepare(`
+    INSERT INTO virtual_sessions (
+      token_hash, virtual_user_id, upstream_access_token, upstream_token_type,
+      upstream_refresh_token, expires_at, created_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    await hashValue(sessionToken),
+    virtualUserId,
+    upstreamSession.accessToken,
+    upstreamSession.tokenType || 'Bearer',
+    upstreamSession.refreshToken || null,
+    upstreamSession.expiresAt || null,
+    now,
+  ).run();
+
+  return sessionToken;
 }
 
 async function requireMasterVirtualUserAccess(request, env) {
@@ -490,8 +651,12 @@ function shouldMaskCalendarMoney(pathname, virtualContext) {
   return Boolean(
     virtualContext?.user &&
     !hasVirtualPermission(virtualContext.user, CALENDAR_REVENUE_PERMISSION) &&
-    /^\/api\/admin\/schedule-cal-courts(?:\/|$)/.test(pathname)
+    CALENDAR_MONEY_ENDPOINT_PATTERNS.some((pattern) => pattern.test(pathname))
   );
+}
+
+function isMoneyFieldName(key) {
+  return MONEY_FIELD_NAMES.has(String(key || '').toLowerCase());
 }
 
 function stripMoneyFields(value) {
@@ -499,7 +664,7 @@ function stripMoneyFields(value) {
   if (!value || typeof value !== 'object') return value;
 
   return Object.fromEntries(Object.entries(value)
-    .filter(([key]) => !MONEY_FIELD_NAMES.has(key.toLowerCase()))
+    .filter(([key]) => !isMoneyFieldName(key))
     .map(([key, nested]) => [key, stripMoneyFields(nested)]));
 }
 
@@ -667,48 +832,50 @@ async function handleVirtualLoginRequest(request, env) {
     return withCors(Response.json({ error: 'Unable to sign in with those credentials.' }, { status: 401 }), request, env);
   }
 
-  const upstreamOrigin = env.UPSTREAM_ORIGIN.replace(/\/$/, '');
-  const upstreamResponse = await fetch(`${upstreamOrigin}/api/auth/login`, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json, text/plain, */*',
-      'Content-Type': 'application/json',
-      Origin: upstreamOrigin,
-      Referer: `${upstreamOrigin}/`,
-    },
-    body: JSON.stringify({
-      username: env.MASTER_USERNAME,
-      password: env.MASTER_PASSWORD,
-      remember: body.remember,
-    }),
-    redirect: 'manual',
-  });
+  let upstreamSession = await getReusableVirtualUpstreamSession(env);
+  if (!upstreamSession) {
+    const upstreamOrigin = env.UPSTREAM_ORIGIN.replace(/\/$/, '');
+    const upstreamResponse = await fetch(`${upstreamOrigin}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json, text/plain, */*',
+        'Content-Type': 'application/json',
+        Origin: upstreamOrigin,
+        Referer: `${upstreamOrigin}/`,
+      },
+      body: JSON.stringify({
+        username: env.MASTER_USERNAME,
+        password: env.MASTER_PASSWORD,
+        remember: body.remember,
+      }),
+      redirect: 'manual',
+    });
 
-  const payload = await readJsonResponse(upstreamResponse);
-  if (!upstreamResponse.ok) {
-    const message = payload?.message || payload?.error || 'Unable to sign in with the configured master account.';
-    return withCors(Response.json({ error: message }, { status: upstreamResponse.status }), request, env);
+    const payload = await readJsonResponse(upstreamResponse);
+    if (!upstreamResponse.ok) {
+      const message = payload?.message || payload?.error || 'Unable to sign in with the configured master account.';
+      return withCors(Response.json({ error: message }, { status: upstreamResponse.status }), request, env);
+    }
+
+    if (!payload?.access_token) {
+      return withCors(Response.json({ error: 'The configured master account did not return an access token.' }, { status: 502 }), request, env);
+    }
+
+    upstreamSession = {
+      accessToken: payload.access_token,
+      tokenType: payload.token_type || 'Bearer',
+      refreshToken: payload.refresh_token || null,
+      expiresAt: getExpiresAtFromPayload(payload),
+    };
   }
 
-  if (payload?.access_token) {
-    const now = new Date().toISOString();
-    const expiresInMs = Number(payload.expires_in || 0) * 1000;
-    const expiresAt = expiresInMs ? new Date(Date.now() + expiresInMs).toISOString() : null;
-    await env.PLACEHOLDER_DB.prepare(`
-      INSERT OR REPLACE INTO virtual_sessions (token_hash, virtual_user_id, expires_at, created_at)
-      VALUES (?, ?, ?, ?)
-    `).bind(
-      await hashValue(payload.access_token),
-      virtualUser.id,
-      expiresAt,
-      now,
-    ).run();
-  }
-
+  const sessionToken = await createVirtualSession(env, virtualUser.id, upstreamSession);
   return withCors(Response.json({
-    ...payload,
+    access_token: sessionToken,
+    token_type: 'Bearer',
+    expires_in: getExpiresInFromDate(upstreamSession.expiresAt),
     virtual_user: rowToVirtualUser(virtualUser),
-  }, { status: upstreamResponse.status }), request, env);
+  }), request, env);
 }
 
 async function handleRegularLoginRequest(request, env, body) {
@@ -722,6 +889,75 @@ async function handleRegularLoginRequest(request, env, body) {
   const payload = await readJsonResponse(response.clone());
   await storeMasterSession(env, payload);
   return response;
+}
+
+function virtualAuthMePayload(virtualUser, upstreamAuthMePayload = null) {
+  const mitraId = findMitraId(upstreamAuthMePayload);
+  const payload = {
+    data: {
+      id: virtualUser.id,
+      name: virtualUser.display_name,
+      username: virtualUser.login_username,
+      is_virtual: true,
+      virtual_user: virtualUser,
+    },
+    virtual_user: virtualUser,
+  };
+
+  if (mitraId) {
+    payload.data.mitra_id = mitraId;
+    payload.data.mitraId = mitraId;
+    payload.mitra_id = mitraId;
+    payload.mitraId = mitraId;
+  }
+
+  return payload;
+}
+
+async function fetchVirtualUpstreamAuthMe(env, virtualContext) {
+  const authorization = getVirtualUpstreamAuthorization(virtualContext);
+  if (!env.UPSTREAM_ORIGIN || !authorization) {
+    return { error: responseWithStatus('Virtual upstream session is unavailable. Please sign in again.', 401) };
+  }
+
+  const upstreamOrigin = env.UPSTREAM_ORIGIN.replace(/\/$/, '');
+  try {
+    const response = await fetch(`${upstreamOrigin}/api/auth/me`, {
+      headers: {
+        Accept: 'application/json, text/plain, */*',
+        Authorization: authorization,
+        Origin: upstreamOrigin,
+        Referer: `${upstreamOrigin}/`,
+      },
+    });
+    const payload = await readJsonResponse(response);
+    if (!response.ok) {
+      const message = payload?.message || payload?.error || 'Unable to verify this virtual session.';
+      return { error: Response.json({ error: message }, { status: response.status }) };
+    }
+    return { payload };
+  } catch {
+    return { error: Response.json({ error: 'Unable to verify this virtual session.' }, { status: 502 }) };
+  }
+}
+
+async function handleVirtualAuthMeRequest(request, env, virtualContext) {
+  if (virtualContext?.error) return withCors(virtualContext.error, request, env);
+  if (!virtualContext?.user) return proxyApiRequest(request, env);
+  const upstreamAuthMe = await fetchVirtualUpstreamAuthMe(env, virtualContext);
+  if (upstreamAuthMe.error) return withCors(upstreamAuthMe.error, request, env);
+  return withCors(Response.json(virtualAuthMePayload(virtualContext.user, upstreamAuthMe.payload)), request, env);
+}
+
+async function handleVirtualLogoutRequest(request, env) {
+  const dbError = requireAppDb(env);
+  if (dbError) return withCors(dbError, request, env);
+  const token = getBearerToken(request);
+  if (token) {
+    await ensureVirtualSessionsTable(env.PLACEHOLDER_DB);
+    await env.PLACEHOLDER_DB.prepare('DELETE FROM virtual_sessions WHERE token_hash = ?').bind(await hashValue(token)).run();
+  }
+  return withCors(Response.json({ ok: true }), request, env);
 }
 
 function normalizePlaceholderPayload(payload = {}) {
@@ -832,7 +1068,16 @@ function epochToTimeInput(value) {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) return '';
   const date = new Date(numericValue);
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    hourCycle: 'h23',
+    minute: '2-digit',
+    timeZone: VENUE_TIME_ZONE,
+  }).formatToParts(date);
+  const hour = parts.find((part) => part.type === 'hour')?.value || '00';
+  const minute = parts.find((part) => part.type === 'minute')?.value || '00';
+  return `${hour}:${minute}`;
 }
 
 async function findPlaceholderOverlap(db, payload, excludeId = '') {
@@ -844,7 +1089,7 @@ async function findPlaceholderOverlap(db, payload, excludeId = '') {
   return (results || []).find((row) => row.id !== excludeId && placeholderRangesOverlap(payload, row));
 }
 
-async function findUpstreamBookingOverlap(request, env, payload) {
+async function findUpstreamBookingOverlap(request, env, payload, virtualContext = null) {
   if (!env.UPSTREAM_ORIGIN) return null;
 
   const upstreamOrigin = env.UPSTREAM_ORIGIN.replace(/\/$/, '');
@@ -853,7 +1098,9 @@ async function findUpstreamBookingOverlap(request, env, payload) {
   upstreamUrl.searchParams.set('date', payload.date);
 
   const response = await fetch(upstreamUrl, {
-    headers: buildUpstreamHeaders(request, upstreamOrigin),
+    headers: buildUpstreamHeaders(request, upstreamOrigin, {
+      authorization: getVirtualUpstreamAuthorization(virtualContext),
+    }),
     method: 'GET',
     redirect: 'manual',
   });
@@ -971,7 +1218,7 @@ async function handlePlaceholderRequest(request, env, virtualContext = null) {
     if (overlap) {
       return placeholderOverlapResponse(request, env, overlap, canViewMoney);
     }
-    const bookingOverlap = await findUpstreamBookingOverlap(request, env, payload);
+    const bookingOverlap = await findUpstreamBookingOverlap(request, env, payload, virtualContext);
     if (bookingOverlap) {
       return upstreamBookingOverlapResponse(request, env, bookingOverlap);
     }
@@ -1031,7 +1278,7 @@ async function handlePlaceholderRequest(request, env, virtualContext = null) {
     if (overlap) {
       return placeholderOverlapResponse(request, env, overlap, canViewMoney);
     }
-    const bookingOverlap = await findUpstreamBookingOverlap(request, env, payload);
+    const bookingOverlap = await findUpstreamBookingOverlap(request, env, payload, virtualContext);
     if (bookingOverlap) {
       return upstreamBookingOverlapResponse(request, env, bookingOverlap);
     }
@@ -1105,6 +1352,14 @@ export default {
 
     const virtualContext = await getVirtualSessionContext(request, env);
 
+    if (url.pathname === '/api/auth/me') {
+      return handleVirtualAuthMeRequest(request, env, virtualContext);
+    }
+
+    if (url.pathname === '/api/auth/logout' && virtualContext) {
+      return handleVirtualLogoutRequest(request, env);
+    }
+
     if (url.pathname === VIRTUAL_USERS_PREFIX || url.pathname.startsWith(`${VIRTUAL_USERS_PREFIX}/`)) {
       return handleVirtualUsersRequest(request, env);
     }
@@ -1118,6 +1373,7 @@ export default {
 
     return proxyApiRequest(request, env, {
       transformResponse: shouldMaskCalendarMoney(url.pathname, virtualContext) ? stripMoneyFields : null,
+      upstreamAuthorization: getVirtualUpstreamAuthorization(virtualContext),
     });
   },
 };

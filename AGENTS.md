@@ -42,6 +42,7 @@ Pushing `main` to GitHub triggers the project auto-deployment. For publish reque
 - `PANEL_API_ORIGIN`: Optional backend target for the local Vite proxy.
 - `MASTER_USERNAME`: Worker secret for the upstream account used by virtual account logins.
 - `MASTER_PASSWORD`: Worker secret for the upstream account used by virtual account logins.
+- `ALLOWED_ORIGINS`: comma-separated browser origins allowed to call the Worker. An empty value does not reflect arbitrary request origins.
 - `VITE_USE_LOCAL_PLACEHOLDERS`: Optional browser-local placeholder storage escape hatch. Leave unset for D1-backed testing.
 - `VITE_BASE_PATH`: Vite base path for static deployments, for example `/pagi-pagi-padel-panel/`.
 
@@ -49,9 +50,9 @@ Pushing `main` to GitHub triggers the project auto-deployment. For publish reque
 
 - `App.jsx` is intentionally still a single large file from the initial build. It is acceptable to split it when adding meaningful functionality or tests.
 - Calendar data is loaded in `loadCalendarData`, which fetches courts, open hours, one schedule response per weekday, and D1-backed placeholder bookings. Calendar fetches are cached in-memory per auth/revenue scope for 30 seconds per visible date; toolbar refresh, browser refresh, placeholder mutations, and real booking write actions force fresh data.
-- Virtual account login uses an underscore-prefixed username, for example `_frontdesk`. The Worker validates the D1 virtual user, then logs into upstream with `MASTER_USERNAME` and `MASTER_PASSWORD`.
+- Virtual account login uses an underscore-prefixed username, for example `_frontdesk`. The Worker validates the D1 virtual user, returns a Worker-owned opaque session token, and keeps the upstream master token server-side in D1. Legacy virtual sessions without a stored upstream token are rejected and must sign in again.
 - Virtual user management is master-only. The Worker rejects `/api/virtual-users` requests from virtual sessions and from real upstream accounts whose `/api/auth/me` identity does not match `MASTER_USERNAME`.
-- Virtual user permissions control wrapper navigation and Worker endpoint authorization. The Worker maps virtual sessions to D1 token hashes before proxying upstream routes, rejects endpoints outside the user's allowed screens, and masks calendar money fields unless `Calendar revenue` is granted.
+- Virtual user permissions control wrapper navigation and Worker endpoint authorization. The Worker maps opaque virtual sessions to D1 token hashes before proxying upstream routes with the server-side upstream token, rejects endpoints outside the user's allowed screens, and masks calendar money fields unless `Calendar revenue` is granted.
 - Placeholder create mode can select multiple courts; the frontend sends one D1 placeholder row per selected court. Editing remains one placeholder row at a time.
 - Real booking create/convert mode calls the captured upstream `/api/admin/court-booking` endpoint for offline or registered users. Existing booking actions call the captured payment proof, mark-paid, reschedule, notes, and cancel endpoints.
 - Virtual users can create and update placeholder bookings, but the Worker stamps `created_by_name`/`updated_by_name` from the virtual user's display name instead of trusting submitted PIC names.

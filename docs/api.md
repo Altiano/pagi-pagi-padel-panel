@@ -49,7 +49,7 @@ The client stores this as `panel.auth` in localStorage and also writes Nuxt-comp
 - `auth._token_expiration.local`
 - `auth._refresh_token.local`
 
-If `username` starts with `_`, the Worker treats it as a virtual account login. It strips the underscore prefix, validates the virtual user and password against D1, then logs into the upstream API with `MASTER_USERNAME` and `MASTER_PASSWORD`. The response keeps the upstream token fields and adds:
+If `username` starts with `_`, the Worker treats it as a virtual account login. It strips the underscore prefix, validates the virtual user and password against D1, then reuses or creates a server-side upstream API session with `MASTER_USERNAME` and `MASTER_PASSWORD`. The response returns the Worker-owned token fields and adds:
 
 ```json
 {
@@ -64,6 +64,8 @@ If `username` starts with `_`, the Worker treats it as a virtual account login. 
 }
 ```
 
+For virtual logins, `access_token` is a Worker-owned opaque token instead of the upstream master token. The upstream master token is stored server-side in D1 and swapped into proxied upstream requests by the Worker. Existing legacy virtual sessions that were keyed by an upstream token are rejected with a re-login response after this migration.
+
 The master credentials must be configured on the Worker and must not be exposed as Vite variables.
 
 ### `GET /api/auth/me`
@@ -75,6 +77,8 @@ The client looks for:
 - `data.name`
 - `name`
 - `data.mitra_id`, `mitra_id`, `data.mitraId`, or nested equivalents up to a limited depth
+
+For virtual sessions, the Worker returns the virtual user's display identity while copying only the upstream venue id fields into the synthesized payload. This prevents the browser from seeing the master account identity but still lets Calendar load the real venue instead of the fallback id.
 
 If no `mitraId` is found, the current code falls back to a hard-coded mitra ID in `src/App.jsx`.
 
@@ -533,7 +537,7 @@ Create/update payload:
 
 For updates, omit or blank `password` to keep the current password. Passwords are stored as salted SHA-256 hashes in D1. Permissions control visible navigation in the wrapper UI and Worker authorization before virtual sessions reach proxied upstream endpoints.
 
-The Worker records virtual-issued access token hashes in D1 so `/api/virtual-users` can reject virtual sessions even though those sessions use a master upstream token underneath. Non-master upstream accounts are rejected after the Worker verifies `/api/auth/me` against `MASTER_USERNAME`.
+The Worker records virtual-issued opaque token hashes in D1 so `/api/virtual-users` can reject virtual sessions even though proxied virtual requests use a server-side master upstream token underneath. Non-master upstream accounts are rejected after the Worker verifies `/api/auth/me` against `MASTER_USERNAME`.
 
 Virtual endpoint authorization:
 
@@ -545,7 +549,7 @@ Virtual endpoint authorization:
 - `Add On`: `/api/admin/addons`.
 - `Customers`: player, voucher, promotion, membership, and mitra discount routes.
 - `Setting`: admin user routes and image lookup.
-- `Calendar revenue`: data permission, not a screen. Without it, the Worker strips money fields from calendar schedule responses and placeholder responses for virtual sessions.
+- `Calendar revenue`: data permission, not a screen. Without it, the Worker strips money fields from calendar schedule, booking detail, reschedule price/time responses, and placeholder responses for virtual sessions.
 
 Placeholder audit fields are also server-owned for virtual sessions. On create, the Worker sets both `created_by_name` and `updated_by_name` to the virtual user's display name. On update, it preserves the original creator and sets `updated_by_name` to the virtual user's display name.
 
