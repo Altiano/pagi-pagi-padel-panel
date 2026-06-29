@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
+  CalendarCheck,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
   CircleDollarSign,
   ClipboardList,
+  Clock,
   Copy,
   ExternalLink,
   LayoutDashboard,
@@ -1291,55 +1293,61 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
       </header>
 
       <section className="calendar-toolbar">
-        <div className="segmented-control">
-          <button className={view === 'day' ? 'selected' : ''} onClick={() => setView('day')} type="button">Day</button>
-          <button className={view === 'week' ? 'selected' : ''} onClick={() => setView('week')} type="button">Week</button>
-        </div>
-        <div className="date-controls">
-          <button onClick={() => (view === 'day' ? moveDate(-1) : moveWeek(-1))} type="button">
-            <ChevronLeft size={16} />
+        <div className="toolbar-nav">
+          <div className="segmented-control">
+            <button className={view === 'day' ? 'selected' : ''} onClick={() => setView('day')} type="button">Day</button>
+            <button className={view === 'week' ? 'selected' : ''} onClick={() => setView('week')} type="button">Week</button>
+          </div>
+          <div className="date-controls">
+            <button aria-label="Previous" onClick={() => (view === 'day' ? moveDate(-1) : moveWeek(-1))} type="button">
+              <ChevronLeft size={16} />
+            </button>
+            <input
+              aria-label="Selected date"
+              onChange={(event) => setSelectedDate(event.target.value)}
+              type="date"
+              value={selectedDate}
+            />
+            <button aria-label="Next" onClick={() => (view === 'day' ? moveDate(1) : moveWeek(1))} type="button">
+              <ChevronRight size={16} />
+            </button>
+          </div>
+          <button className="today-button" onClick={() => setSelectedDate(toDateInputValue(new Date()))} type="button">
+            <CalendarCheck size={16} />
+            Today
           </button>
-          <input
-            aria-label="Selected date"
-            onChange={(event) => setSelectedDate(event.target.value)}
-            type="date"
-            value={selectedDate}
-          />
-          <button onClick={() => (view === 'day' ? moveDate(1) : moveWeek(1))} type="button">
-            <ChevronRight size={16} />
-          </button>
-          <button onClick={() => setSelectedDate(toDateInputValue(new Date()))} type="button">Today</button>
-        </div>
-        <div className="calendar-filters">
-          <button onClick={requestCalendarRefresh} type="button">
+          <button aria-label="Refresh calendar" className="toolbar-icon-button" onClick={requestCalendarRefresh} type="button">
             <RefreshCw size={15} />
           </button>
         </div>
-        <button className="placeholder-create-button" onClick={openCreatePlaceholder} type="button">
-          <Plus size={16} />
-          Placeholder
-        </button>
-        {canWriteBookings ? (
-          <button className="real-booking-create-button" onClick={() => openCreateRealBooking()} type="button">
-            <CheckCircle2 size={16} />
-            Booking
+        <div className="toolbar-actions">
+          <div className="open-hours">
+            <Clock size={14} />
+            {formatAvailabilityRange(
+              parseTimeToMinutes(state.openHour?.open_hours || '06:00'),
+              parseTimeToMinutes(state.openHour?.close_hours || '24:00'),
+            )}
+          </div>
+          {!isMobileApp ? (
+            <button
+              className={`summary-toggle-button ${showSummaryPanel ? 'selected' : ''}`}
+              onClick={() => setShowSummaryPanel((current) => !current)}
+              type="button"
+            >
+              <ClipboardList size={15} />
+              Summary
+            </button>
+          ) : null}
+          <button className="placeholder-create-button" onClick={openCreatePlaceholder} type="button">
+            <Plus size={16} />
+            Placeholder
           </button>
-        ) : null}
-        {!isMobileApp ? (
-          <button
-            className={`summary-toggle-button ${showSummaryPanel ? 'selected' : ''}`}
-            onClick={() => setShowSummaryPanel((current) => !current)}
-            type="button"
-          >
-            <ClipboardList size={15} />
-            Summary
-          </button>
-        ) : null}
-        <div className="open-hours">
-          Open: {formatAvailabilityRange(
-            parseTimeToMinutes(state.openHour?.open_hours || '06:00'),
-            parseTimeToMinutes(state.openHour?.close_hours || '24:00'),
-          )}
+          {canWriteBookings ? (
+            <button className="real-booking-create-button" onClick={() => openCreateRealBooking()} type="button">
+              <CheckCircle2 size={16} />
+              Booking
+            </button>
+          ) : null}
         </div>
       </section>
 

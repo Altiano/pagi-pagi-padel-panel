@@ -605,9 +605,20 @@ textarea:focus {
   background: rgba(255, 255, 255, 0.74);
 }
 
+.toolbar-nav,
+.toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-actions {
+  margin-left: auto;
+}
+
 .segmented-control,
-.date-controls,
-.calendar-filters {
+.date-controls {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -621,9 +632,7 @@ textarea:focus {
 }
 
 .segmented-control button,
-.date-controls button,
-.calendar-filters button,
-.calendar-filters span {
+.date-controls button {
   min-height: 36px;
   border: 0;
   border-radius: 9px;
@@ -632,11 +641,6 @@ textarea:focus {
   color: #526052;
   font-size: 13px;
   font-weight: 500;
-}
-
-.segmented-control button,
-.date-controls button,
-.calendar-filters button {
   cursor: pointer;
 }
 
@@ -661,46 +665,62 @@ textarea:focus {
   background: transparent;
 }
 
-.calendar-filters span {
-  display: inline-grid;
-  place-items: center;
-  border: 1px solid var(--line);
-  background: var(--surface);
-}
-
-.open-hours {
-  margin-left: auto;
-  border-radius: 999px;
-  padding: 10px 14px;
-  background: #edf4e5;
-  color: var(--green);
-  font-size: 13px;
-  font-weight: 650;
-}
-
-.placeholder-create-button,
-.real-booking-create-button {
+.today-button {
   display: inline-flex;
   min-height: 38px;
   align-items: center;
-  justify-content: center;
-  gap: 7px;
-  border: 0;
+  gap: 6px;
+  border: 1px solid var(--line);
   border-radius: 11px;
   padding: 0 14px;
-  background: var(--green);
-  color: white;
-  cursor: pointer;
+  background: var(--surface);
+  color: var(--green);
   font-size: 13px;
   font-weight: 650;
+  cursor: pointer;
 }
 
-.real-booking-create-button {
-  border: 1px solid rgba(40, 99, 69, 0.22);
-  background: #edf4e5;
+.today-button:hover {
+  background: #f1f6ec;
+  border-color: rgba(40, 99, 69, 0.28);
+}
+
+.toolbar-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+  color: #526052;
+  cursor: pointer;
+}
+
+.toolbar-icon-button:hover {
+  background: #f1f6ec;
   color: var(--green);
 }
 
+.open-hours {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 13px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.open-hours svg {
+  color: var(--green);
+}
+
+.placeholder-create-button,
+.real-booking-create-button,
 .summary-toggle-button {
   display: inline-flex;
   min-height: 38px;
@@ -709,12 +729,31 @@ textarea:focus {
   gap: 7px;
   border: 1px solid var(--line);
   border-radius: 11px;
-  padding: 0 13px;
+  padding: 0 14px;
   background: var(--surface);
   color: #526052;
   cursor: pointer;
   font-size: 13px;
   font-weight: 650;
+}
+
+.real-booking-create-button {
+  border-color: transparent;
+  background: var(--green);
+  color: white;
+}
+
+.real-booking-create-button:hover {
+  background: var(--green-deep);
+}
+
+.placeholder-create-button {
+  border-color: rgba(40, 99, 69, 0.28);
+  color: var(--green);
+}
+
+.placeholder-create-button:hover {
+  background: #f1f6ec;
 }
 
 .summary-toggle-button.selected {
@@ -2549,27 +2588,32 @@ textarea:focus {
   background: rgba(255, 255, 255, 0.82);
 }
 
-.mobile-calendar-page .segmented-control,
-.mobile-calendar-page .date-controls,
-.mobile-calendar-page .calendar-filters {
+.mobile-calendar-page .toolbar-nav,
+.mobile-calendar-page .toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
   width: 100%;
+  gap: 8px;
+  margin-left: 0;
 }
 
 .mobile-calendar-page .segmented-control {
+  flex: 1 1 100%;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .mobile-calendar-page .segmented-control button,
 .mobile-calendar-page .date-controls button,
-.mobile-calendar-page .calendar-filters button,
-.mobile-calendar-page .calendar-filters span {
+.mobile-calendar-page .today-button,
+.mobile-calendar-page .toolbar-icon-button {
   min-height: 42px;
 }
 
 .mobile-calendar-page .date-controls {
+  flex: 1 1 100%;
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) 42px 72px;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
 }
 
 .mobile-calendar-page .date-controls input {
@@ -2578,9 +2622,13 @@ textarea:focus {
   text-align: center;
 }
 
-.mobile-calendar-page .calendar-filters {
-  display: grid;
-  grid-template-columns: 1fr 1fr 42px;
+.mobile-calendar-page .today-button {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
+.mobile-calendar-page .toolbar-icon-button {
+  flex: 0 0 42px;
 }
 
 .mobile-calendar-page .placeholder-create-button,
@@ -2589,8 +2637,8 @@ textarea:focus {
 }
 
 .mobile-calendar-page .open-hours {
-  margin-left: 0;
-  text-align: center;
+  flex: 1 1 100%;
+  justify-content: center;
 }
 
 .mobile-calendar-page .calendar-layout {
