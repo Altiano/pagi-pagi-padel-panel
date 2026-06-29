@@ -1951,9 +1951,12 @@ function CalendarDetailPanel({
           <div className="detail-conflict-alert waitlist">
             <strong>{waitlistItems.length} waitlist placeholder{waitlistItems.length > 1 ? 's' : ''}</strong>
             {waitlistItems.slice(0, 4).map((item) => (
-              <span key={`${item.type}-${item.id}-${item.time}`}>
-                {item.name} · {item.time}
-              </span>
+              <div className="detail-conflict-row" key={`${item.type}-${item.id}-${item.time}`}>
+                <span>{item.name} · {item.time}</span>
+                {canWriteBookings ? (
+                  <button className="danger-action" onClick={() => onDeletePlaceholder?.(item)} type="button"><Trash2 size={13} /> Delete</button>
+                ) : null}
+              </div>
             ))}
           </div>
         ) : null}
