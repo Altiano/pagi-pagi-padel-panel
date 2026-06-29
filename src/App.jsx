@@ -1311,8 +1311,6 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
           <button onClick={() => setSelectedDate(toDateInputValue(new Date()))} type="button">Today</button>
         </div>
         <div className="calendar-filters">
-          <span>All courts</span>
-          <span>All booking types</span>
           <button onClick={requestCalendarRefresh} type="button">
             <RefreshCw size={15} />
           </button>
