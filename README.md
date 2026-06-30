@@ -79,62 +79,18 @@ wrangler secret put MASTER_USERNAME
 wrangler secret put MASTER_PASSWORD
 ```
 
-## Repository Map
+## Repository Overview
 
 ```text
 src/
   main.jsx          React entrypoint
   App.jsx           Composition root + panel shell (login vs panel, nav gating)
-  constants.js      Shared constants (nav, permissions, cache TTL, durations)
-  hooks.js          usePreferredMobileView, useEscapeKey
-  styles.css        CSS entrypoint importing grouped styles
+  api/              Network, auth, Worker-owned data, calendar cache/endpoints
+  calendar/         Calendar feature UI, state hooks, dialogs, and form builders
+  lib/              Pure helpers and focused unit tests
+  screens/          Login and virtual-user management screens
+  styles.css        CSS entrypoint importing grouped styles from src/styles/
   styles/           Global CSS split by feature area
-    base.css        Tokens, element defaults, shared form/button states
-    shell.css       Panel shell, sidebar, placeholder screens
-    login.css       Login screen
-    virtual-users.css
-                    Virtual user management
-    calendar.css    Calendar toolbar, grids, detail panel, booking tones
-    dialogs.css     Placeholder and real-booking dialogs/drawers
-    mobile.css      Mobile app shell and mobile calendar views
-    responsive.css  Shared responsive breakpoints
-  lib/              Pure, framework-free helpers (unit-test friendly)
-    datetime.js     Date / time / week parsing + formatting
-    format.js       Currency / status / clipboard
-    bookings.js     Booking-shape helpers, overlaps, summaries
-    bookings.test.js
-    navigation.js   Virtual-user nav + permission gating
-    navigation.test.js
-  api/              Network + persistence boundary
-    config.js       API URL builder
-    client.js       Authenticated API request helper (apiRequest)
-    auth.js         Login, localStorage auth persistence, logout cleanup
-    virtualUsers.js Virtual user CRUD
-    placeholders.js Browser-local placeholder escape hatch
-    calendar.js     Calendar data load + cache + booking-action endpoints
-  calendar/         Calendar feature
-    CalendarPage.jsx            Controller wiring state hooks, views, dialogs
-    useCalendarData.js          Calendar load/cache/refresh state
-    useCalendarSelection.js     View/date/detail selection state
-    useCalendarScrollIndicators.js
-                                Day-view auto-scroll + hidden-count indicators
-    usePlaceholderActions.js    Placeholder create/update/delete workflows
-    useRealBookingActions.js    Real booking create/convert/write workflows
-    CalendarViews.jsx           Day/Week/Mobile grid renderers + tooltip
-    CalendarDetailPanel.jsx     Booking detail + day/week summary
-    BookingWriteDialog.jsx      Real booking create/convert dialog
-    PaymentProofDialog.jsx      Receipt upload dialog
-    RescheduleBookingDialog.jsx Reschedule dialog + slot/price checks
-    CancelBookingDialog.jsx     Cancel booking dialog
-    BookingNotesDialog.jsx      Booking notes dialog
-    SlotChoiceDialog.jsx        Placeholder-vs-real slot chooser
-    BookingActionSummary.jsx    Shared booking action header
-    PlaceholderBookingEditor.jsx Placeholder create/edit modal
-    forms.js                    Form-state + upstream-payload builders
-    forms.test.js
-  screens/
-    LoginScreen.jsx       Credential login
-    VirtualUsersPage.jsx  Settings: virtual user management
 docs/
   architecture.md Architecture and data-flow notes
   api.md          Backend endpoint assumptions
@@ -144,6 +100,9 @@ docs/
                   Live app screenshots for mockup alignment
 AGENTS.md         AI-agent working guide (start here; has the full Code Map)
 ```
+
+For the canonical file-by-file code map, use `AGENTS.md`. This README keeps only
+the high-level orientation for human readers.
 
 ## Development Notes
 
