@@ -1839,14 +1839,17 @@ function WeekDayColumn({ bookings, canViewRevenue = true, courts, date, isSelect
 
   return (
     <article className={`week-day ${isSelected ? 'selected' : ''}`}>
-      <div className="week-day-header">
+      <button className="week-day-header" onClick={() => {
+        onSelectDate(date);
+        onSwitchDay();
+      }} type="button">
         <span>{formatWeekday(date)}</span>
         <strong>{formatDayNumber(date)}</strong>
         <small>{bookingLabel}</small>
         <div className="occupancy-bar">
           <span style={{ width: `${summary.occupancy}%` }} />
         </div>
-      </div>
+      </button>
       <div className="week-day-metrics">
         <span>{summary.bookedHours.toFixed(1)}h booked</span>
         <em>{formatMoney(summary.revenue, canViewRevenue)}</em>
@@ -1903,10 +1906,6 @@ function WeekDayColumn({ bookings, canViewRevenue = true, courts, date, isSelect
           </div>
         ) : null}
       </div>
-      <button className="open-day-link" onClick={() => {
-        onSelectDate(date);
-        onSwitchDay();
-      }} type="button">Open day view</button>
     </article>
   );
 }
