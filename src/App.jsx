@@ -34,7 +34,7 @@ import { apiRequest } from './api/client.js';
 import { createVirtualUser, deleteVirtualUser, listVirtualUsers, updateVirtualUser } from './api/virtualUsers.js';
 
 const APP_VERSION = import.meta.env.VITE_APP_VERSION || '0.1.0';
-const APP_BUILD_DATE = import.meta.env.VITE_BUILD_DATE || '';
+const APP_BUILD_TIMESTAMP = import.meta.env.VITE_BUILD_TIMESTAMP || '';
 const navGroups = [
   {
     label: 'Main',
@@ -395,7 +395,7 @@ function getCalendarCacheScope(auth, canViewRevenue) {
 }
 
 function DesktopSidebar({ activeNav, navGroups: visibleNavGroups, onChangeNav }) {
-  const buildDateLabel = formatBuildDate(APP_BUILD_DATE);
+  const buildTimestampLabel = formatBuildTimestamp(APP_BUILD_TIMESTAMP);
 
   return (
     <aside className="sidebar">
@@ -429,9 +429,9 @@ function DesktopSidebar({ activeNav, navGroups: visibleNavGroups, onChangeNav })
         ))}
       </nav>
 
-      <div className="sidebar-build" title={`Build v${APP_VERSION}${buildDateLabel ? ` on ${buildDateLabel}` : ''}`}>
+      <div className="sidebar-build" title={`Build v${APP_VERSION}${buildTimestampLabel ? ` on ${buildTimestampLabel}` : ''}`}>
         <span>v{APP_VERSION}</span>
-        {buildDateLabel ? <span>{buildDateLabel}</span> : null}
+        {buildTimestampLabel ? <span>{buildTimestampLabel}</span> : null}
       </div>
     </aside>
   );
@@ -3979,11 +3979,20 @@ function formatMonthLabel(dateValue) {
   return new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(new Date(`${dateValue}T00:00:00`));
 }
 
-function formatBuildDate(dateValue) {
-  if (!dateValue) return '';
-  const date = new Date(`${dateValue}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return dateValue;
-  return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(date);
+function formatBuildTimestamp(timestampValue) {
+  if (!timestampValue) return '';
+  const date = new Date(timestampValue);
+  if (Number.isNaN(date.getTime())) return timestampValue;
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    hour: '2-digit',
+    hour12: false,
+    minute: '2-digit',
+    month: 'short',
+    timeZone: 'UTC',
+    timeZoneName: 'short',
+    year: 'numeric',
+  }).format(date);
 }
 
 function buildMonthMatrix(dateValue) {

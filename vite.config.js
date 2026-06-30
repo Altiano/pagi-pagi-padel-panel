@@ -22,7 +22,7 @@ export default defineConfig({
   base: process.env.VITE_BASE_PATH || '/',
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(packageJson.version),
-    'import.meta.env.VITE_BUILD_DATE': JSON.stringify(new Date().toISOString().slice(0, 10)),
+    'import.meta.env.VITE_BUILD_TIMESTAMP': JSON.stringify(new Date().toISOString()),
   },
   plugins: [react()],
   server: {
