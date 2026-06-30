@@ -101,6 +101,71 @@ const VIRTUAL_ENDPOINT_RULES = [
     ],
   },
 ];
+const LOG_LEVELS = {
+  debug: 10,
+  info: 20,
+  warn: 30,
+  error: 40,
+  silent: 100,
+};
+const SENSITIVE_LOG_KEYS = new Set([
+  'access_token',
+  'authorization',
+  'cookie',
+  'password',
+  'refresh_token',
+  'set-cookie',
+  'token',
+]);
+
+function createRequestContext(request) {
+  const url = new URL(request.url);
+  return {
+    method: request.method,
+    origin: request.headers.get('Origin') || '',
+    pathname: url.pathname,
+    requestId: request.headers.get('X-Request-ID') || crypto.randomUUID(),
+  };
+}
+
+function shouldLog(env, level) {
+  const configuredLevel = String(env.WORKER_LOG_LEVEL || 'info').toLowerCase();
+  const threshold = LOG_LEVELS[configuredLevel] ?? LOG_LEVELS.info;
+  return (LOG_LEVELS[level] ?? LOG_LEVELS.info) >= threshold;
+}
+
+function sanitizeLogValue(value, depth = 0) {
+  if (depth > 5) return '[truncated]';
+  if (Array.isArray(value)) return value.map((item) => sanitizeLogValue(item, depth + 1));
+  if (!value || typeof value !== 'object') return value;
+
+  return Object.fromEntries(Object.entries(value).map(([key, nested]) => {
+    if (SENSITIVE_LOG_KEYS.has(key.toLowerCase())) return [key, '[redacted]'];
+    return [key, sanitizeLogValue(nested, depth + 1)];
+  }));
+}
+
+function logWorker(env, level, event, context = {}, details = {}) {
+  if (!shouldLog(env, level)) return;
+
+  const entry = sanitizeLogValue({
+    event,
+    level,
+    method: context.method,
+    origin: context.origin,
+    pathname: context.pathname,
+    request_id: context.requestId,
+    timestamp: new Date().toISOString(),
+    ...details,
+  });
+  if (level === 'error') {
+    console.error(entry);
+  } else if (level === 'warn') {
+    console.warn(entry);
+  } else {
+    console.log(entry);
+  }
+}
 
 function getAllowedOrigin(request, env) {
   const origin = request.headers.get('Origin');
@@ -139,30 +204,51 @@ function buildUpstreamHeaders(request, upstreamOrigin) {
   return headers;
 }
 
-async function proxyApiRequest(request, env, { transformResponse } = {}) {
+async function proxyApiRequest(request, env, { context = createRequestContext(request), transformResponse } = {}) {
   if (!env.UPSTREAM_ORIGIN) {
-    return Response.json({ error: 'Proxy upstream is not configured.' }, { status: 500 });
+    logWorker(env, 'error', 'proxy.missing_upstream_origin', context);
+    return withCors(Response.json({ error: 'Proxy upstream is not configured.' }, { status: 500 }), request, env, context);
   }
 
   const requestUrl = new URL(request.url);
   if (!requestUrl.pathname.startsWith('/api/')) {
-    return Response.json({ error: 'Not found.' }, { status: 404, headers: corsHeaders(request, env) });
+    return withCors(Response.json({ error: 'Not found.' }, { status: 404 }), request, env, context);
   }
 
   const upstreamOrigin = env.UPSTREAM_ORIGIN.replace(/\/$/, '');
   const upstreamUrl = new URL(`${upstreamOrigin}${requestUrl.pathname}${requestUrl.search}`);
 
-  const response = await fetch(upstreamUrl, {
-    method: request.method,
-    headers: buildUpstreamHeaders(request, upstreamOrigin),
-    body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
-    redirect: 'manual',
+  const startedAt = Date.now();
+  let response;
+  try {
+    response = await fetch(upstreamUrl, {
+      method: request.method,
+      headers: buildUpstreamHeaders(request, upstreamOrigin),
+      body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
+      redirect: 'manual',
+    });
+  } catch (error) {
+    logWorker(env, 'error', 'proxy.upstream_fetch_exception', context, {
+      duration_ms: Date.now() - startedAt,
+      error_message: error?.message || String(error),
+      upstream_pathname: upstreamUrl.pathname,
+    });
+    return withCors(Response.json({ error: 'Unable to reach the upstream service.' }, { status: 502 }), request, env, context);
+  }
+
+  const logLevel = response.ok ? 'info' : 'warn';
+  logWorker(env, logLevel, 'proxy.upstream_response', context, {
+    duration_ms: Date.now() - startedAt,
+    upstream_pathname: upstreamUrl.pathname,
+    upstream_status: response.status,
+    upstream_status_text: response.statusText,
   });
 
   const responseHeaders = new Headers(response.headers);
   for (const [key, value] of Object.entries(corsHeaders(request, env))) {
     responseHeaders.set(key, value);
   }
+  responseHeaders.set('X-Panel-Request-ID', context.requestId);
 
   if (transformResponse) {
     const payload = await readJsonResponse(response);
@@ -662,20 +748,25 @@ async function handleVirtualUsersRequest(request, env) {
   return withCors(Response.json({ error: 'Not found.' }, { status: 404 }), request, env);
 }
 
-async function handleVirtualLoginRequest(request, env) {
+async function handleVirtualLoginRequest(request, env, context = createRequestContext(request)) {
   const body = await readJsonBody(request.clone()) || {};
   const username = String(body.username || '');
   if (!username.startsWith(VIRTUAL_LOGIN_PREFIX)) {
-    return handleRegularLoginRequest(request, env, body);
+    return handleRegularLoginRequest(request, env, body, context);
   }
 
   const dbError = requireAppDb(env);
-  if (dbError) return withCors(dbError, request, env);
+  if (dbError) {
+    logWorker(env, 'error', 'auth.virtual_login.missing_db', context);
+    return withCors(dbError, request, env, context);
+  }
   if (!env.MASTER_USERNAME || !env.MASTER_PASSWORD) {
-    return withCors(Response.json({ error: 'Virtual login master credentials are not configured.' }, { status: 500 }), request, env);
+    logWorker(env, 'error', 'auth.virtual_login.missing_master_credentials', context);
+    return withCors(Response.json({ error: 'Virtual login master credentials are not configured.' }, { status: 500 }), request, env, context);
   }
   if (!env.UPSTREAM_ORIGIN) {
-    return withCors(Response.json({ error: 'Proxy upstream is not configured.' }, { status: 500 }), request, env);
+    logWorker(env, 'error', 'auth.virtual_login.missing_upstream_origin', context);
+    return withCors(Response.json({ error: 'Proxy upstream is not configured.' }, { status: 500 }), request, env, context);
   }
 
   await ensureVirtualUsersTable(env.PLACEHOLDER_DB);
@@ -683,35 +774,64 @@ async function handleVirtualLoginRequest(request, env) {
   const virtualUsername = normalizeVirtualUsername(username);
   const virtualUser = await env.PLACEHOLDER_DB.prepare('SELECT * FROM virtual_users WHERE username = ? AND deleted_at IS NULL').bind(virtualUsername).first();
   if (!virtualUser || !virtualUser.is_active) {
-    return withCors(Response.json({ error: 'Virtual user was not found or is inactive.' }, { status: 401 }), request, env);
+    logWorker(env, 'warn', 'auth.virtual_login.virtual_user_unavailable', context, {
+      virtual_username: virtualUsername,
+    });
+    return withCors(Response.json({ error: 'Virtual user was not found or is inactive.' }, { status: 401 }), request, env, context);
   }
 
   const passwordHash = await hashPassword(String(body.password || ''), virtualUser.password_salt);
   if (!safeEqual(passwordHash, virtualUser.password_hash)) {
-    return withCors(Response.json({ error: 'Unable to sign in with those credentials.' }, { status: 401 }), request, env);
+    logWorker(env, 'warn', 'auth.virtual_login.invalid_virtual_password', context, {
+      virtual_user_id: virtualUser.id,
+      virtual_username: virtualUsername,
+    });
+    return withCors(Response.json({ error: 'Unable to sign in with those credentials.' }, { status: 401 }), request, env, context);
   }
 
   const upstreamOrigin = env.UPSTREAM_ORIGIN.replace(/\/$/, '');
-  const upstreamResponse = await fetch(`${upstreamOrigin}/api/auth/login`, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json, text/plain, */*',
-      'Content-Type': 'application/json',
-      Origin: upstreamOrigin,
-      Referer: `${upstreamOrigin}/`,
-    },
-    body: JSON.stringify({
-      username: env.MASTER_USERNAME,
-      password: env.MASTER_PASSWORD,
-      remember: body.remember,
-    }),
-    redirect: 'manual',
-  });
+  const startedAt = Date.now();
+  let upstreamResponse;
+  try {
+    upstreamResponse = await fetch(`${upstreamOrigin}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json, text/plain, */*',
+        'Content-Type': 'application/json',
+        Origin: upstreamOrigin,
+        Referer: `${upstreamOrigin}/`,
+      },
+      body: JSON.stringify({
+        username: env.MASTER_USERNAME,
+        password: env.MASTER_PASSWORD,
+        remember: body.remember,
+      }),
+      redirect: 'manual',
+    });
+  } catch (error) {
+    logWorker(env, 'error', 'auth.virtual_login.master_fetch_exception', context, {
+      duration_ms: Date.now() - startedAt,
+      error_message: error?.message || String(error),
+      upstream_pathname: '/api/auth/login',
+      virtual_user_id: virtualUser.id,
+      virtual_username: virtualUsername,
+    });
+    return withCors(Response.json({ error: 'Unable to reach the configured master account.' }, { status: 502 }), request, env, context);
+  }
 
   const payload = await readJsonResponse(upstreamResponse);
   if (!upstreamResponse.ok) {
     const message = payload?.message || payload?.error || 'Unable to sign in with the configured master account.';
-    return withCors(Response.json({ error: message }, { status: upstreamResponse.status }), request, env);
+    logWorker(env, 'warn', 'auth.virtual_login.master_upstream_rejected', context, {
+      duration_ms: Date.now() - startedAt,
+      upstream_error: message,
+      upstream_pathname: '/api/auth/login',
+      upstream_status: upstreamResponse.status,
+      upstream_status_text: upstreamResponse.statusText,
+      virtual_user_id: virtualUser.id,
+      virtual_username: virtualUsername,
+    });
+    return withCors(Response.json({ error: message }, { status: upstreamResponse.status }), request, env, context);
   }
 
   if (payload?.access_token) {
@@ -729,14 +849,21 @@ async function handleVirtualLoginRequest(request, env) {
     ).run();
   }
 
+  logWorker(env, 'info', 'auth.virtual_login.success', context, {
+    duration_ms: Date.now() - startedAt,
+    upstream_status: upstreamResponse.status,
+    virtual_user_id: virtualUser.id,
+    virtual_username: virtualUsername,
+  });
+
   return withCors(Response.json({
     ...payload,
     virtual_user: rowToVirtualUser(virtualUser),
-  }, { status: upstreamResponse.status }), request, env);
+  }, { status: upstreamResponse.status }), request, env, context);
 }
 
-async function handleRegularLoginRequest(request, env, body) {
-  const response = await proxyApiRequest(request, env);
+async function handleRegularLoginRequest(request, env, body, context = createRequestContext(request)) {
+  const response = await proxyApiRequest(request, env, { context });
   const masterUsername = String(env.MASTER_USERNAME || '').trim().toLowerCase();
   const loginUsername = String(body.username || '').trim().toLowerCase();
   if (!env.PLACEHOLDER_DB || !masterUsername || loginUsername !== masterUsername || !response.ok) {
@@ -1085,10 +1212,13 @@ async function handlePlaceholderRequest(request, env, virtualContext = null) {
   return withCors(Response.json({ error: 'Not found.' }, { status: 404 }), request, env);
 }
 
-function withCors(response, request, env) {
+function withCors(response, request, env, context = null) {
   const headers = new Headers(response.headers);
   for (const [key, value] of Object.entries(corsHeaders(request, env))) {
     headers.set(key, value);
+  }
+  if (context?.requestId) {
+    headers.set('X-Panel-Request-ID', context.requestId);
   }
   return new Response(response.body, {
     status: response.status,
@@ -1099,6 +1229,7 @@ function withCors(response, request, env) {
 
 export default {
   async fetch(request, env) {
+    const context = createRequestContext(request);
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         status: 204,
@@ -1106,26 +1237,34 @@ export default {
       });
     }
 
-    const url = new URL(request.url);
-    if (url.pathname === '/api/auth/login' && request.method === 'POST') {
-      return handleVirtualLoginRequest(request, env);
+    try {
+      const url = new URL(request.url);
+      if (url.pathname === '/api/auth/login' && request.method === 'POST') {
+        return handleVirtualLoginRequest(request, env, context);
+      }
+
+      const virtualContext = await getVirtualSessionContext(request, env);
+
+      if (url.pathname === VIRTUAL_USERS_PREFIX || url.pathname.startsWith(`${VIRTUAL_USERS_PREFIX}/`)) {
+        return handleVirtualUsersRequest(request, env);
+      }
+
+      if (url.pathname === PLACEHOLDER_PREFIX || url.pathname.startsWith(`${PLACEHOLDER_PREFIX}/`)) {
+        return handlePlaceholderRequest(request, env, virtualContext);
+      }
+
+      const accessError = authorizeVirtualProxyRequest(request, virtualContext);
+      if (accessError) return withCors(accessError, request, env, context);
+
+      return proxyApiRequest(request, env, {
+        context,
+        transformResponse: shouldMaskCalendarMoney(url.pathname, virtualContext) ? stripMoneyFields : null,
+      });
+    } catch (error) {
+      logWorker(env, 'error', 'worker.unhandled_exception', context, {
+        error_message: error?.message || String(error),
+      });
+      return withCors(Response.json({ error: 'Internal server error.', request_id: context.requestId }, { status: 500 }), request, env, context);
     }
-
-    const virtualContext = await getVirtualSessionContext(request, env);
-
-    if (url.pathname === VIRTUAL_USERS_PREFIX || url.pathname.startsWith(`${VIRTUAL_USERS_PREFIX}/`)) {
-      return handleVirtualUsersRequest(request, env);
-    }
-
-    if (url.pathname === PLACEHOLDER_PREFIX || url.pathname.startsWith(`${PLACEHOLDER_PREFIX}/`)) {
-      return handlePlaceholderRequest(request, env, virtualContext);
-    }
-
-    const accessError = authorizeVirtualProxyRequest(request, virtualContext);
-    if (accessError) return withCors(accessError, request, env);
-
-    return proxyApiRequest(request, env, {
-      transformResponse: shouldMaskCalendarMoney(url.pathname, virtualContext) ? stripMoneyFields : null,
-    });
   },
 };

@@ -118,6 +118,7 @@ Other key files:
 - `PANEL_API_ORIGIN`: Optional backend target for the local Vite proxy.
 - `MASTER_USERNAME`: Worker secret for the upstream account used by virtual account logins.
 - `MASTER_PASSWORD`: Worker secret for the upstream account used by virtual account logins.
+- `WORKER_LOG_LEVEL`: Optional Worker log threshold (`debug`, `info`, `warn`, `error`, or `silent`). Defaults to `info`.
 - `VITE_USE_LOCAL_PLACEHOLDERS`: Optional browser-local placeholder storage escape hatch. Leave unset for D1-backed testing.
 - `VITE_BASE_PATH`: Vite base path for static deployments, for example `/pagi-pagi-padel-panel/`.
 
@@ -126,6 +127,7 @@ Other key files:
 - The UI is split into layered modules (see the Code Map above). `App.jsx` is now only the composition root and panel shell; feature code lives under `src/calendar/` and `src/screens/`, with reusable pure helpers under `src/lib/`, workflow hooks under `src/calendar/use*.js`, and the network/cache boundary under `src/api/`.
 - Calendar data is loaded by `useCalendarData` through `loadCalendarData` (in `src/api/calendar.js`), which fetches courts, open hours, one schedule response per weekday, and D1-backed placeholder bookings. Calendar fetches are cached in-memory per auth/revenue scope for the `CALENDAR_DATA_CACHE_TTL_MS` window (in `src/constants.js`) per visible date; toolbar refresh, browser refresh, placeholder mutations, and real booking write actions force fresh data.
 - Virtual account login uses an underscore-prefixed username, for example `_frontdesk`. The Worker validates the D1 virtual user, then logs into upstream with `MASTER_USERNAME` and `MASTER_PASSWORD`.
+- Workers Logs are enabled in `wrangler.toml`. Match `X-Panel-Request-ID` response headers to log `request_id` values in Cloudflare Workers Logs or real-time log tail output when debugging upstream proxy or virtual-login failures. Logs redact secret-looking keys and avoid request bodies.
 - Virtual user management is master-only. The Worker rejects `/api/virtual-users` requests from virtual sessions and from real upstream accounts whose `/api/auth/me` identity does not match `MASTER_USERNAME`.
 - Virtual user permissions control wrapper navigation and Worker endpoint authorization. The Worker maps virtual sessions to D1 token hashes before proxying upstream routes, rejects endpoints outside the user's allowed screens, requires `Calendar booking` for real booking write actions, and masks calendar money fields unless `Calendar revenue` is granted.
 - Placeholder create mode can select multiple courts; the frontend sends one D1 placeholder row per selected court. Multiple placeholders can share the same court/time as a stack, and placeholders that overlap a live booking are treated as waitlist holds. Editing remains one placeholder row at a time.

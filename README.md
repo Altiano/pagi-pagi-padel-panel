@@ -59,12 +59,15 @@ VITE_BASE_PATH=/
 - `UPSTREAM_ORIGIN`: Worker secret/var for the upstream API origin.
 - `MASTER_USERNAME`: Worker secret for the real upstream account used by virtual users.
 - `MASTER_PASSWORD`: Worker secret for the real upstream account used by virtual users.
+- `WORKER_LOG_LEVEL`: optional Worker log threshold (`debug`, `info`, `warn`, `error`, or `silent`). Defaults to `info`.
 
 ## Worker And D1
 
 The Worker proxies ordinary `/api/*` requests to the configured upstream service. `/api/placeholder-bookings` and `/api/virtual-users` are handled locally by the Worker and stored in Cloudflare D1. Virtual users sign in with usernames like `_frontdesk`; the Worker validates that virtual user password, then signs into upstream using `MASTER_USERNAME` and `MASTER_PASSWORD`.
 
 Virtual-user permissions are enforced in the Worker before upstream proxying. Screen permissions map to captured endpoint groups, `Calendar booking` controls real booking write actions, and `Calendar revenue` controls whether calendar money fields are returned. Real booking creation and placeholder conversion require `Calendar` plus `Calendar booking`, but do not require `Calendar revenue`; hidden or blank booking prices are submitted as zero. Placeholder booking audit names are server-stamped for virtual users, so they cannot submit another PIC name as creator/updater.
+
+Workers Logs are enabled in `wrangler.toml` with full request sampling. The Worker emits structured object logs for upstream proxy responses, virtual-login failures, and unhandled exceptions. Responses include `X-Panel-Request-ID`, which can be matched to the `request_id` field in Cloudflare Workers Logs or real-time log tail output. Logs intentionally avoid request bodies, passwords, bearer tokens, and cookie values.
 
 The current `wrangler.toml` is bound to the project D1 database. To create a new database for another environment:
 

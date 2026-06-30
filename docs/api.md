@@ -15,6 +15,14 @@ Static deployment:
 - Browser calls `VITE_API_BASE_URL` plus the request path.
 - GitHub Pages uses the `PANEL_PROXY_ORIGIN` repository secret for `VITE_API_BASE_URL`.
 
+Worker observability:
+
+- Worker responses include `X-Panel-Request-ID`.
+- Workers Logs are enabled in `wrangler.toml` with full request sampling.
+- Worker logs are structured objects and include the matching `request_id`, route, upstream status, and safe upstream error message when available.
+- `WORKER_LOG_LEVEL` controls verbosity (`debug`, `info`, `warn`, `error`, or `silent`) and defaults to `info`.
+- Logs intentionally avoid request bodies, passwords, bearer tokens, and cookie values.
+
 ## Authentication
 
 ### `POST /api/auth/login`
