@@ -2690,9 +2690,9 @@ textarea:focus {
 
 .mobile-build {
   display: grid;
-  max-width: 92px;
+  max-width: 116px;
   color: #9aa395;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 600;
   line-height: 1.25;
   text-align: right;
@@ -2726,7 +2726,7 @@ textarea:focus {
 
 @media (max-width: 390px) {
   .mobile-build {
-    max-width: 72px;
+    max-width: 104px;
     font-size: 8px;
   }
 }

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
@@ -16,12 +16,9 @@ const panelApiOrigin = process.env.PANEL_API_ORIGIN
 
 console.log(`[vite] proxying /api → ${panelApiOrigin}`);
 
-const packageJson = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
-
 export default defineConfig({
   base: process.env.VITE_BASE_PATH || '/',
   define: {
-    'import.meta.env.VITE_APP_VERSION': JSON.stringify(packageJson.version),
     'import.meta.env.VITE_BUILD_TIMESTAMP': JSON.stringify(new Date().toISOString()),
   },
   plugins: [react()],

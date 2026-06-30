@@ -33,7 +33,6 @@ import { clearStoredAuth, getStoredAuth, login } from './api/auth.js';
 import { apiRequest } from './api/client.js';
 import { createVirtualUser, deleteVirtualUser, listVirtualUsers, updateVirtualUser } from './api/virtualUsers.js';
 
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || '0.1.0';
 const APP_BUILD_TIMESTAMP = import.meta.env.VITE_BUILD_TIMESTAMP || '';
 const navGroups = [
   {
@@ -395,7 +394,7 @@ function getCalendarCacheScope(auth, canViewRevenue) {
 }
 
 function DesktopSidebar({ activeNav, navGroups: visibleNavGroups, onChangeNav }) {
-  const buildTimestampLabel = formatBuildTimestamp(APP_BUILD_TIMESTAMP);
+  const buildVersion = formatBuildVersion(APP_BUILD_TIMESTAMP);
 
   return (
     <aside className="sidebar">
@@ -429,16 +428,15 @@ function DesktopSidebar({ activeNav, navGroups: visibleNavGroups, onChangeNav })
         ))}
       </nav>
 
-      <div className="sidebar-build" title={`Build v${APP_VERSION}${buildTimestampLabel ? ` on ${buildTimestampLabel}` : ''}`}>
-        <span>v{APP_VERSION}</span>
-        {buildTimestampLabel ? <span>{buildTimestampLabel}</span> : null}
+      <div className="sidebar-build" title={buildVersion ? `Build ${buildVersion}` : 'Build'}>
+        {buildVersion ? <span>{buildVersion}</span> : null}
       </div>
     </aside>
   );
 }
 
 function MobileAppShell({ activeNav, children, displayName, navItems, onChangeNav, onLogout, onUseDesktopView }) {
-  const buildTimestampLabel = formatBuildTimestamp(APP_BUILD_TIMESTAMP);
+  const buildVersion = formatBuildVersion(APP_BUILD_TIMESTAMP);
 
   return (
     <>
@@ -451,9 +449,8 @@ function MobileAppShell({ activeNav, children, displayName, navItems, onChangeNa
           </div>
         </div>
         <div className="mobile-header-actions">
-          <div className="mobile-build" title={`Build v${APP_VERSION}${buildTimestampLabel ? ` on ${buildTimestampLabel}` : ''}`}>
-            <span>v{APP_VERSION}</span>
-            {buildTimestampLabel ? <span>{buildTimestampLabel}</span> : null}
+          <div className="mobile-build" title={buildVersion ? `Build ${buildVersion}` : 'Build'}>
+            {buildVersion ? <span>{buildVersion}</span> : null}
           </div>
           <button onClick={onUseDesktopView} type="button">Desktop</button>
           <button aria-label="Logout" onClick={onLogout} type="button">
@@ -3985,20 +3982,18 @@ function formatMonthLabel(dateValue) {
   return new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(new Date(`${dateValue}T00:00:00`));
 }
 
-function formatBuildTimestamp(timestampValue) {
+function formatBuildVersion(timestampValue) {
   if (!timestampValue) return '';
   const date = new Date(timestampValue);
   if (Number.isNaN(date.getTime())) return timestampValue;
-  return new Intl.DateTimeFormat('en-GB', {
-    day: '2-digit',
-    hour: '2-digit',
-    hour12: false,
-    minute: '2-digit',
-    month: 'short',
-    timeZone: 'UTC',
-    timeZoneName: 'short',
-    year: 'numeric',
-  }).format(date);
+  const parts = [
+    date.getUTCFullYear(),
+    date.getUTCMonth() + 1,
+    date.getUTCDate(),
+    date.getUTCHours(),
+    date.getUTCMinutes(),
+  ].map((part) => String(part).padStart(2, '0'));
+  return `build.${parts.join('.')}`;
 }
 
 function buildMonthMatrix(dateValue) {
