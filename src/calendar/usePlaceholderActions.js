@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { apiRequest } from '../api/client.js';
-import { normalizePlaceholderBooking } from '../lib/bookings.js';
+import { getPlaceholderStackItems, normalizePlaceholderBooking } from '../lib/bookings.js';
 import { getSelectedCourtIds } from './forms.js';
 
 export function usePlaceholderActions({
@@ -114,8 +114,38 @@ export function usePlaceholderActions({
     }
   }, [onRefresh, setPlaceholderStatus, setSelectedBooking]);
 
+  const deletePlaceholders = useCallback(async (bookings) => {
+    // Each week-view card can stand in for a stack of placeholders sharing a slot,
+    // so expand every selected card into its underlying placeholder ids.
+    const ids = [...new Set(
+      (bookings || [])
+        .flatMap((booking) => getPlaceholderStackItems(booking))
+        .map((item) => item?.placeholder_id || item?.id)
+        .filter(Boolean),
+    )];
+    if (!ids.length) return;
+
+    const label = `${ids.length} placeholder${ids.length > 1 ? 's' : ''}`;
+    setPlaceholderStatus({ state: 'loading', message: `Deleting ${label}...` });
+    const results = await Promise.allSettled(ids.map((id) => apiRequest(`/api/placeholder-bookings/${id}`, { method: 'DELETE' })));
+    const failed = results.filter((result) => result.status === 'rejected');
+
+    if (failed.length) {
+      setPlaceholderStatus({
+        state: 'error',
+        message: `Deleted ${ids.length - failed.length} of ${ids.length} placeholders. ${failed.length} failed: ${failed[0].reason?.message || 'unknown error'}`,
+      });
+    } else {
+      setPlaceholderStatus({ state: 'success', message: `${label} deleted.` });
+    }
+
+    setSelectedBooking(null);
+    onRefresh();
+  }, [onRefresh, setPlaceholderStatus, setSelectedBooking]);
+
   return {
     deletePlaceholder,
+    deletePlaceholders,
     savePlaceholder,
   };
 }
