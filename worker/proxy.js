@@ -16,6 +16,8 @@ const CALENDAR_BOOKING_PERMISSION = 'Calendar booking';
 const UPSTREAM_TOKEN_REFRESH_SKEW_MS = 60 * 1000;
 const DEFAULT_VIRTUAL_SESSION_TTL_SECONDS = 12 * 60 * 60;
 const REMEMBERED_VIRTUAL_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
+const DEFAULT_REAL_SESSION_TTL_SECONDS = 12 * 60 * 60;
+const REMEMBERED_REAL_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 const MONEY_FIELD_NAMES = new Set([
   'amount',
   'balance',
@@ -428,6 +430,38 @@ async function ensureMasterSessionsTable(db) {
   await db.prepare('CREATE INDEX IF NOT EXISTS idx_master_sessions_expires_at ON master_sessions (expires_at)').run();
 }
 
+async function ensureRealSessionsTable(db) {
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS real_sessions (
+      token_hash TEXT PRIMARY KEY,
+      upstream_account_username TEXT NOT NULL,
+      remember INTEGER NOT NULL DEFAULT 0,
+      expires_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT
+    )
+  `).run();
+  await ensureTableColumns(db, 'real_sessions', [
+    { name: 'remember', definition: 'INTEGER NOT NULL DEFAULT 0' },
+    { name: 'updated_at', definition: 'TEXT' },
+  ]);
+  await db.prepare('CREATE INDEX IF NOT EXISTS idx_real_sessions_expires_at ON real_sessions (expires_at)').run();
+  await db.prepare('CREATE INDEX IF NOT EXISTS idx_real_sessions_upstream_account ON real_sessions (upstream_account_username, expires_at)').run();
+}
+
+async function ensureRealAccountCredentialsTable(db) {
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS real_account_credentials (
+      username TEXT PRIMARY KEY,
+      password_salt TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `).run();
+  await db.prepare('CREATE INDEX IF NOT EXISTS idx_real_account_credentials_username ON real_account_credentials (username)').run();
+}
+
 function normalizeVirtualUsername(value = '') {
   return String(value).trim().replace(/^_+/, '').toLowerCase();
 }
@@ -581,6 +615,16 @@ function getConfiguredUpstreamAccounts(env) {
   return fallback ? [fallback] : [];
 }
 
+function findConfiguredUpstreamAccountForLogin(env, username, password) {
+  const normalizedUsername = String(username || '').trim().toLowerCase();
+  const normalizedPassword = String(password || '');
+  if (!normalizedUsername || !normalizedPassword) return null;
+  return getConfiguredUpstreamAccounts(env).find((account) => (
+    account.username.toLowerCase() === normalizedUsername &&
+    account.password === normalizedPassword
+  )) || null;
+}
+
 function compareNullableIso(first, second) {
   if (!first && !second) return 0;
   if (!first) return -1;
@@ -687,6 +731,12 @@ function getVirtualSessionTtlSeconds(env, remember = false) {
   return remember ? REMEMBERED_VIRTUAL_SESSION_TTL_SECONDS : DEFAULT_VIRTUAL_SESSION_TTL_SECONDS;
 }
 
+function getRealSessionTtlSeconds(env, remember = false) {
+  const configured = Number(remember ? env.REAL_SESSION_REMEMBER_TTL_SECONDS : env.REAL_SESSION_TTL_SECONDS);
+  if (Number.isFinite(configured) && configured > 0) return configured;
+  return remember ? REMEMBERED_REAL_SESSION_TTL_SECONDS : DEFAULT_REAL_SESSION_TTL_SECONDS;
+}
+
 function getExpiresAtFromSeconds(seconds) {
   return seconds ? new Date(Date.now() + seconds * 1000).toISOString() : null;
 }
@@ -784,14 +834,55 @@ async function storeUpstreamAccountToken(db, account, payload) {
   };
 }
 
+async function getStoredRealAccountCredential(db, username) {
+  await ensureRealAccountCredentialsTable(db);
+  return db.prepare(`
+    SELECT username, password_salt, password_hash
+    FROM real_account_credentials
+    WHERE username = ?
+  `).bind(username).first();
+}
+
+async function storeRealAccountCredential(db, username, password) {
+  await ensureRealAccountCredentialsTable(db);
+  const now = new Date().toISOString();
+  const salt = randomHex();
+  const passwordHash = await hashPassword(password, salt);
+  await db.prepare(`
+    INSERT INTO real_account_credentials (
+      username, password_salt, password_hash, created_at, updated_at
+    )
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(username) DO UPDATE SET
+      password_salt = excluded.password_salt,
+      password_hash = excluded.password_hash,
+      updated_at = excluded.updated_at
+  `).bind(username, salt, passwordHash, now, now).run();
+}
+
+async function doesRealAccountPasswordMatch(db, username, password) {
+  const credential = await getStoredRealAccountCredential(db, username);
+  if (!credential?.password_salt || !credential?.password_hash) return false;
+  const passwordHash = await hashPassword(password, credential.password_salt);
+  return safeEqual(passwordHash, credential.password_hash);
+}
+
+function authFromStoredUpstreamToken(stored) {
+  if (!stored?.access_token || isIsoExpired(stored.expires_at, UPSTREAM_TOKEN_REFRESH_SKEW_MS)) {
+    return null;
+  }
+  return {
+    accessToken: stored.access_token,
+    tokenType: stored.token_type || 'Bearer',
+  };
+}
+
 async function ensureUpstreamAccountAuth(env, account, { context, remember = false, virtualUser = null } = {}) {
   const stored = await getStoredUpstreamAccountToken(env.PLACEHOLDER_DB, account.username);
-  if (stored?.access_token && !isIsoExpired(stored.expires_at, UPSTREAM_TOKEN_REFRESH_SKEW_MS)) {
+  const storedAuth = authFromStoredUpstreamToken(stored);
+  if (storedAuth) {
     return {
-      auth: {
-        accessToken: stored.access_token,
-        tokenType: stored.token_type || 'Bearer',
-      },
+      auth: storedAuth,
       reused: true,
     };
   }
@@ -868,6 +959,85 @@ async function getVirtualSessionContext(request, env) {
   };
 }
 
+async function cleanupExpiredRealSessions(db, now) {
+  await db.prepare('DELETE FROM real_sessions WHERE expires_at IS NOT NULL AND expires_at <= ?').bind(now).run();
+}
+
+async function createRealSessionLoginResponse(request, env, context, {
+  extraPayload = {},
+  remember = false,
+  upstreamAccountUsername,
+  upstreamTokenReused = false,
+}) {
+  const panelToken = randomHex(32);
+  const tokenHash = await hashValue(panelToken);
+  const now = new Date().toISOString();
+  const sessionTtlSeconds = getRealSessionTtlSeconds(env, remember);
+  const expiresAt = getExpiresAtFromSeconds(sessionTtlSeconds);
+  await ensureRealSessionsTable(env.PLACEHOLDER_DB);
+  await env.PLACEHOLDER_DB.prepare(`
+    INSERT OR REPLACE INTO real_sessions (
+      token_hash, upstream_account_username, remember, expires_at, created_at, updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).bind(
+    tokenHash,
+    upstreamAccountUsername,
+    remember ? 1 : 0,
+    expiresAt,
+    now,
+    now,
+  ).run();
+
+  const masterUsername = String(env.MASTER_USERNAME || '').trim().toLowerCase();
+  if (masterUsername && String(upstreamAccountUsername || '').toLowerCase() === masterUsername) {
+    await ensureMasterSessionsTable(env.PLACEHOLDER_DB);
+    await storeMasterSession(env, panelToken, expiresAt);
+  }
+
+  logWorker(env, 'info', 'auth.real_login.success', context, {
+    upstream_account_username: upstreamAccountUsername,
+    upstream_token_reused: Boolean(upstreamTokenReused),
+  });
+
+  return withCors(Response.json({
+    ...extraPayload,
+    access_token: panelToken,
+    expires_in: sessionTtlSeconds,
+    refresh_token: null,
+    token_type: 'Bearer',
+    upstream_account_username: upstreamAccountUsername,
+  }, { status: 200 }), request, env, context);
+}
+
+async function getRealSessionContext(request, env) {
+  const token = getBearerToken(request);
+  if (!token || !env.PLACEHOLDER_DB) return null;
+  await ensureRealSessionsTable(env.PLACEHOLDER_DB);
+  const now = new Date().toISOString();
+  await cleanupExpiredRealSessions(env.PLACEHOLDER_DB, now);
+  const tokenHash = await hashValue(token);
+  const row = await env.PLACEHOLDER_DB.prepare(`
+    SELECT token_hash, upstream_account_username, remember, expires_at
+    FROM real_sessions
+    WHERE token_hash = ? AND (expires_at IS NULL OR expires_at > ?)
+  `).bind(tokenHash, now).first();
+
+  if (!row) return null;
+  if (!row.upstream_account_username) {
+    return { error: responseWithStatus('Session has expired. Please sign in again.', 401) };
+  }
+
+  return {
+    session: {
+      expiresAt: row.expires_at || null,
+      remember: Boolean(row.remember),
+      tokenHash: row.token_hash,
+      upstreamAccountUsername: row.upstream_account_username || '',
+    },
+  };
+}
+
 async function isVirtualSession(request, env) {
   const context = await getVirtualSessionContext(request, env);
   return Boolean(context?.user || context?.error);
@@ -887,16 +1057,21 @@ async function isMasterSession(request, env) {
   return Boolean(session);
 }
 
-async function storeMasterSession(env, payload) {
-  if (!payload?.access_token) return;
+async function storeMasterSession(env, payloadOrToken, expiresAtOverride = undefined) {
+  const token = typeof payloadOrToken === 'string' ? payloadOrToken : payloadOrToken?.access_token;
+  if (!token) return;
   await ensureMasterSessionsTable(env.PLACEHOLDER_DB);
   const now = new Date().toISOString();
-  const expiresInMs = Number(payload.expires_in || 0) * 1000;
-  const expiresAt = expiresInMs ? new Date(Date.now() + expiresInMs).toISOString() : null;
+  const expiresInMs = typeof payloadOrToken === 'string' ? 0 : Number(payloadOrToken.expires_in || 0) * 1000;
+  const expiresAt = expiresAtOverride !== undefined
+    ? expiresAtOverride
+    : expiresInMs
+      ? new Date(Date.now() + expiresInMs).toISOString()
+      : null;
   await env.PLACEHOLDER_DB.prepare(`
     INSERT OR REPLACE INTO master_sessions (token_hash, expires_at, created_at)
     VALUES (?, ?, ?)
-  `).bind(await hashValue(payload.access_token), expiresAt, now).run();
+  `).bind(await hashValue(token), expiresAt, now).run();
 }
 
 async function requireMasterVirtualUserAccess(request, env) {
@@ -1028,6 +1203,36 @@ async function ensureVirtualUpstreamAuth(virtualContext, env, context) {
     remember: session.remember,
     virtualUser: virtualContext.user,
   });
+}
+
+async function ensureRealUpstreamAuth(realContext, env, context) {
+  if (!realContext?.session) return { auth: null };
+  const session = realContext.session;
+  if (!session?.upstreamAccountUsername) {
+    return { error: responseWithStatus('Session has expired. Please sign in again.', 401) };
+  }
+
+  const upstreamAccounts = getConfiguredUpstreamAccounts(env);
+  const account = upstreamAccounts.find((candidate) => (
+    candidate.username.toLowerCase() === String(session.upstreamAccountUsername || '').toLowerCase()
+  ));
+  if (account) {
+    return ensureUpstreamAccountAuth(env, account, {
+      context,
+      remember: session.remember,
+    });
+  }
+
+  const stored = await getStoredUpstreamAccountToken(env.PLACEHOLDER_DB, session.upstreamAccountUsername);
+  const storedAuth = authFromStoredUpstreamToken(stored);
+  if (storedAuth) {
+    return { auth: storedAuth, reused: true };
+  }
+
+  logWorker(env, 'warn', 'auth.real_session.upstream_token_expired', context, {
+    upstream_account_username: session.upstreamAccountUsername,
+  });
+  return { error: responseWithStatus('Session has expired. Please sign in again.', 401) };
 }
 
 async function handleVirtualUsersRequest(request, env) {
@@ -1288,16 +1493,63 @@ async function handleVirtualLoginRequest(request, env, context = createRequestCo
 }
 
 async function handleRegularLoginRequest(request, env, body, context = createRequestContext(request)) {
+  const loginUsername = String(body.username || '').trim();
+  const loginPassword = String(body.password || '');
+  const remember = Boolean(body.remember);
+  const configuredAccount = env.PLACEHOLDER_DB
+    ? findConfiguredUpstreamAccountForLogin(env, loginUsername, loginPassword)
+    : null;
+  if (configuredAccount) {
+    const upstreamAuthResult = await ensureUpstreamAccountAuth(env, configuredAccount, {
+      context,
+      remember,
+    });
+    if (upstreamAuthResult.error) {
+      return withCors(upstreamAuthResult.error, request, env, context);
+    }
+
+    return createRealSessionLoginResponse(request, env, context, {
+      remember,
+      upstreamAccountUsername: configuredAccount.username,
+      upstreamTokenReused: Boolean(upstreamAuthResult.reused),
+    });
+  }
+
+  if (env.PLACEHOLDER_DB && loginUsername && loginPassword) {
+    const passwordMatchesCachedCredential = await doesRealAccountPasswordMatch(env.PLACEHOLDER_DB, loginUsername, loginPassword);
+    if (passwordMatchesCachedCredential) {
+      const stored = await getStoredUpstreamAccountToken(env.PLACEHOLDER_DB, loginUsername);
+      if (authFromStoredUpstreamToken(stored)) {
+        return createRealSessionLoginResponse(request, env, context, {
+          remember,
+          upstreamAccountUsername: loginUsername,
+          upstreamTokenReused: true,
+        });
+      }
+    }
+  }
+
   const response = await proxyApiRequest(request, env, { context });
-  const masterUsername = String(env.MASTER_USERNAME || '').trim().toLowerCase();
-  const loginUsername = String(body.username || '').trim().toLowerCase();
-  if (!env.PLACEHOLDER_DB || !masterUsername || loginUsername !== masterUsername || !response.ok) {
+  if (!env.PLACEHOLDER_DB || !response.ok) {
     return response;
   }
 
   const payload = await readJsonResponse(response.clone());
-  await storeMasterSession(env, payload);
-  return response;
+  if (!payload?.access_token || !loginUsername) {
+    return response;
+  }
+
+  await storeUpstreamAccountToken(env.PLACEHOLDER_DB, { username: loginUsername }, payload);
+  if (loginPassword) {
+    await storeRealAccountCredential(env.PLACEHOLDER_DB, loginUsername, loginPassword);
+  }
+
+  return createRealSessionLoginResponse(request, env, context, {
+    extraPayload: payload,
+    remember,
+    upstreamAccountUsername: loginUsername,
+    upstreamTokenReused: false,
+  });
 }
 
 function normalizePlaceholderPayload(payload = {}) {
@@ -1679,6 +1931,9 @@ export default {
       }
 
       const virtualContext = await getVirtualSessionContext(request, env);
+      const realContext = virtualContext?.user || virtualContext?.error
+        ? null
+        : await getRealSessionContext(request, env);
 
       if (url.pathname === VIRTUAL_USERS_PREFIX || url.pathname.startsWith(`${VIRTUAL_USERS_PREFIX}/`)) {
         return handleVirtualUsersRequest(request, env);
@@ -1693,7 +1948,9 @@ export default {
 
       const upstreamAuthResult = virtualContext?.user
         ? await ensureVirtualUpstreamAuth(virtualContext, env, context)
-        : null;
+        : realContext?.session
+          ? await ensureRealUpstreamAuth(realContext, env, context)
+          : null;
       if (upstreamAuthResult?.error) return withCors(upstreamAuthResult.error, request, env, context);
 
       return proxyApiRequest(request, env, {

@@ -79,6 +79,8 @@ If `username` starts with `_`, the Worker treats it as a virtual account login. 
 
 For virtual sessions, `access_token` is not an upstream token. It is a random panel token whose hash is stored in D1. `expires_in` is the panel-session lifetime, not the upstream token lifetime. The selected upstream username is returned only for debugging; upstream access and refresh tokens stay server-side in `upstream_account_tokens`, keyed by upstream username, and can be shared by multiple virtual sessions assigned to the same account. The account pool should be configured with the `UPSTREAM_ACCOUNTS_JSON` Worker secret. If it is unset, virtual login falls back to `MASTER_USERNAME` and `MASTER_PASSWORD`. These secrets must not be exposed as Vite variables.
 
+For real logins, the Worker uses the same server-side token sharing model. It returns a per-device panel token, stores its hash in `real_sessions`, and maps later proxied API requests to the account's single reusable row in `upstream_account_tokens`. This lets device A and device B for the same real account share one upstream token. Server-configured accounts can refresh expired upstream tokens with configured credentials. Unknown real accounts seed the shared upstream token and a salted password hash after the first successful upstream login; later matching-password logins reuse the stored upstream token without creating a new upstream login while that token is fresh. If the cached password hash does not match, or the unknown account's stored upstream token has expired, the Worker falls back to a fresh upstream login.
+
 ### `GET /api/auth/me`
 
 Called from `PanelShell` through `apiRequest`.
