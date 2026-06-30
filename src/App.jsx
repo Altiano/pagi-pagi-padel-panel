@@ -33,6 +33,8 @@ import { clearStoredAuth, getStoredAuth, login } from './api/auth.js';
 import { apiRequest } from './api/client.js';
 import { createVirtualUser, deleteVirtualUser, listVirtualUsers, updateVirtualUser } from './api/virtualUsers.js';
 
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || '0.1.0';
+const APP_BUILD_DATE = import.meta.env.VITE_BUILD_DATE || '';
 const navGroups = [
   {
     label: 'Main',
@@ -393,6 +395,8 @@ function getCalendarCacheScope(auth, canViewRevenue) {
 }
 
 function DesktopSidebar({ activeNav, navGroups: visibleNavGroups, onChangeNav }) {
+  const buildDateLabel = formatBuildDate(APP_BUILD_DATE);
+
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
@@ -424,6 +428,11 @@ function DesktopSidebar({ activeNav, navGroups: visibleNavGroups, onChangeNav })
           </div>
         ))}
       </nav>
+
+      <div className="sidebar-build" title={`Build v${APP_VERSION}${buildDateLabel ? ` on ${buildDateLabel}` : ''}`}>
+        <span>v{APP_VERSION}</span>
+        {buildDateLabel ? <span>{buildDateLabel}</span> : null}
+      </div>
     </aside>
   );
 }
@@ -3865,6 +3874,13 @@ function formatDayNumber(dateValue) {
 
 function formatMonthLabel(dateValue) {
   return new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(new Date(`${dateValue}T00:00:00`));
+}
+
+function formatBuildDate(dateValue) {
+  if (!dateValue) return '';
+  const date = new Date(`${dateValue}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return dateValue;
+  return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(date);
 }
 
 function buildMonthMatrix(dateValue) {
