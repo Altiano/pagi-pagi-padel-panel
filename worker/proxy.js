@@ -468,6 +468,31 @@ function rowToVirtualUser(row) {
   };
 }
 
+function getUpstreamTokenStatus(expiresAt) {
+  if (!expiresAt) return 'missing';
+  if (isIsoExpired(expiresAt)) return 'expired';
+  if (isIsoExpired(expiresAt, UPSTREAM_TOKEN_REFRESH_SKEW_MS)) return 'expiring';
+  return 'fresh';
+}
+
+function rowToVirtualSession(row) {
+  return {
+    virtual_user_id: row.virtual_user_id || '',
+    username: row.username || '',
+    login_username: row.username ? `${VIRTUAL_LOGIN_PREFIX}${row.username}` : '',
+    display_name: row.display_name || '',
+    is_active: row.is_active === null || row.is_active === undefined ? null : Boolean(row.is_active),
+    upstream_account_username: row.upstream_account_username || '',
+    session_expires_at: row.session_expires_at || null,
+    session_created_at: row.session_created_at || null,
+    session_updated_at: row.session_updated_at || null,
+    remember: Boolean(row.remember),
+    upstream_token_expires_at: row.upstream_token_expires_at || null,
+    upstream_token_updated_at: row.upstream_token_updated_at || null,
+    upstream_token_status: getUpstreamTokenStatus(row.upstream_token_expires_at),
+  };
+}
+
 function randomHex(byteLength = 16) {
   const bytes = new Uint8Array(byteLength);
   crypto.getRandomValues(bytes);
@@ -1018,6 +1043,32 @@ async function handleVirtualUsersRequest(request, env) {
 
   const url = new URL(request.url);
   const id = url.pathname.slice(VIRTUAL_USERS_PREFIX.length).replace(/^\//, '');
+
+  if (request.method === 'GET' && id === 'sessions') {
+    const now = new Date().toISOString();
+    await ensureUpstreamAccountTokensTable(env.PLACEHOLDER_DB);
+    await cleanupExpiredVirtualSessions(env.PLACEHOLDER_DB, now);
+    const { results } = await env.PLACEHOLDER_DB.prepare(`
+      SELECT
+        vs.virtual_user_id,
+        vs.upstream_account_username,
+        vs.remember,
+        vs.expires_at AS session_expires_at,
+        vs.created_at AS session_created_at,
+        vs.updated_at AS session_updated_at,
+        vu.username,
+        vu.display_name,
+        vu.is_active,
+        uat.expires_at AS upstream_token_expires_at,
+        uat.updated_at AS upstream_token_updated_at
+      FROM virtual_sessions vs
+      LEFT JOIN virtual_users vu ON vu.id = vs.virtual_user_id
+      LEFT JOIN upstream_account_tokens uat ON LOWER(uat.username) = LOWER(vs.upstream_account_username)
+      WHERE vs.expires_at IS NULL OR vs.expires_at > ?
+      ORDER BY vs.created_at DESC
+    `).bind(now).all();
+    return withCors(Response.json({ lists: (results || []).map(rowToVirtualSession) }), request, env);
+  }
 
   if (request.method === 'GET' && !id) {
     const { results } = await env.PLACEHOLDER_DB.prepare(`

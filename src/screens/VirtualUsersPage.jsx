@@ -1,22 +1,30 @@
 import { useEffect, useState } from 'react';
 import { Copy, LogOut, Pencil, Trash2, UserPlus, X } from 'lucide-react';
 import { CALENDAR_BOOKING_PERMISSION, virtualPermissionGroups } from '../constants.js';
-import { createVirtualUser, deleteVirtualUser, listVirtualUsers, updateVirtualUser } from '../api/virtualUsers.js';
+import {
+  createVirtualUser,
+  deleteVirtualUser,
+  listVirtualUserSessions,
+  listVirtualUsers,
+  updateVirtualUser,
+} from '../api/virtualUsers.js';
 import { copyText } from '../lib/format.js';
 import { useEscapeKey } from '../hooks.js';
 
 export function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
   const [users, setUsers] = useState([]);
+  const [sessions, setSessions] = useState([]);
   const [state, setState] = useState({ loading: true, error: '', status: '', canManage: false });
   const [editor, setEditor] = useState({ mode: 'closed', user: null });
 
   useEffect(() => {
     let active = true;
     setState({ loading: true, error: '', status: '', canManage: false });
-    listVirtualUsers()
-      .then((items) => {
+    loadVirtualUserData()
+      .then(({ sessions: sessionItems, users: userItems }) => {
         if (active) {
-          setUsers(items);
+          setUsers(userItems);
+          setSessions(sessionItems);
           setState({ loading: false, error: '', status: '', canManage: true });
         }
       })
@@ -29,9 +37,10 @@ export function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
     };
   }, []);
 
-  async function refreshUsers() {
-    const items = await listVirtualUsers();
-    setUsers(items);
+  async function refreshData() {
+    const data = await loadVirtualUserData();
+    setUsers(data.users);
+    setSessions(data.sessions);
   }
 
   async function saveUser(form) {
@@ -41,7 +50,7 @@ export function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
     } else {
       await createVirtualUser(form);
     }
-    await refreshUsers();
+    await refreshData();
     setEditor({ mode: 'closed', user: null });
     setState({ loading: false, error: '', status: 'Virtual user saved.', canManage: true });
   }
@@ -52,7 +61,7 @@ export function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
     setState((current) => ({ ...current, status: 'Deleting virtual user...' }));
     try {
       await deleteVirtualUser(user.id);
-      await refreshUsers();
+      await refreshData();
       setState({ loading: false, error: '', status: 'Virtual user deleted.', canManage: true });
     } catch (error) {
       setState({ loading: false, error: error.message, status: '', canManage: false });
@@ -120,6 +129,44 @@ export function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
               <div className="empty-state">No virtual users yet.</div>
             )}
           </div>
+
+          {state.canManage ? (
+            <div className="virtual-session-section">
+              <div className="settings-panel-heading compact-heading">
+                <div>
+                  <span className="panel-label">Active sessions</span>
+                  <h2>Upstream use</h2>
+                </div>
+              </div>
+              <div className="virtual-session-list">
+                {state.loading ? (
+                  <div className="empty-state">Loading sessions...</div>
+                ) : sessions.length ? sessions.map((session, index) => (
+                  <article className="virtual-session-row" key={`${session.virtual_user_id}-${session.session_created_at || index}`}>
+                    <div>
+                      <strong>{session.display_name || session.login_username || 'Unknown user'}</strong>
+                      <span>{session.login_username || session.username || 'Unknown login'}</span>
+                    </div>
+                    <div>
+                      <span>Upstream</span>
+                      <strong>{session.upstream_account_username || 'Unassigned'}</strong>
+                    </div>
+                    <div>
+                      <span>Panel expires</span>
+                      <strong>{formatSessionDate(session.session_expires_at)}</strong>
+                    </div>
+                    <div>
+                      <span>Token expires</span>
+                      <strong>{formatSessionDate(session.upstream_token_expires_at)}</strong>
+                    </div>
+                    <span className={`state-pill ${session.upstream_token_status || 'missing'}`}>{formatTokenStatus(session.upstream_token_status)}</span>
+                  </article>
+                )) : (
+                  <div className="empty-state">No active virtual sessions.</div>
+                )}
+              </div>
+            </div>
+          ) : null}
         </article>
 
         <aside className="settings-panel settings-info">
@@ -147,6 +194,33 @@ export function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
       ) : null}
     </>
   );
+}
+
+async function loadVirtualUserData() {
+  const [users, sessions] = await Promise.all([
+    listVirtualUsers(),
+    listVirtualUserSessions(),
+  ]);
+  return { sessions, users };
+}
+
+function formatSessionDate(value) {
+  if (!value) return 'No expiry';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Unknown';
+  return new Intl.DateTimeFormat(undefined, {
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: 'short',
+  }).format(date);
+}
+
+function formatTokenStatus(status) {
+  if (status === 'fresh') return 'Fresh';
+  if (status === 'expiring') return 'Expiring';
+  if (status === 'expired') return 'Expired';
+  return 'Missing';
 }
 
 export function VirtualUserEditor({ mode, user, onClose, onSave }) {
@@ -278,4 +352,3 @@ export function buildVirtualUserForm(user) {
     is_active: true,
   };
 }
-

@@ -5,6 +5,11 @@ export async function listVirtualUsers() {
   return response?.lists || [];
 }
 
+export async function listVirtualUserSessions() {
+  const response = await apiRequest('/api/virtual-users/sessions');
+  return response?.lists || [];
+}
+
 export async function createVirtualUser(payload) {
   const response = await apiRequest('/api/virtual-users', {
     method: 'POST',

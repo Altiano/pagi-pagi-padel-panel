@@ -37,6 +37,16 @@
   gap: 10px;
 }
 
+.virtual-session-section {
+  display: grid;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.compact-heading {
+  margin-bottom: 0;
+}
+
 .virtual-user-card {
   display: grid;
   grid-template-columns: minmax(170px, 0.7fr) minmax(180px, 1fr) auto;
@@ -49,18 +59,38 @@
 }
 
 .virtual-user-card strong,
-.virtual-user-card span {
+.virtual-user-card span,
+.virtual-session-row strong,
+.virtual-session-row span {
   display: block;
 }
 
-.virtual-user-card strong {
+.virtual-user-card strong,
+.virtual-session-row strong {
   font-size: 15px;
 }
 
-.virtual-user-card > div:first-child span {
+.virtual-user-card > div:first-child span,
+.virtual-session-row span {
   margin-top: 4px;
   color: var(--muted);
   font-size: 13px;
+}
+
+.virtual-session-list {
+  display: grid;
+  gap: 8px;
+}
+
+.virtual-session-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(160px, 1fr) minmax(120px, 0.7fr) minmax(120px, 0.7fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  background: #fbfcf8;
 }
 
 .virtual-user-permissions {
@@ -85,6 +115,22 @@
 }
 
 .state-pill.inactive {
+  background: #f4e4df;
+  color: var(--danger);
+}
+
+.state-pill.fresh {
+  background: #e4f2d7;
+  color: var(--green-deep);
+}
+
+.state-pill.expiring {
+  background: #fff0ce;
+  color: #765b11;
+}
+
+.state-pill.expired,
+.state-pill.missing {
   background: #f4e4df;
   color: var(--danger);
 }

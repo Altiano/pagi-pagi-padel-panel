@@ -532,6 +532,7 @@ Virtual users are stored by this wrapper and can only be managed by a real sessi
 The Worker handles these routes locally before proxying other `/api/*` requests upstream:
 
 - `GET /api/virtual-users`
+- `GET /api/virtual-users/sessions`
 - `POST /api/virtual-users`
 - `PUT /api/virtual-users/:id`
 - `DELETE /api/virtual-users/:id`
@@ -551,6 +552,28 @@ Create/update payload:
 For updates, omit or blank `password` to keep the current password. Passwords are stored as salted SHA-256 hashes in D1. Permissions control visible navigation in the wrapper UI and Worker authorization before virtual sessions reach proxied upstream endpoints.
 
 The Worker records virtual-issued panel token hashes in D1. Each virtual session row stores the assigned upstream account username. A dedicated `upstream_account_tokens` table stores one reusable upstream access/refresh token per configured upstream username. On proxy requests, the Worker maps the panel token back to the virtual user, enforces permissions, reuses or refreshes the assigned account token by re-login when it is near expiry, and only then sends the stored upstream token to the upstream API. Non-master upstream accounts are rejected from virtual-user management after the Worker verifies `/api/auth/me` against `MASTER_USERNAME`.
+
+`GET /api/virtual-users/sessions` is master-only and returns active, non-expired virtual panel sessions for debugging account distribution. It does not return panel token hashes or upstream token values.
+
+Representative row:
+
+```json
+{
+  "virtual_user_id": "virtual-user-id",
+  "username": "frontdesk",
+  "login_username": "_frontdesk",
+  "display_name": "Front desk",
+  "is_active": true,
+  "upstream_account_username": "admin-a@example.com",
+  "session_expires_at": "2026-06-30T22:00:00.000Z",
+  "session_created_at": "2026-06-30T10:00:00.000Z",
+  "session_updated_at": "2026-06-30T10:00:00.000Z",
+  "remember": false,
+  "upstream_token_expires_at": "2026-06-30T11:00:00.000Z",
+  "upstream_token_updated_at": "2026-06-30T10:00:00.000Z",
+  "upstream_token_status": "fresh"
+}
+```
 
 Virtual endpoint authorization:
 

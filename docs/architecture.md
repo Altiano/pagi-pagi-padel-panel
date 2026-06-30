@@ -20,7 +20,7 @@ sections below describe how data flows through those layers.
 4. Login posts to `/api/auth/login`, stores auth in localStorage, then renders the panel.
 5. If the login username starts with `_`, the Worker validates a D1-backed virtual user, assigns the least-loaded configured upstream account, reuses or refreshes that account's shared upstream token in D1, and returns a Worker-issued panel token plus virtual-user metadata.
 6. `PanelShell` loads `/api/auth/me`, derives the display name and `mitraId`, applies virtual-user navigation visibility, and renders the active screen.
-7. Calendar is the only fully wired screen today. Settings exposes virtual user management only when the Worker confirms the real master account is signed in. Other navigation items render placeholders.
+7. Calendar is the only fully wired screen today. Settings exposes virtual user management and active virtual-session upstream account mapping only when the Worker confirms the real master account is signed in. Other navigation items render placeholders.
 
 Placeholder bookings and virtual users are wrapper-owned data models. They are stored in Cloudflare D1 through the Worker. Placeholder bookings are merged into Calendar responses on the frontend; staff can later convert a placeholder into a real upstream court booking, optionally uploading a payment receipt, after which the local placeholder is deleted. Virtual users receive Worker-issued panel tokens. Their session rows store the assigned upstream username, while reusable upstream tokens stay server-side in `upstream_account_tokens`, keyed by upstream account. Only a real `MASTER_USERNAME` session can manage virtual users.
 
