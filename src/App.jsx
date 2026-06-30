@@ -799,6 +799,7 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [placeholderEditor, setPlaceholderEditor] = useState({ mode: 'closed', booking: null });
   const [bookingActionEditor, setBookingActionEditor] = useState({ mode: 'closed', booking: null, draft: null });
+  const [slotChoice, setSlotChoice] = useState({ open: false, draft: null });
   const [placeholderStatus, setPlaceholderStatus] = useState({ state: 'idle', message: '' });
   const [hiddenAboveCount, setHiddenAboveCount] = useState(0);
   const [hiddenBelowCount, setHiddenBelowCount] = useState(0);
@@ -815,6 +816,7 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
   const showDetailPanel = !isMobileApp && (selectedBooking || showSummaryPanel);
   const isPlaceholderEditorOpen = placeholderEditor.mode !== 'closed';
   const isBookingActionEditorOpen = bookingActionEditor.mode !== 'closed';
+  const isSlotChoiceOpen = slotChoice.open;
   const showCalendarFeedback = Boolean(state.error || (placeholderStatus.message && !isPlaceholderEditorOpen && !isBookingActionEditorOpen));
 
   useEffect(() => {
@@ -829,12 +831,20 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
     setBookingActionEditor({ mode: 'closed', booking: null, draft: null });
   }
 
+  function closeSlotChoice() {
+    setSlotChoice({ open: false, draft: null });
+  }
+
   function closeCalendarDetail() {
     setSelectedBooking(null);
     setShowSummaryPanel(false);
   }
 
   useEscapeKey(() => {
+    if (isSlotChoiceOpen) {
+      closeSlotChoice();
+      return;
+    }
     if (isBookingActionEditorOpen) {
       closeBookingActionEditor();
       return;
@@ -844,7 +854,7 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
       return;
     }
     closeCalendarDetail();
-  }, isBookingActionEditorOpen || isPlaceholderEditorOpen || Boolean(selectedBooking) || showSummaryPanel);
+  }, isSlotChoiceOpen || isBookingActionEditorOpen || isPlaceholderEditorOpen || Boolean(selectedBooking) || showSummaryPanel);
 
   useEffect(() => {
     let active = true;
@@ -930,6 +940,27 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
   function openCreatePlaceholder(draft = null) {
     setPlaceholderStatus({ state: 'idle', message: '' });
     setPlaceholderEditor({ mode: 'create', booking: null, draft });
+  }
+
+  function openSlotChoice(draft = null) {
+    // Operators without booking-write access can only make placeholders, so skip the prompt.
+    if (!canWriteBookings) {
+      openCreatePlaceholder(draft);
+      return;
+    }
+    setSlotChoice({ open: true, draft });
+  }
+
+  function chooseSlotPlaceholder() {
+    const { draft } = slotChoice;
+    closeSlotChoice();
+    openCreatePlaceholder(draft);
+  }
+
+  function chooseSlotRealBooking() {
+    const { draft } = slotChoice;
+    closeSlotChoice();
+    openCreateRealBooking(draft);
   }
 
   function openEditPlaceholder(booking) {
@@ -1410,6 +1441,7 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
                 selectedBooking={selectedBooking}
                 selectedDate={selectedDate}
                 onSelectBooking={setSelectedBooking}
+                onSelectFreeSlot={openSlotChoice}
               />
             ) : isMobileApp && view === 'week' ? (
               <MobileWeekCalendar
@@ -1419,10 +1451,9 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
                 openHour={state.openHour}
                 selectedDate={selectedDate}
                 weekDays={weekDays}
-                onCreatePlaceholder={openCreatePlaceholder}
-                onCreateRealBooking={openCreateRealBooking}
                 onSelectBooking={setSelectedBooking}
                 onSelectDate={setSelectedDate}
+                onSelectFreeSlot={openSlotChoice}
                 onSwitchDay={() => setView('day')}
               />
             ) : view === 'day' ? (
@@ -1433,9 +1464,8 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
                 openHour={state.openHour}
                 selectedBooking={selectedBooking}
                 selectedDate={selectedDate}
-                onCreatePlaceholder={openCreatePlaceholder}
-                onCreateRealBooking={openCreateRealBooking}
                 onSelectBooking={setSelectedBooking}
+                onSelectFreeSlot={openSlotChoice}
               />
             ) : (
               <WeekCalendar
@@ -1445,10 +1475,9 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
                 openHour={state.openHour}
                 selectedDate={selectedDate}
                 weekDays={weekDays}
-                onCreatePlaceholder={openCreatePlaceholder}
-                onCreateRealBooking={openCreateRealBooking}
                 onSelectBooking={setSelectedBooking}
                 onSelectDate={setSelectedDate}
+                onSelectFreeSlot={openSlotChoice}
                 onSwitchDay={() => setView('day')}
               />
             )}
@@ -1490,9 +1519,17 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
         ) : null}
       </section>
       {isMobileApp ? (
-        <button className="mobile-placeholder-fab" onClick={openCreatePlaceholder} type="button">
+        <button className="mobile-placeholder-fab" onClick={() => openSlotChoice()} type="button">
           <Plus size={20} />
         </button>
+      ) : null}
+      {isSlotChoiceOpen ? (
+        <SlotChoiceDialog
+          draft={slotChoice.draft}
+          onChoosePlaceholder={chooseSlotPlaceholder}
+          onChooseRealBooking={chooseSlotRealBooking}
+          onClose={closeSlotChoice}
+        />
       ) : null}
       {placeholderEditor.mode !== 'closed' ? (
         <PlaceholderBookingEditor
@@ -1592,7 +1629,7 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
   );
 }
 
-function MobileDayAgenda({ bookings, canViewRevenue = true, courts, openHour, selectedBooking, selectedDate, onSelectBooking }) {
+function MobileDayAgenda({ bookings, canViewRevenue = true, courts, openHour, selectedBooking, selectedDate, onSelectBooking, onSelectFreeSlot }) {
   const courtBookings = courts.length ? courts.map((court) => ({
     court,
     entries: buildCourtTimelineEntries(buildCalendarDisplayBookings(bookings.filter((booking) => booking.court_id === court.id)), openHour),
@@ -1615,10 +1652,22 @@ function MobileDayAgenda({ bookings, canViewRevenue = true, courts, openHour, se
           <div className="mobile-agenda-list">
             {entries.length ? entries.map((entry) => (
               entry.type === 'availability' ? (
-                <div className="mobile-availability-row" key={entry.id}>
+                <button
+                  aria-label={`Create booking for ${court.name} at ${formatTimeInput(entry.startMinutes)}`}
+                  className="mobile-availability-row"
+                  key={entry.id}
+                  onClick={() => onSelectFreeSlot?.({
+                    court_id: court.id,
+                    court_name: court.name,
+                    date: selectedDate,
+                    start_time: formatTimeInput(entry.startMinutes),
+                    end_time: formatTimeInput(Math.min(entry.startMinutes + 60, entry.endMinutes)),
+                  })}
+                  type="button"
+                >
                   <span>{entry.label}</span>
                   <strong>Available</strong>
-                </div>
+                </button>
               ) : (
                 <button
                   className={`mobile-booking-row ${getBookingTone(entry.booking)} ${selectedBooking?.id === entry.booking.id ? 'selected' : ''}`}
@@ -1637,10 +1686,21 @@ function MobileDayAgenda({ bookings, canViewRevenue = true, courts, openHour, se
                 </button>
               )
             )) : (
-              <div className="mobile-availability-row">
+              <button
+                aria-label={`Create booking for ${court.name}`}
+                className="mobile-availability-row"
+                onClick={() => onSelectFreeSlot?.({
+                  court_id: court.id,
+                  court_name: court.name,
+                  date: selectedDate,
+                  start_time: openHour?.open_hours || '06:00',
+                  end_time: shiftTime(openHour?.open_hours || '06:00', 60),
+                })}
+                type="button"
+              >
                 <span>{formatAvailabilityRange(parseTimeToMinutes(openHour?.open_hours || '06:00'), parseTimeToMinutes(openHour?.close_hours || '24:00'))}</span>
                 <strong>Available</strong>
-              </div>
+              </button>
             )}
           </div>
         </section>
@@ -1649,7 +1709,7 @@ function MobileDayAgenda({ bookings, canViewRevenue = true, courts, openHour, se
   );
 }
 
-function MobileWeekCalendar({ bookingsByDate, canViewRevenue = true, courts, openHour, selectedDate, weekDays, onCreatePlaceholder, onSelectBooking, onSelectDate, onSwitchDay }) {
+function MobileWeekCalendar({ bookingsByDate, canViewRevenue = true, courts, openHour, selectedDate, weekDays, onSelectBooking, onSelectDate, onSelectFreeSlot, onSwitchDay }) {
   return (
     <div className="mobile-week-list">
       {weekDays.map((date) => {
@@ -1686,7 +1746,7 @@ function MobileWeekCalendar({ bookingsByDate, canViewRevenue = true, courts, ope
                       )) : (
                         <button
                           className="mobile-week-availability"
-                          onClick={() => onCreatePlaceholder?.({
+                          onClick={() => onSelectFreeSlot?.({
                             court_id: court.id,
                             court_name: court.name,
                             date,
@@ -1712,7 +1772,7 @@ function MobileWeekCalendar({ bookingsByDate, canViewRevenue = true, courts, ope
   );
 }
 
-function DayCalendar({ bookings, canViewRevenue = true, courts, openHour, selectedBooking, selectedDate, onCreatePlaceholder, onSelectBooking }) {
+function DayCalendar({ bookings, canViewRevenue = true, courts, openHour, selectedBooking, selectedDate, onSelectBooking, onSelectFreeSlot }) {
   const hours = buildHours(openHour);
   const intervalCount = Math.max(hours.length - 1, 1);
   const startMinutes = parseTimeToMinutes(openHour?.open_hours || '06:00');
@@ -1750,10 +1810,10 @@ function DayCalendar({ bookings, canViewRevenue = true, courts, openHour, select
               if (!isAvailable) return null;
               return (
                 <button
-                  aria-label={`Create placeholder for ${court.name} at ${formatTimeInput(minutes)}`}
+                  aria-label={`Create booking for ${court.name} at ${formatTimeInput(minutes)}`}
                   className="day-slot-button"
                   key={`${court.id}-${minutes}`}
-                  onClick={() => onCreatePlaceholder?.({
+                  onClick={() => onSelectFreeSlot?.({
                     court_id: court.id,
                     court_name: court.name,
                     date: selectedDate,
@@ -1764,7 +1824,7 @@ function DayCalendar({ bookings, canViewRevenue = true, courts, openHour, select
                     top: `${((minutes - startMinutes) / totalMinutes) * 100}%`,
                     height: `${(60 / totalMinutes) * 100}%`,
                   }}
-                  title={`Create placeholder at ${formatTimeInput(minutes)}`}
+                  title={`Create booking at ${formatTimeInput(minutes)}`}
                   type="button"
                 >
                   <span>+</span>
@@ -1800,7 +1860,7 @@ function DayCalendar({ bookings, canViewRevenue = true, courts, openHour, select
   );
 }
 
-function WeekCalendar({ bookingsByDate, canViewRevenue = true, courts, openHour, selectedDate, weekDays, onCreatePlaceholder, onSelectBooking, onSelectDate, onSwitchDay }) {
+function WeekCalendar({ bookingsByDate, canViewRevenue = true, courts, openHour, selectedDate, weekDays, onSelectBooking, onSelectDate, onSelectFreeSlot, onSwitchDay }) {
   return (
     <div className="week-calendar">
       {weekDays.map((date) => {
@@ -1814,9 +1874,9 @@ function WeekCalendar({ bookingsByDate, canViewRevenue = true, courts, openHour,
             isSelected={date === selectedDate}
             key={date}
             openHour={openHour}
-            onCreatePlaceholder={onCreatePlaceholder}
             onSelectBooking={onSelectBooking}
             onSelectDate={onSelectDate}
+            onSelectFreeSlot={onSelectFreeSlot}
             onSwitchDay={onSwitchDay}
           />
         );
@@ -1825,7 +1885,7 @@ function WeekCalendar({ bookingsByDate, canViewRevenue = true, courts, openHour,
   );
 }
 
-function WeekDayColumn({ bookings, canViewRevenue = true, courts, date, isSelected, openHour, onCreatePlaceholder, onSelectBooking, onSelectDate, onSwitchDay }) {
+function WeekDayColumn({ bookings, canViewRevenue = true, courts, date, isSelected, openHour, onSelectBooking, onSelectDate, onSelectFreeSlot, onSwitchDay }) {
   const [hiddenCounts, setHiddenCounts] = useState({ above: 0, below: 0 });
   const courtListRef = useRef(null);
   const summary = summarizeDay(bookings, openHour, courts.length, canViewRevenue);
@@ -1881,10 +1941,10 @@ function WeekDayColumn({ bookings, canViewRevenue = true, courts, date, isSelect
                 {timelineEntries.length ? timelineEntries.map((entry) => (
                   entry.type === 'availability' ? (
                     <button
-                      aria-label={`Create placeholder for ${court.name} on ${formatLongDate(date)} at ${formatTimeInput(entry.startMinutes)}`}
+                      aria-label={`Create booking for ${court.name} on ${formatLongDate(date)} at ${formatTimeInput(entry.startMinutes)}`}
                       className="availability-gap"
                       key={entry.id}
-                      onClick={() => onCreatePlaceholder?.({
+                      onClick={() => onSelectFreeSlot?.({
                         court_id: court.id,
                         court_name: court.name,
                         date,
@@ -2951,6 +3011,49 @@ function RescheduleBookingDialog({ booking, canViewRevenue = true, courts, isSav
             </div>
           </div>
         </form>
+      </aside>
+    </div>
+  );
+}
+
+function SlotChoiceDialog({ draft, onChoosePlaceholder, onChooseRealBooking, onClose }) {
+  const courtName = draft?.court_name;
+  const slotLabel = draft?.start_time && draft?.end_time
+    ? `${draft.start_time}–${draft.end_time}`
+    : draft?.start_time || '';
+  const dateLabel = draft?.date ? formatLongDate(draft.date) : '';
+
+  return (
+    <div className="slot-choice-backdrop" onClick={onClose}>
+      <aside className="slot-choice-dialog" onClick={(event) => event.stopPropagation()}>
+        <div className="panel-label-row">
+          <span className="panel-label">New booking</span>
+          <button aria-label="Close booking type panel" onClick={onClose} type="button">
+            <X size={16} />
+          </button>
+        </div>
+        <h2>What would you like to add?</h2>
+        {(courtName || slotLabel || dateLabel) ? (
+          <p className="slot-choice-context">
+            {[courtName, dateLabel, slotLabel].filter(Boolean).join(' · ')}
+          </p>
+        ) : null}
+        <div className="slot-choice-options">
+          <button className="slot-choice-option" onClick={onChoosePlaceholder} type="button">
+            <ClipboardList size={20} />
+            <span>
+              <strong>Placeholder booking</strong>
+              <small>Hold the slot without confirmed payment details.</small>
+            </span>
+          </button>
+          <button className="slot-choice-option primary" onClick={onChooseRealBooking} type="button">
+            <CalendarCheck size={20} />
+            <span>
+              <strong>Real booking</strong>
+              <small>Create a confirmed booking on the schedule.</small>
+            </span>
+          </button>
+        </div>
       </aside>
     </div>
   );

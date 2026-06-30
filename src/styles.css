@@ -1885,6 +1885,99 @@ textarea:focus {
   width: min(100%, 440px);
 }
 
+.slot-choice-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(23, 33, 27, 0.28);
+}
+
+.slot-choice-dialog {
+  display: grid;
+  gap: 14px;
+  width: min(100%, 440px);
+  padding: 22px 22px 24px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: 0 30px 80px rgba(23, 33, 27, 0.22);
+}
+
+.slot-choice-dialog h2 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+
+.slot-choice-context {
+  margin: -6px 0 2px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.slot-choice-options {
+  display: grid;
+  gap: 12px;
+}
+
+.slot-choice-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  width: 100%;
+  padding: 15px 16px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.05s ease;
+}
+
+.slot-choice-option:hover {
+  border-color: var(--green);
+  background: #f4f8ef;
+}
+
+.slot-choice-option:active {
+  transform: translateY(1px);
+}
+
+.slot-choice-option svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--green);
+}
+
+.slot-choice-option span {
+  display: grid;
+  gap: 3px;
+}
+
+.slot-choice-option strong {
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+
+.slot-choice-option small {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.slot-choice-option.primary {
+  border-color: rgba(40, 99, 69, 0.45);
+  background: #f4f8ef;
+}
+
+.slot-choice-option.primary:hover {
+  background: #ebf3e2;
+}
+
 .placeholder-editor form {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
@@ -2907,6 +3000,17 @@ textarea:focus {
 
 .mobile-availability-row {
   background: rgba(248, 250, 245, 0.7);
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.mobile-availability-row:hover,
+.mobile-availability-row:focus-visible {
+  background: rgba(240, 246, 232, 0.95);
+}
+
+.mobile-availability-row:active {
+  background: rgba(232, 240, 220, 1);
 }
 
 .mobile-availability-row strong {
