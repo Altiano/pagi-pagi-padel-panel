@@ -39,15 +39,18 @@ Virtual permissions are enforced twice:
 
 ## Calendar Flow
 
-`CalendarPage` (`src/calendar/CalendarPage.jsx`) owns calendar state:
+`CalendarPage` (`src/calendar/CalendarPage.jsx`) is the visible controller: it
+wires toolbar actions, grids, detail panels, dialogs, and the focused hooks that
+own stateful workflows.
 
-- `view`: `day` or `week`.
-- `selectedDate`: `YYYY-MM-DD` date string.
-- `refreshKey`: incremented to force-refresh current calendar data.
-- `state`: courts, open hours, bookings grouped by date, loading, and error state.
-- `selectedBooking`: booking shown in the detail panel.
+- `useCalendarSelection.js` owns `view`, `selectedDate`, selected booking, summary panel state, and selected week days.
+- `useCalendarData.js` owns load/cache/refresh state and calls `loadCalendarData`.
+- `useCalendarScrollIndicators.js` owns day-view auto-scroll and hidden booking indicators.
+- `usePlaceholderActions.js` owns placeholder create/update/delete workflows.
+- `useRealBookingActions.js` owns real booking create/convert, receipt, mark-paid, reschedule, cancel, and notes workflows.
 
-When `mitraId`, `selectedDate`, or `refreshKey` changes, `CalendarPage` calls `loadCalendarData`.
+When `mitraId`, `selectedDate`, or the refresh key changes, `useCalendarData`
+calls `loadCalendarData`.
 
 `loadCalendarData` (`src/api/calendar.js`) fetches:
 
@@ -58,7 +61,7 @@ When `mitraId`, `selectedDate`, or `refreshKey` changes, `CalendarPage` calls `l
 
 Then it attaches court names to booking rows, maps placeholders into booking-like entries, and returns normalized calendar state.
 
-Calendar data uses a module-level in-memory cache (in `src/api/calendar.js`) with a TTL set by `CALENDAR_DATA_CACHE_TTL_MS` in `src/constants.js`. Cache keys include the current auth/revenue visibility scope, `mitraId`, data type, and date so virtual-user revenue masking does not bleed across sessions. Selecting another already-cached day in the same week reuses cached open hours, schedule rows, and placeholders. The toolbar refresh button and placeholder create/update/delete increment `refreshKey` and bypass the cache; a browser reload also clears the cache because it is not persisted.
+Calendar data uses a module-level in-memory cache (in `src/api/calendar.js`) with a TTL set by `CALENDAR_DATA_CACHE_TTL_MS` in `src/constants.js`. Cache keys include the current auth/revenue visibility scope, `mitraId`, data type, and date so virtual-user revenue masking does not bleed across sessions. Selecting another already-cached day in the same week reuses cached open hours, schedule rows, and placeholders. The toolbar refresh button, placeholder create/update/delete, and real booking write actions increment the refresh key and bypass the cache; a browser reload also clears the cache because it is not persisted.
 
 Placeholder create mode can target multiple courts at once. The frontend fans that out into one `/api/placeholder-bookings` POST per selected court. Multiple placeholders can share the same court/time; the Calendar renders those as a placeholder stack. If a placeholder overlaps a live upstream booking, the frontend treats it as a waitlist hold and disables conversion until the live booking moves or is canceled. Edit mode updates a single placeholder row.
 
@@ -73,19 +76,42 @@ Components by file (`AGENTS.md` has the full Code Map):
 - `src/App.jsx` — `App`, `PanelShell`, `DesktopSidebar`, `MobileAppShell`, `PlaceholderPage`, `NoAccessPage`.
 - `src/screens/LoginScreen.jsx` — `LoginScreen`.
 - `src/screens/VirtualUsersPage.jsx` — `VirtualUsersPage`, `VirtualUserEditor`.
-- `src/calendar/CalendarPage.jsx` — `CalendarPage` (the controller that holds calendar state and write actions).
+- `src/calendar/CalendarPage.jsx` — `CalendarPage` (visible controller/wiring).
+- `src/calendar/useCalendarData.js` — calendar load/cache/refresh hook.
+- `src/calendar/useCalendarSelection.js` — calendar view/date/detail selection hook.
+- `src/calendar/useCalendarScrollIndicators.js` — day-view scroll helper hook.
+- `src/calendar/usePlaceholderActions.js` — placeholder write workflow hook.
+- `src/calendar/useRealBookingActions.js` — real booking write workflow hook.
 - `src/calendar/CalendarViews.jsx` — `DayCalendar`, `WeekCalendar`, `WeekDayColumn`, `MobileDayAgenda`, `MobileWeekCalendar`, `CalendarBookingButton`, `CalendarCardTooltip`.
 - `src/calendar/CalendarDetailPanel.jsx` — `CalendarDetailPanel`.
-- `src/calendar/BookingDialogs.jsx` — `BookingWriteDialog` (create/convert), `PaymentProofDialog`, `RescheduleBookingDialog`, `CancelBookingDialog`, `BookingNotesDialog`, `SlotChoiceDialog`, `BookingActionSummary`.
+- `src/calendar/BookingWriteDialog.jsx` — real booking create/convert dialog.
+- `src/calendar/PaymentProofDialog.jsx` — receipt upload dialog.
+- `src/calendar/RescheduleBookingDialog.jsx` — reschedule dialog with slot/price checks.
+- `src/calendar/CancelBookingDialog.jsx` — cancel booking dialog.
+- `src/calendar/BookingNotesDialog.jsx` — booking notes dialog.
+- `src/calendar/SlotChoiceDialog.jsx` — placeholder-vs-real slot chooser.
+- `src/calendar/BookingActionSummary.jsx` — shared booking action header.
 - `src/calendar/PlaceholderBookingEditor.jsx` — `PlaceholderBookingEditor`.
 
 The former in-file helper functions now live in `src/lib/` (date/time, formatting, booking shapes, navigation), `src/calendar/forms.js` (form-state + payload builders), and `src/api/calendar.js` (data loading, cache, booking-action endpoints).
 
 ## Styling
 
-All app styles live in `src/styles.css`. The stylesheet defines global tokens, login styles, shell/sidebar styles, calendar layout, booking colors, responsive behavior, and utility states.
+`src/styles.css` is the CSS entrypoint and imports grouped global styles from
+`src/styles/`:
 
-If the UI grows, consider splitting styles by feature or moving repeated UI patterns into components before adding more selectors to the global file.
+- `base.css` — tokens, element defaults, shared form/button states.
+- `shell.css` — panel shell, sidebar, and placeholder screens.
+- `login.css` — login screen.
+- `virtual-users.css` — virtual user management.
+- `calendar.css` — calendar toolbar, grids, detail panel, and booking tones.
+- `dialogs.css` — placeholder and real-booking dialogs/drawers.
+- `mobile.css` — mobile app shell and mobile calendar views.
+- `responsive.css` — shared responsive breakpoints.
+
+Keep selectors grouped by feature when adding styles. Class names remain global
+for now, so avoid broad selectors that could unintentionally affect another
+screen.
 
 ## Refactoring Guidance
 
@@ -102,10 +128,10 @@ Keep the dependency direction downward: components may import from `api/`, `lib/
 `constants.js`, and `hooks.js`, but those lower layers must not import components.
 This is what keeps the graph cycle-free.
 
-`vite build` verifies that named imports resolve, but it does **not** catch a
-helper that is referenced without being imported (it becomes a runtime
-`ReferenceError`). After moving code between files, confirm imports by grepping the
-symbol or by loading the page and watching the browser console.
+`vite build` verifies that named imports resolve, but it does **not** catch every
+helper that is referenced without being imported (it can become a runtime
+`ReferenceError`). Run `pnpm lint` after moving code between files; it includes
+`no-undef` and unresolved import checks.
 
 When refactoring, also update:
 
@@ -116,17 +142,15 @@ When refactoring, also update:
 
 ## Testing Notes
 
-There are no automated tests yet. The current verification command is:
+The current verification suite is:
 
 ```sh
+pnpm lint
+pnpm test
 pnpm build
 ```
 
-The pure helpers now live in `src/lib/` (and `src/calendar/forms.js`), which makes
-them straightforward to unit test in isolation. Recommended first targets:
-
-- `src/lib/datetime.js` — date shifting, week generation, time parsing.
-- `src/lib/bookings.js` — booking start/end/duration, overlap, day/week summaries, placeholder normalize/annotate.
-- `src/lib/format.js` — currency/status formatting.
-- `src/calendar/forms.js` — form-state and `buildCourtBookingPayload` / `buildCancelBookingPayload`.
-- `src/api/config.js` — API URL construction.
+Vitest currently covers booking helpers, calendar form payload builders, and
+virtual-user navigation helpers. Add focused tests beside pure modules when
+changing `src/lib/*` or `src/calendar/forms.js`; broaden coverage when a change
+touches shared behavior or backend payload contracts.

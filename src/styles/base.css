@@ -1,0 +1,153 @@
+:root {
+  --bg: #f4f6f1;
+  --ink: #17211b;
+  --muted: #6d756e;
+  --line: #dfe5d8;
+  --surface: #ffffff;
+  --surface-strong: #eef3e7;
+  --green: #286345;
+  --green-deep: #173f2b;
+  --lime: #cce15f;
+  --danger: #a13232;
+  --shadow: 0 24px 70px rgba(23, 33, 27, 0.13);
+  font-family: "Avenir Next", "Helvetica Neue", Helvetica, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+form {
+  display: grid;
+  gap: 18px;
+}
+
+label {
+  display: grid;
+  gap: 8px;
+  color: #39433b;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 15px;
+  background: #fbfcf8;
+  color: var(--ink);
+  outline: none;
+  font-weight: 500;
+}
+
+select,
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 15px;
+  background: #fbfcf8;
+  color: var(--ink);
+  outline: none;
+  font-weight: 500;
+}
+
+textarea {
+  resize: vertical;
+}
+
+input::placeholder {
+  color: #7d867e;
+  font-weight: 500;
+}
+
+input:read-only {
+  color: #5a635b;
+  background: #eef3e8;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 4px rgba(40, 99, 69, 0.12);
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+}
+
+.check-row input {
+  width: 18px;
+  height: 18px;
+}
+
+.primary-button,
+.logout-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.primary-button {
+  min-height: 50px;
+  background: var(--green);
+  color: white;
+}
+
+.primary-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.status-line {
+  margin: 0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: var(--surface-strong);
+  color: var(--green-deep);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.status-line.error {
+  background: #fae8e6;
+  color: var(--danger);
+}
+
+.status-line.warning {
+  background: #fff4d5;
+  color: #805513;
+}

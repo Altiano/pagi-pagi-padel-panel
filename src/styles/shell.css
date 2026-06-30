@@ -1,0 +1,167 @@
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.brand-mark {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: 2px solid currentColor;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.brand-mark {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  color: var(--green);
+}
+
+.nav-group p,
+.handoff-grid span {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.panel-shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  padding: 20px 16px;
+  border-right: 1px solid var(--line);
+  background: #fbfcf8;
+}
+
+.sidebar-brand {
+  margin-bottom: 28px;
+}
+
+.sidebar-brand div {
+  display: grid;
+}
+
+.sidebar-brand span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 450;
+}
+
+.nav-group {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 18px;
+}
+
+.nav-group p {
+  color: #99a093;
+}
+
+.nav-group button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: transparent;
+  color: #4d584f;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.nav-group button.active,
+.nav-group button:hover {
+  background: var(--surface-strong);
+  color: var(--green);
+}
+
+.nav-group button.active {
+  font-weight: 650;
+}
+
+.sidebar nav {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.sidebar-build {
+  display: grid;
+  gap: 2px;
+  margin-top: auto;
+  padding: 16px 2px 2px;
+  color: #9aa395;
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 1.35;
+}
+
+.content {
+  height: 100vh;
+  overflow: hidden;
+  padding: 22px 26px 26px;
+  min-width: 0;
+}
+
+.topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: clamp(30px, 4vw, 46px);
+  letter-spacing: -0.04em;
+}
+
+.logout-button {
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.handoff-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.handoff-grid article {
+  min-height: 190px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+}
+
+.handoff-grid span {
+  color: var(--green);
+}
+
+.handoff-grid strong {
+  display: block;
+  font-size: 24px;
+  letter-spacing: -0.03em;
+}

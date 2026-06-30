@@ -13,11 +13,15 @@ This repo is intended to be easy for AI agents and human maintainers to modify. 
 ```sh
 pnpm install
 pnpm dev
+pnpm lint
+pnpm test
 pnpm build
 pnpm preview
 ```
 
-Use `pnpm build` as the default verification command after code changes.
+Use `pnpm build` as the default verification command after code changes. Run
+`pnpm lint` after moving imports or splitting modules, and run `pnpm test` when
+changing pure helpers or calendar form payload builders.
 
 Pushing `main` to GitHub triggers the project auto-deployment. For publish requests, push the completed commit to `origin/main` unless the user explicitly asks for a PR or a separate branch.
 
@@ -40,7 +44,16 @@ src/
   constants.js                   Shared constants: nav groups, permission lists,
                                  cache TTL, placeholder statuses, durations.
   hooks.js                       usePreferredMobileView, useEscapeKey.
-  styles.css                     All global styles (login, shell, calendar).
+  styles.css                     CSS entrypoint importing grouped global styles.
+  styles/
+    base.css                     Tokens, element defaults, shared form/buttons.
+    shell.css                    Panel shell, sidebar, placeholder screens.
+    login.css                    Login screen.
+    virtual-users.css            Virtual user management.
+    calendar.css                 Calendar toolbar, grids, detail, booking tones.
+    dialogs.css                  Placeholder + real-booking dialogs/drawers.
+    mobile.css                   Mobile shell + mobile calendar views.
+    responsive.css               Shared breakpoints.
 
   lib/            (pure, framework-free helpers — safe to unit test)
     datetime.js                  Date / time / week / month parsing + formatting.
@@ -48,7 +61,10 @@ src/
     bookings.js                  Booking-shape helpers: derive times/labels/tone/
                                  meta, overlap detection, placeholder normalize +
                                  conflict annotation, day/week summaries.
+    bookings.test.js             Vitest coverage for overlap, waitlist, stacks,
+                                 revenue masking, summaries.
     navigation.js                Virtual-user nav visibility + permission checks.
+    navigation.test.js           Vitest coverage for virtual-user nav/permissions.
 
   api/            (network + persistence boundary)
     config.js                    API URL builder using VITE_API_BASE_URL.
@@ -61,16 +77,27 @@ src/
                                  receipt upload, reschedule lookups, price check).
 
   calendar/       (the Calendar feature)
-    CalendarPage.jsx             Controller: view/date/selection/editor state,
-                                 data loading, all booking + placeholder write
-                                 actions, and wiring of the pieces below.
+    CalendarPage.jsx             Visible controller: wires hooks, views, detail
+                                 panel, dialogs, and toolbar actions.
+    useCalendarSelection.js      View/date/detail/summary selection state.
+    useCalendarData.js           Calendar load/cache/refresh state.
+    useCalendarScrollIndicators.js
+                                 Day-view auto-scroll + hidden-count indicators.
+    usePlaceholderActions.js     Placeholder create/update/delete workflows.
+    useRealBookingActions.js     Real booking create/convert, payment, reschedule,
+                                 cancel, and notes workflows.
     CalendarViews.jsx            Day/Week/Mobile grid renderers + hover tooltip.
     CalendarDetailPanel.jsx      Selected booking detail + day/week summary panel.
-    BookingDialogs.jsx           Real-booking write dialogs: create/convert,
-                                 payment proof, reschedule, cancel, notes, and the
-                                 placeholder-vs-real slot chooser.
+    BookingWriteDialog.jsx       Real-booking create/convert dialog.
+    PaymentProofDialog.jsx       Receipt upload dialog.
+    RescheduleBookingDialog.jsx  Reschedule dialog + slot/price checks.
+    CancelBookingDialog.jsx      Cancel booking dialog.
+    BookingNotesDialog.jsx       Booking notes dialog.
+    SlotChoiceDialog.jsx         Placeholder-vs-real slot chooser.
+    BookingActionSummary.jsx     Shared booking action header.
     PlaceholderBookingEditor.jsx Placeholder create/edit modal.
     forms.js                     Pure form-state + upstream-payload builders.
+    forms.test.js                Vitest coverage for dates, courts, payloads.
 
   screens/
     LoginScreen.jsx              Credential login screen.
@@ -96,8 +123,8 @@ Other key files:
 
 ## Current Architecture Notes
 
-- The UI is split into layered modules (see the Code Map above). `App.jsx` is now only the composition root and panel shell; feature code lives under `src/calendar/` and `src/screens/`, with reusable pure helpers under `src/lib/` and the network/cache boundary under `src/api/`.
-- Calendar data is loaded in `loadCalendarData` (in `src/api/calendar.js`), which fetches courts, open hours, one schedule response per weekday, and D1-backed placeholder bookings. Calendar fetches are cached in-memory per auth/revenue scope for the `CALENDAR_DATA_CACHE_TTL_MS` window (in `src/constants.js`) per visible date; toolbar refresh, browser refresh, placeholder mutations, and real booking write actions force fresh data.
+- The UI is split into layered modules (see the Code Map above). `App.jsx` is now only the composition root and panel shell; feature code lives under `src/calendar/` and `src/screens/`, with reusable pure helpers under `src/lib/`, workflow hooks under `src/calendar/use*.js`, and the network/cache boundary under `src/api/`.
+- Calendar data is loaded by `useCalendarData` through `loadCalendarData` (in `src/api/calendar.js`), which fetches courts, open hours, one schedule response per weekday, and D1-backed placeholder bookings. Calendar fetches are cached in-memory per auth/revenue scope for the `CALENDAR_DATA_CACHE_TTL_MS` window (in `src/constants.js`) per visible date; toolbar refresh, browser refresh, placeholder mutations, and real booking write actions force fresh data.
 - Virtual account login uses an underscore-prefixed username, for example `_frontdesk`. The Worker validates the D1 virtual user, then logs into upstream with `MASTER_USERNAME` and `MASTER_PASSWORD`.
 - Virtual user management is master-only. The Worker rejects `/api/virtual-users` requests from virtual sessions and from real upstream accounts whose `/api/auth/me` identity does not match `MASTER_USERNAME`.
 - Virtual user permissions control wrapper navigation and Worker endpoint authorization. The Worker maps virtual sessions to D1 token hashes before proxying upstream routes, rejects endpoints outside the user's allowed screens, requires `Calendar booking` for real booking write actions, and masks calendar money fields unless `Calendar revenue` is granted.
@@ -109,16 +136,17 @@ Other key files:
 
 ## Change Guidance
 
-- Prefer small, behavior-focused changes with `pnpm build` verification.
+- Prefer small, behavior-focused changes with `pnpm build` verification. Use `pnpm lint` for import/refactor safety and `pnpm test` for helper/payload changes.
 - Put new code in the layer that matches it (see the Code Map):
   - Pure value helpers (dates, money, booking shapes) → `src/lib/*`. These are framework-free and the best first target for unit tests.
   - Anything that talks to the network or owns cached data → `src/api/*`.
   - A new full screen → `src/screens/NewScreen.jsx`, wired into `App.jsx`'s `PanelShell` switch.
-  - Calendar UI → a focused file under `src/calendar/`; keep `CalendarPage.jsx` as the controller and avoid growing it back into a monolith.
+  - Calendar UI → a focused file under `src/calendar/`; keep `CalendarPage.jsx` as the visible controller and avoid growing it back into a monolith.
+  - Calendar stateful workflows → a focused `src/calendar/use*.js` hook.
 - Respect the dependency direction (`App` → `screens`/`calendar` → `api`/`lib` → `constants`). Do not import a component from `lib/` or `api/`; that would create a cycle.
 - Keep API field names aligned with the existing backend payloads. Do not rename backend-derived fields unless there is a mapping layer.
 - Keep docs in sync with code changes. If a refactor changes the module layout, update this guide's Code Map, `README.md`, and relevant files in `docs/`.
-- `vite build` does not catch a helper that is used but not imported (a free identifier silently becomes a runtime crash). After moving code between modules, double-check imports — grep the symbol, or load the page and watch the browser console.
+- `vite build` does not catch every helper that is used but not imported (a free identifier can become a runtime crash). After moving code between modules, run `pnpm lint`; it includes `no-undef` and unresolved import checks.
 
 ## Visual And Mockup Guidance
 
@@ -134,7 +162,7 @@ Future AI agents may freely refactor this guide, the README, and the docs when t
 
 Good triggers for refactoring:
 
-- A single file (e.g. `CalendarPage.jsx` or `BookingDialogs.jsx`) becomes hard to scan or grows another distinct responsibility — split it the same way `App.jsx` was split.
+- A single file becomes hard to scan or grows another distinct responsibility — split it the same way `App.jsx`, `CalendarPage.jsx`, and the booking dialogs were split.
 - A `src/lib/*` module accumulates enough logic to deserve its own tests.
 - Multiple screens share shell, toolbar, or data-fetching patterns worth lifting into a shared component or hook.
 - API assumptions move from guessed shapes to stable backend contracts.

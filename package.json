@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "lint": "eslint .",
+    "test": "vitest run",
     "build": "vite build",
     "preview": "vite preview",
     "worker:dev": "wrangler dev",
@@ -20,6 +22,12 @@
     "vite": "^7.0.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.6.0",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.7.0",
+    "vitest": "^4.1.9",
     "wrangler": "^4.103.0"
   }
 }

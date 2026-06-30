@@ -31,11 +31,15 @@ For this workspace, `.env.local` points Vite at the deployed Worker so local tes
 ## Commands
 
 ```sh
+pnpm lint
+pnpm test
 pnpm build
 pnpm preview
 ```
 
 - `pnpm dev`: start the Vite dev server.
+- `pnpm lint`: run ESLint import/undefined-name and React hook checks.
+- `pnpm test`: run focused Vitest unit tests for pure helpers.
 - `pnpm build`: create a production build. Use this as the default verification command.
 - `pnpm preview`: preview the production build locally.
 
@@ -83,12 +87,24 @@ src/
   App.jsx           Composition root + panel shell (login vs panel, nav gating)
   constants.js      Shared constants (nav, permissions, cache TTL, durations)
   hooks.js          usePreferredMobileView, useEscapeKey
-  styles.css        Global app styles
+  styles.css        CSS entrypoint importing grouped styles
+  styles/           Global CSS split by feature area
+    base.css        Tokens, element defaults, shared form/button states
+    shell.css       Panel shell, sidebar, placeholder screens
+    login.css       Login screen
+    virtual-users.css
+                    Virtual user management
+    calendar.css    Calendar toolbar, grids, detail panel, booking tones
+    dialogs.css     Placeholder and real-booking dialogs/drawers
+    mobile.css      Mobile app shell and mobile calendar views
+    responsive.css  Shared responsive breakpoints
   lib/              Pure, framework-free helpers (unit-test friendly)
     datetime.js     Date / time / week parsing + formatting
     format.js       Currency / status / clipboard
     bookings.js     Booking-shape helpers, overlaps, summaries
+    bookings.test.js
     navigation.js   Virtual-user nav + permission gating
+    navigation.test.js
   api/              Network + persistence boundary
     config.js       API URL builder
     client.js       Authenticated API request helper (apiRequest)
@@ -97,12 +113,25 @@ src/
     placeholders.js Browser-local placeholder escape hatch
     calendar.js     Calendar data load + cache + booking-action endpoints
   calendar/         Calendar feature
-    CalendarPage.jsx            Controller (state + write actions)
+    CalendarPage.jsx            Controller wiring state hooks, views, dialogs
+    useCalendarData.js          Calendar load/cache/refresh state
+    useCalendarSelection.js     View/date/detail selection state
+    useCalendarScrollIndicators.js
+                                Day-view auto-scroll + hidden-count indicators
+    usePlaceholderActions.js    Placeholder create/update/delete workflows
+    useRealBookingActions.js    Real booking create/convert/write workflows
     CalendarViews.jsx           Day/Week/Mobile grid renderers + tooltip
     CalendarDetailPanel.jsx     Booking detail + day/week summary
-    BookingDialogs.jsx          Real-booking write dialogs
+    BookingWriteDialog.jsx      Real booking create/convert dialog
+    PaymentProofDialog.jsx      Receipt upload dialog
+    RescheduleBookingDialog.jsx Reschedule dialog + slot/price checks
+    CancelBookingDialog.jsx     Cancel booking dialog
+    BookingNotesDialog.jsx      Booking notes dialog
+    SlotChoiceDialog.jsx        Placeholder-vs-real slot chooser
+    BookingActionSummary.jsx    Shared booking action header
     PlaceholderBookingEditor.jsx Placeholder create/edit modal
     forms.js                    Form-state + upstream-payload builders
+    forms.test.js
   screens/
     LoginScreen.jsx       Credential login
     VirtualUsersPage.jsx  Settings: virtual user management
@@ -118,14 +147,16 @@ AGENTS.md         AI-agent working guide (start here; has the full Code Map)
 
 ## Development Notes
 
-- The code is split into layers: `App.jsx` (shell) → `src/screens` + `src/calendar` (feature UI) → `src/api` + `src/lib` (network + pure helpers) → `src/constants.js`. Add new code to the matching layer instead of growing one file. See the Code Map in `AGENTS.md`.
+- The code is split into layers: `App.jsx` (shell) -> `src/screens` + `src/calendar` (feature UI) -> `src/api` + `src/lib` (network + pure helpers) -> `src/constants.js`. Add new code to the matching layer instead of growing one file. See the Code Map in `AGENTS.md`.
 - Keep the dependency direction downward (lower layers must not import components) so the module graph stays cycle-free.
 - When moving or splitting code, update `AGENTS.md`, this README, and the relevant docs so the repo remains AI-friendly.
+- Use `pnpm lint` after moving imports or extracting modules. ESLint catches undefined free identifiers that `vite build` can miss.
+- Add focused `pnpm test` coverage when changing pure helpers in `src/lib/` or `src/calendar/forms.js`.
 - Before generating UI mockups or design variants, review `docs/visual-reference.md` and the screenshots in `docs/visual-reference/`.
 - When the app's visual design changes materially, refresh the visual-reference screenshots so future mockups stay aligned with the real UI.
 - Keep backend response field names visible at the boundary. If fields need nicer frontend names, map them in one place instead of renaming them throughout the UI.
 - Calendar data is cached only in memory for the `CALENDAR_DATA_CACHE_TTL_MS` window (`src/constants.js`, currently 2 minutes) per auth/revenue scope and visible date. The toolbar refresh button, browser reload, and placeholder mutations intentionally bypass or clear that cache.
-- There are no automated tests yet. The pure helpers in `src/lib/` (date/time, formatting, booking shapes, summaries) and `src/calendar/forms.js` are framework-free and make good first unit-test targets.
+- Automated tests currently cover booking helpers, calendar form payload builders, and virtual-user navigation helpers. Keep new tests focused around pure helper behavior unless a UI workflow change needs broader coverage.
 
 ## GitHub Pages
 

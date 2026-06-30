@@ -1,0 +1,122 @@
+@media (max-width: 900px) {
+  .panel-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .handoff-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .virtual-user-card {
+    grid-template-columns: 1fr;
+  }
+
+  .virtual-user-actions {
+    justify-content: flex-start;
+  }
+
+  .calendar-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-detail {
+    position: static;
+  }
+}
+
+@media (max-width: 1200px) {
+  .week-mode .calendar-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .week-mode .calendar-detail {
+    position: static;
+  }
+
+  .week-mode .week-calendar {
+    grid-template-columns: repeat(7, minmax(84px, 1fr));
+    overflow-x: visible;
+  }
+
+  .week-mode .week-day {
+    min-height: 520px;
+    padding: 10px;
+  }
+
+  .week-mode .week-day-header,
+  .week-mode .week-court .week-booking-card,
+  .week-mode .empty-slot {
+    padding: 8px;
+  }
+
+  .week-mode .week-day-header strong {
+    font-size: 16px;
+  }
+
+  .week-mode .week-day-metrics,
+  .week-mode .week-court p,
+  .week-mode .week-court .week-booking-card strong,
+  .week-mode .empty-slot {
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 560px) {
+  .login-page,
+  .content {
+    padding: 22px;
+  }
+
+  .login-card {
+    padding: 24px;
+    border-radius: 18px;
+  }
+
+  .topbar {
+    flex-direction: column;
+  }
+
+  .calendar-topbar,
+  .topbar-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .placeholder-editor-backdrop {
+    align-items: flex-end;
+    justify-content: stretch;
+  }
+
+  .placeholder-editor {
+    width: 100%;
+    height: min(88dvh, 780px);
+    border-top-left-radius: 22px;
+    border-top-right-radius: 22px;
+    border-left: 0;
+  }
+
+  .form-grid.two,
+  .time-grid,
+  .editor-actions,
+  .court-choice-grid,
+  .permission-section > div {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-stack-list > div {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-stack-list button {
+    justify-content: center;
+  }
+}
