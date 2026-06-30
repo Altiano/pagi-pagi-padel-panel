@@ -105,6 +105,20 @@
     border-left: 0;
   }
 
+  .placeholder-editor,
+  .placeholder-editor form,
+  .placeholder-editor-fields {
+    max-width: 100vw;
+    max-width: 100dvw;
+    overflow-x: hidden;
+  }
+
+  .placeholder-editor input,
+  .placeholder-editor select,
+  .placeholder-editor textarea {
+    font-size: 16px;
+  }
+
   .form-grid.two,
   .time-grid,
   .editor-actions,
