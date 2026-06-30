@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { getWeekDays, shiftDate, toDateInputValue } from '../lib/datetime.js';
 
 export function useCalendarSelection({ isMobileApp = false } = {}) {
@@ -8,10 +8,6 @@ export function useCalendarSelection({ isMobileApp = false } = {}) {
   const [showSummaryPanel, setShowSummaryPanel] = useState(false);
 
   const weekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
-
-  useEffect(() => {
-    if (isMobileApp && view !== 'day') setView('day');
-  }, [isMobileApp, view]);
 
   const moveDate = useCallback((days) => {
     setSelectedDate((current) => shiftDate(current, days));

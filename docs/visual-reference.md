@@ -18,12 +18,13 @@ The goal is not to copy every pixel. The goal is to keep new mockups aligned wit
 | State | Desktop | Mobile |
 | --- | --- | --- |
 | Login | `docs/visual-reference/login-desktop.jpg` | `docs/visual-reference/login-mobile.jpg` |
-| Calendar - Week view | `docs/visual-reference/panel-calendar-week-desktop.png` | `docs/visual-reference/panel-calendar-mobile.jpg` |
-| Calendar - Day view | `docs/visual-reference/panel-calendar-day-desktop.png` | Not captured |
+| Calendar - Week view | `docs/visual-reference/panel-calendar-week-desktop.png` | `docs/visual-reference/panel-calendar-week-mobile.jpg` |
+| Calendar - Day view | `docs/visual-reference/panel-calendar-day-desktop.png` | `docs/visual-reference/panel-calendar-day-mobile.jpg` |
+| Calendar - Booking detail | Not captured | `docs/visual-reference/panel-calendar-detail-mobile.jpg` |
 
 ## Capture Notes
 
-- Captured from the live Vite app at `http://localhost:5173/` or `http://127.0.0.1:5173/`.
+- Captured from the live Vite app at `http://localhost:5173/`, `http://localhost:5174/`, or `http://127.0.0.1:5173/`.
 - Desktop screenshots use the active Chrome viewport from the authenticated local app.
 - Mobile viewport: `390x844`.
 - Authenticated Calendar screenshots use local browser auth for visual-reference purposes.

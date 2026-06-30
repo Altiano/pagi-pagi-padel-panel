@@ -510,7 +510,7 @@ export function CalendarPage({ cacheScope = 'session', canViewRevenue = true, ca
         ) : null}
       </section>
       {isMobileApp ? (
-        <button className="mobile-placeholder-fab" onClick={() => openSlotChoice()} type="button">
+        <button aria-label="Create booking or placeholder" className="mobile-placeholder-fab" onClick={() => openSlotChoice()} type="button">
           <Plus size={20} />
         </button>
       ) : null}
