@@ -18,22 +18,22 @@ sections below describe how data flows through those layers.
 2. `App` checks `getStoredAuth()` from `src/api/auth.js`.
 3. If there is no valid auth object, `LoginScreen` is shown.
 4. Login posts to `/api/auth/login`, stores auth in localStorage, then renders the panel.
-5. If the login username starts with `_`, the Worker validates a D1-backed virtual user and signs into upstream with the configured master account before returning the upstream token plus virtual-user metadata.
+5. If the login username starts with `_`, the Worker validates a D1-backed virtual user, assigns the least-loaded configured upstream account, reuses or refreshes that account's shared upstream token in D1, and returns a Worker-issued panel token plus virtual-user metadata.
 6. `PanelShell` loads `/api/auth/me`, derives the display name and `mitraId`, applies virtual-user navigation visibility, and renders the active screen.
 7. Calendar is the only fully wired screen today. Settings exposes virtual user management only when the Worker confirms the real master account is signed in. Other navigation items render placeholders.
 
-Placeholder bookings and virtual users are wrapper-owned data models. They are stored in Cloudflare D1 through the Worker. Placeholder bookings are merged into Calendar responses on the frontend; staff can later convert a placeholder into a real upstream court booking, optionally uploading a payment receipt, after which the local placeholder is deleted. Virtual users allow multiple wrapper logins to share one real upstream account, but only a real `MASTER_USERNAME` session can manage them.
+Placeholder bookings and virtual users are wrapper-owned data models. They are stored in Cloudflare D1 through the Worker. Placeholder bookings are merged into Calendar responses on the frontend; staff can later convert a placeholder into a real upstream court booking, optionally uploading a payment receipt, after which the local placeholder is deleted. Virtual users receive Worker-issued panel tokens. Their session rows store the assigned upstream username, while reusable upstream tokens stay server-side in `upstream_account_tokens`, keyed by upstream account. Only a real `MASTER_USERNAME` session can manage virtual users.
 
 Virtual permissions are enforced twice:
 
 - The React shell filters visible screens, hides calendar money when `Calendar revenue` is absent, and shows real booking write actions only when `Calendar booking` is present. Calendar booking writes require `Calendar` plus `Calendar booking`; when a price is hidden or left blank, the frontend sends `harga: 0`.
-- The Worker maps bearer tokens back to D1 virtual sessions before proxying, rejects upstream endpoints outside the user's allowed screens, strips calendar money fields without `Calendar revenue`, and stamps virtual placeholder audit names from the virtual user's display name.
+- The Worker maps virtual bearer tokens back to D1 virtual sessions before proxying, rejects upstream endpoints outside the user's allowed screens, swaps in the server-side upstream token, strips calendar money fields without `Calendar revenue`, and stamps virtual placeholder audit names from the virtual user's display name.
 
 ## API Flow
 
 - `src/api/config.js` builds request URLs.
 - `src/api/client.js` wraps `fetch`, adds `Accept` and `Authorization` headers, reads JSON/text bodies, and clears auth on `401`.
-- `src/api/auth.js` handles login and localStorage persistence.
+- `src/api/auth.js` handles login and localStorage persistence. For virtual users, the stored bearer token is the Worker-issued panel token rather than an upstream token.
 - `src/api/virtualUsers.js` reads and mutates Worker-owned virtual users.
 - `vite.config.js` can proxy local `/api` requests to `PANEL_API_ORIGIN`, but the normal local setup uses `VITE_API_BASE_URL` to call the deployed Worker.
 

@@ -13,6 +13,9 @@ const VIRTUAL_USERS_PREFIX = '/api/virtual-users';
 const VIRTUAL_LOGIN_PREFIX = '_';
 const CALENDAR_REVENUE_PERMISSION = 'Calendar revenue';
 const CALENDAR_BOOKING_PERMISSION = 'Calendar booking';
+const UPSTREAM_TOKEN_REFRESH_SKEW_MS = 60 * 1000;
+const DEFAULT_VIRTUAL_SESSION_TTL_SECONDS = 12 * 60 * 60;
+const REMEMBERED_VIRTUAL_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 const MONEY_FIELD_NAMES = new Set([
   'amount',
   'balance',
@@ -116,6 +119,8 @@ const SENSITIVE_LOG_KEYS = new Set([
   'refresh_token',
   'set-cookie',
   'token',
+  'upstream_access_token',
+  'upstream_refresh_token',
 ]);
 
 function createRequestContext(request) {
@@ -189,7 +194,7 @@ function corsHeaders(request, env) {
   };
 }
 
-function buildUpstreamHeaders(request, upstreamOrigin) {
+function buildUpstreamHeaders(request, upstreamOrigin, upstreamAuth = null) {
   const headers = new Headers();
 
   for (const [key, value] of request.headers.entries()) {
@@ -198,13 +203,17 @@ function buildUpstreamHeaders(request, upstreamOrigin) {
     }
   }
 
+  if (upstreamAuth?.accessToken) {
+    headers.set('Authorization', `${upstreamAuth.tokenType || 'Bearer'} ${upstreamAuth.accessToken}`);
+  }
+
   headers.set('Origin', upstreamOrigin);
   headers.set('Referer', `${upstreamOrigin}/`);
 
   return headers;
 }
 
-async function proxyApiRequest(request, env, { context = createRequestContext(request), transformResponse } = {}) {
+async function proxyApiRequest(request, env, { context = createRequestContext(request), transformResponse, upstreamAuth } = {}) {
   if (!env.UPSTREAM_ORIGIN) {
     logWorker(env, 'error', 'proxy.missing_upstream_origin', context);
     return withCors(Response.json({ error: 'Proxy upstream is not configured.' }, { status: 500 }), request, env, context);
@@ -223,7 +232,7 @@ async function proxyApiRequest(request, env, { context = createRequestContext(re
   try {
     response = await fetch(upstreamUrl, {
       method: request.method,
-      headers: buildUpstreamHeaders(request, upstreamOrigin),
+      headers: buildUpstreamHeaders(request, upstreamOrigin, upstreamAuth),
       body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
       redirect: 'manual',
     });
@@ -319,6 +328,17 @@ async function readJsonResponse(response) {
   }
 }
 
+async function ensureTableColumns(db, tableName, columns) {
+  const { results } = await db.prepare(`PRAGMA table_info(${tableName})`).all();
+  const existingColumns = new Set((results || []).map((row) => row.name));
+
+  for (const column of columns) {
+    if (!existingColumns.has(column.name)) {
+      await db.prepare(`ALTER TABLE ${tableName} ADD COLUMN ${column.name} ${column.definition}`).run();
+    }
+  }
+}
+
 function requireAppDb(env) {
   if (!env.PLACEHOLDER_DB) {
     return Response.json({ error: 'Application database is not configured.' }, { status: 500 });
@@ -349,11 +369,52 @@ async function ensureVirtualSessionsTable(db) {
     CREATE TABLE IF NOT EXISTS virtual_sessions (
       token_hash TEXT PRIMARY KEY,
       virtual_user_id TEXT NOT NULL,
+      upstream_account_username TEXT,
+      remember INTEGER NOT NULL DEFAULT 0,
       expires_at TEXT,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      updated_at TEXT
     )
   `).run();
+  await ensureTableColumns(db, 'virtual_sessions', [
+    { name: 'upstream_account_username', definition: 'TEXT' },
+    { name: 'remember', definition: 'INTEGER NOT NULL DEFAULT 0' },
+    { name: 'updated_at', definition: 'TEXT' },
+  ]);
   await db.prepare('CREATE INDEX IF NOT EXISTS idx_virtual_sessions_expires_at ON virtual_sessions (expires_at)').run();
+  await db.prepare('CREATE INDEX IF NOT EXISTS idx_virtual_sessions_upstream_account ON virtual_sessions (upstream_account_username, expires_at)').run();
+}
+
+async function ensureUpstreamAccountTokensTable(db) {
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS upstream_account_tokens (
+      username TEXT PRIMARY KEY,
+      access_token TEXT NOT NULL,
+      refresh_token TEXT,
+      token_type TEXT,
+      expires_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `).run();
+  await ensureTableColumns(db, 'upstream_account_tokens', [
+    { name: 'refresh_token', definition: 'TEXT' },
+    { name: 'token_type', definition: 'TEXT' },
+    { name: 'expires_at', definition: 'TEXT' },
+    { name: 'created_at', definition: 'TEXT' },
+    { name: 'updated_at', definition: 'TEXT' },
+  ]);
+  await db.prepare('CREATE INDEX IF NOT EXISTS idx_upstream_account_tokens_expires_at ON upstream_account_tokens (expires_at)').run();
+}
+
+async function ensureUpstreamAccountUsageTable(db) {
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS upstream_account_usage (
+      username TEXT PRIMARY KEY,
+      last_selected_at TEXT,
+      updated_at TEXT NOT NULL
+    )
+  `).run();
 }
 
 async function ensureMasterSessionsTable(db) {
@@ -440,6 +501,134 @@ function getBearerToken(request) {
   return match ? match[1].trim() : '';
 }
 
+function normalizeUpstreamAccount(rawAccount, index = 0) {
+  if (!rawAccount || typeof rawAccount !== 'object') return null;
+  const username = String(rawAccount.username || rawAccount.email || rawAccount.login || '').trim();
+  const passwordValue = Object.prototype.hasOwnProperty.call(rawAccount, 'password')
+    ? rawAccount.password
+    : rawAccount.pass;
+  const password = passwordValue === undefined || passwordValue === null ? '' : String(passwordValue);
+  if (!username || !password) return null;
+  return {
+    id: String(rawAccount.id || username).trim() || username,
+    index,
+    password,
+    username,
+  };
+}
+
+function parseUpstreamAccounts(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    const rows = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.accounts)
+        ? parsed.accounts
+        : [];
+    return rows.map(normalizeUpstreamAccount).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function dedupeUpstreamAccounts(accounts) {
+  const seen = new Set();
+  const unique = [];
+  for (const account of accounts) {
+    const key = account.username.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push({ ...account, index: unique.length });
+    }
+  }
+  return unique;
+}
+
+function getConfiguredUpstreamAccounts(env) {
+  const pooledAccounts = parseUpstreamAccounts(env.UPSTREAM_ACCOUNTS_JSON || env.UPSTREAM_ACCOUNTS);
+  if (pooledAccounts.length) return dedupeUpstreamAccounts(pooledAccounts);
+
+  const fallback = normalizeUpstreamAccount({
+    password: env.MASTER_PASSWORD,
+    username: env.MASTER_USERNAME,
+  });
+  return fallback ? [fallback] : [];
+}
+
+function compareNullableIso(first, second) {
+  if (!first && !second) return 0;
+  if (!first) return -1;
+  if (!second) return 1;
+  return String(first).localeCompare(String(second));
+}
+
+async function cleanupExpiredVirtualSessions(db, now) {
+  await db.prepare('DELETE FROM virtual_sessions WHERE expires_at IS NOT NULL AND expires_at <= ?').bind(now).run();
+}
+
+async function getActiveVirtualSessionCounts(db, now) {
+  const { results } = await db.prepare(`
+    SELECT upstream_account_username, COUNT(*) AS active_count
+    FROM virtual_sessions
+    WHERE upstream_account_username IS NOT NULL
+      AND upstream_account_username != ''
+      AND (expires_at IS NULL OR expires_at > ?)
+    GROUP BY upstream_account_username
+  `).bind(now).all();
+
+  return new Map((results || []).map((row) => [
+    String(row.upstream_account_username || '').toLowerCase(),
+    Number(row.active_count || 0),
+  ]));
+}
+
+async function getUpstreamAccountUsage(db) {
+  await ensureUpstreamAccountUsageTable(db);
+  const { results } = await db.prepare('SELECT username, last_selected_at FROM upstream_account_usage').all();
+  return new Map((results || []).map((row) => [
+    String(row.username || '').toLowerCase(),
+    row.last_selected_at || '',
+  ]));
+}
+
+async function rankUpstreamAccountsForVirtualLogin(db, accounts) {
+  await ensureVirtualSessionsTable(db);
+  await ensureUpstreamAccountUsageTable(db);
+
+  const now = new Date().toISOString();
+  await cleanupExpiredVirtualSessions(db, now);
+  const activeCounts = await getActiveVirtualSessionCounts(db, now);
+  const usage = await getUpstreamAccountUsage(db);
+
+  return accounts
+    .map((account) => {
+      const key = account.username.toLowerCase();
+      return {
+        account,
+        activeCount: activeCounts.get(key) || 0,
+        lastSelectedAt: usage.get(key) || '',
+      };
+    })
+    .sort((first, second) => (
+      first.activeCount - second.activeCount ||
+      compareNullableIso(first.lastSelectedAt, second.lastSelectedAt) ||
+      first.account.index - second.account.index
+    ))
+    .map((entry) => entry.account);
+}
+
+async function markUpstreamAccountSelected(db, username, now) {
+  await ensureUpstreamAccountUsageTable(db);
+  await db.prepare(`
+    INSERT INTO upstream_account_usage (username, last_selected_at, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(username) DO UPDATE SET
+      last_selected_at = excluded.last_selected_at,
+      updated_at = excluded.updated_at
+  `).bind(username, now, now).run();
+}
+
 function hasVirtualPermission(virtualUser, permission) {
   const permissions = Array.isArray(virtualUser?.permissions) ? virtualUser.permissions : [];
   return permissions.includes(permission);
@@ -462,16 +651,174 @@ function findIdentityValues(value, depth = 0) {
   return identities;
 }
 
+function getPayloadExpiresAt(payload) {
+  const expiresInMs = Number(payload?.expires_in || 0) * 1000;
+  return expiresInMs ? new Date(Date.now() + expiresInMs).toISOString() : null;
+}
+
+function getVirtualSessionTtlSeconds(env, remember = false) {
+  const configured = Number(remember ? env.VIRTUAL_SESSION_REMEMBER_TTL_SECONDS : env.VIRTUAL_SESSION_TTL_SECONDS);
+  if (Number.isFinite(configured) && configured > 0) return configured;
+  return remember ? REMEMBERED_VIRTUAL_SESSION_TTL_SECONDS : DEFAULT_VIRTUAL_SESSION_TTL_SECONDS;
+}
+
+function getExpiresAtFromSeconds(seconds) {
+  return seconds ? new Date(Date.now() + seconds * 1000).toISOString() : null;
+}
+
+function isIsoExpired(value, skewMs = 0) {
+  if (!value) return false;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && timestamp <= Date.now() + skewMs;
+}
+
+async function loginToUpstreamAccount(env, account, { remember = false } = {}) {
+  if (!env.UPSTREAM_ORIGIN) {
+    return { ok: false, status: 500, statusText: 'Missing upstream origin', message: 'Proxy upstream is not configured.' };
+  }
+
+  const upstreamOrigin = env.UPSTREAM_ORIGIN.replace(/\/$/, '');
+  const startedAt = Date.now();
+  let response;
+  try {
+    response = await fetch(`${upstreamOrigin}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json, text/plain, */*',
+        'Content-Type': 'application/json',
+        Origin: upstreamOrigin,
+        Referer: `${upstreamOrigin}/`,
+      },
+      body: JSON.stringify({
+        username: account.username,
+        password: account.password,
+        remember,
+      }),
+      redirect: 'manual',
+    });
+  } catch (error) {
+    return {
+      durationMs: Date.now() - startedAt,
+      error,
+      message: 'Unable to reach the configured upstream account.',
+      ok: false,
+      status: 502,
+      statusText: 'Bad Gateway',
+    };
+  }
+
+  const payload = await readJsonResponse(response);
+  const message = payload?.message || payload?.error || 'Unable to sign in with the configured upstream account.';
+  return {
+    durationMs: Date.now() - startedAt,
+    message,
+    ok: response.ok && Boolean(payload?.access_token),
+    payload,
+    status: response.ok && !payload?.access_token ? 502 : response.status,
+    statusText: response.ok && !payload?.access_token ? 'Missing access token' : response.statusText,
+  };
+}
+
+async function getStoredUpstreamAccountToken(db, username) {
+  await ensureUpstreamAccountTokensTable(db);
+  return db.prepare(`
+    SELECT username, access_token, refresh_token, token_type, expires_at
+    FROM upstream_account_tokens
+    WHERE username = ?
+  `).bind(username).first();
+}
+
+async function storeUpstreamAccountToken(db, account, payload) {
+  await ensureUpstreamAccountTokensTable(db);
+  const now = new Date().toISOString();
+  const expiresAt = getPayloadExpiresAt(payload);
+  await db.prepare(`
+    INSERT INTO upstream_account_tokens (
+      username, access_token, refresh_token, token_type, expires_at, created_at, updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(username) DO UPDATE SET
+      access_token = excluded.access_token,
+      refresh_token = excluded.refresh_token,
+      token_type = excluded.token_type,
+      expires_at = excluded.expires_at,
+      updated_at = excluded.updated_at
+  `).bind(
+    account.username,
+    payload.access_token,
+    payload.refresh_token || '',
+    payload.token_type || 'Bearer',
+    expiresAt,
+    now,
+    now,
+  ).run();
+  return {
+    accessToken: payload.access_token,
+    expiresAt,
+    tokenType: payload.token_type || 'Bearer',
+  };
+}
+
+async function ensureUpstreamAccountAuth(env, account, { context, remember = false, virtualUser = null } = {}) {
+  const stored = await getStoredUpstreamAccountToken(env.PLACEHOLDER_DB, account.username);
+  if (stored?.access_token && !isIsoExpired(stored.expires_at, UPSTREAM_TOKEN_REFRESH_SKEW_MS)) {
+    return {
+      auth: {
+        accessToken: stored.access_token,
+        tokenType: stored.token_type || 'Bearer',
+      },
+      reused: true,
+    };
+  }
+
+  const loginResult = await loginToUpstreamAccount(env, account, { remember });
+  if (!loginResult.ok) {
+    logWorker(env, 'warn', 'auth.upstream_account.login_failed', context, {
+      duration_ms: loginResult.durationMs,
+      upstream_account_username: account.username,
+      upstream_error: loginResult.message,
+      upstream_status: loginResult.status,
+      upstream_status_text: loginResult.statusText,
+      virtual_user_id: virtualUser?.id,
+      virtual_username: virtualUser?.username,
+    });
+    return { error: responseWithStatus(loginResult.message, loginResult.status || 502), loginResult };
+  }
+
+  const storedToken = await storeUpstreamAccountToken(env.PLACEHOLDER_DB, account, loginResult.payload);
+  logWorker(env, 'info', 'auth.upstream_account.login_success', context, {
+    duration_ms: loginResult.durationMs,
+    upstream_account_username: account.username,
+    upstream_status: loginResult.status,
+    virtual_user_id: virtualUser?.id,
+    virtual_username: virtualUser?.username,
+  });
+
+  return {
+    auth: {
+      accessToken: storedToken.accessToken,
+      tokenType: storedToken.tokenType,
+    },
+    loginResult,
+    reused: false,
+  };
+}
+
 async function getVirtualSessionContext(request, env) {
   const token = getBearerToken(request);
   if (!token || !env.PLACEHOLDER_DB) return null;
   await ensureVirtualSessionsTable(env.PLACEHOLDER_DB);
   await ensureVirtualUsersTable(env.PLACEHOLDER_DB);
   const now = new Date().toISOString();
-  await env.PLACEHOLDER_DB.prepare('DELETE FROM virtual_sessions WHERE expires_at IS NOT NULL AND expires_at <= ?').bind(now).run();
+  await cleanupExpiredVirtualSessions(env.PLACEHOLDER_DB, now);
   const tokenHash = await hashValue(token);
   const row = await env.PLACEHOLDER_DB.prepare(`
-    SELECT vu.*
+    SELECT
+      vu.*,
+      vs.token_hash AS session_token_hash,
+      vs.expires_at AS session_expires_at,
+      vs.upstream_account_username AS session_upstream_account_username,
+      vs.remember AS session_remember
     FROM virtual_sessions vs
     LEFT JOIN virtual_users vu ON vu.id = vs.virtual_user_id
     WHERE vs.token_hash = ? AND (vs.expires_at IS NULL OR vs.expires_at > ?)
@@ -481,8 +828,19 @@ async function getVirtualSessionContext(request, env) {
   if (!row.id || row.deleted_at || !row.is_active) {
     return { error: responseWithStatus('Virtual user was not found or is inactive.', 403) };
   }
+  if (!row.session_upstream_account_username) {
+    return { error: responseWithStatus('Virtual session has expired. Please sign in again.', 401) };
+  }
 
-  return { user: rowToVirtualUser(row) };
+  return {
+    session: {
+      expiresAt: row.session_expires_at || null,
+      remember: Boolean(row.session_remember),
+      tokenHash: row.session_token_hash,
+      upstreamAccountUsername: row.session_upstream_account_username || '',
+    },
+    user: rowToVirtualUser(row),
+  };
 }
 
 async function isVirtualSession(request, env) {
@@ -620,6 +978,33 @@ function requireVirtualPermission(virtualContext, permission) {
   return responseWithStatus('This virtual user does not have permission to access that data.', 403);
 }
 
+async function ensureVirtualUpstreamAuth(virtualContext, env, context) {
+  if (!virtualContext?.user) return { auth: null };
+  const session = virtualContext.session;
+  if (!session?.upstreamAccountUsername) {
+    return { error: responseWithStatus('Virtual session has expired. Please sign in again.', 401) };
+  }
+
+  const upstreamAccounts = getConfiguredUpstreamAccounts(env);
+  const account = upstreamAccounts.find((candidate) => (
+    candidate.username.toLowerCase() === String(session.upstreamAccountUsername || '').toLowerCase()
+  ));
+  if (!account) {
+    logWorker(env, 'warn', 'auth.virtual_session.upstream_account_missing', context, {
+      upstream_account_username: session.upstreamAccountUsername,
+      virtual_user_id: virtualContext.user.id,
+      virtual_username: virtualContext.user.username,
+    });
+    return { error: responseWithStatus('The upstream account for this virtual session is no longer configured.', 401) };
+  }
+
+  return ensureUpstreamAccountAuth(env, account, {
+    context,
+    remember: session.remember,
+    virtualUser: virtualContext.user,
+  });
+}
+
 async function handleVirtualUsersRequest(request, env) {
   const dbError = requireAppDb(env);
   if (dbError) return withCors(dbError, request, env);
@@ -627,7 +1012,6 @@ async function handleVirtualUsersRequest(request, env) {
   await ensureVirtualUsersTable(env.PLACEHOLDER_DB);
   await ensureVirtualSessionsTable(env.PLACEHOLDER_DB);
   await ensureMasterSessionsTable(env.PLACEHOLDER_DB);
-  await ensureVirtualSessionsTable(env.PLACEHOLDER_DB);
 
   const accessError = await requireMasterVirtualUserAccess(request, env);
   if (accessError) return withCors(accessError, request, env);
@@ -760,16 +1144,19 @@ async function handleVirtualLoginRequest(request, env, context = createRequestCo
     logWorker(env, 'error', 'auth.virtual_login.missing_db', context);
     return withCors(dbError, request, env, context);
   }
-  if (!env.MASTER_USERNAME || !env.MASTER_PASSWORD) {
-    logWorker(env, 'error', 'auth.virtual_login.missing_master_credentials', context);
-    return withCors(Response.json({ error: 'Virtual login master credentials are not configured.' }, { status: 500 }), request, env, context);
-  }
   if (!env.UPSTREAM_ORIGIN) {
     logWorker(env, 'error', 'auth.virtual_login.missing_upstream_origin', context);
     return withCors(Response.json({ error: 'Proxy upstream is not configured.' }, { status: 500 }), request, env, context);
   }
 
+  const upstreamAccounts = getConfiguredUpstreamAccounts(env);
+  if (!upstreamAccounts.length) {
+    logWorker(env, 'error', 'auth.virtual_login.missing_upstream_accounts', context);
+    return withCors(Response.json({ error: 'Virtual login upstream accounts are not configured.' }, { status: 500 }), request, env, context);
+  }
+
   await ensureVirtualUsersTable(env.PLACEHOLDER_DB);
+  await ensureVirtualSessionsTable(env.PLACEHOLDER_DB);
 
   const virtualUsername = normalizeVirtualUsername(username);
   const virtualUser = await env.PLACEHOLDER_DB.prepare('SELECT * FROM virtual_users WHERE username = ? AND deleted_at IS NULL').bind(virtualUsername).first();
@@ -789,77 +1176,64 @@ async function handleVirtualLoginRequest(request, env, context = createRequestCo
     return withCors(Response.json({ error: 'Unable to sign in with those credentials.' }, { status: 401 }), request, env, context);
   }
 
-  const upstreamOrigin = env.UPSTREAM_ORIGIN.replace(/\/$/, '');
-  const startedAt = Date.now();
-  let upstreamResponse;
-  try {
-    upstreamResponse = await fetch(`${upstreamOrigin}/api/auth/login`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json, text/plain, */*',
-        'Content-Type': 'application/json',
-        Origin: upstreamOrigin,
-        Referer: `${upstreamOrigin}/`,
-      },
-      body: JSON.stringify({
-        username: env.MASTER_USERNAME,
-        password: env.MASTER_PASSWORD,
-        remember: body.remember,
-      }),
-      redirect: 'manual',
+  const rankedAccounts = await rankUpstreamAccountsForVirtualLogin(env.PLACEHOLDER_DB, upstreamAccounts);
+  let lastLoginFailure = null;
+  for (const upstreamAccount of rankedAccounts) {
+    const upstreamAuthResult = await ensureUpstreamAccountAuth(env, upstreamAccount, {
+      context,
+      remember: Boolean(body.remember),
+      virtualUser: rowToVirtualUser(virtualUser),
     });
-  } catch (error) {
-    logWorker(env, 'error', 'auth.virtual_login.master_fetch_exception', context, {
-      duration_ms: Date.now() - startedAt,
-      error_message: error?.message || String(error),
-      upstream_pathname: '/api/auth/login',
-      virtual_user_id: virtualUser.id,
-      virtual_username: virtualUsername,
-    });
-    return withCors(Response.json({ error: 'Unable to reach the configured master account.' }, { status: 502 }), request, env, context);
-  }
+    if (upstreamAuthResult.error) {
+      lastLoginFailure = upstreamAuthResult.loginResult || {
+        message: 'Unable to sign in with the configured upstream account.',
+        status: upstreamAuthResult.error.status || 502,
+      };
+      continue;
+    }
 
-  const payload = await readJsonResponse(upstreamResponse);
-  if (!upstreamResponse.ok) {
-    const message = payload?.message || payload?.error || 'Unable to sign in with the configured master account.';
-    logWorker(env, 'warn', 'auth.virtual_login.master_upstream_rejected', context, {
-      duration_ms: Date.now() - startedAt,
-      upstream_error: message,
-      upstream_pathname: '/api/auth/login',
-      upstream_status: upstreamResponse.status,
-      upstream_status_text: upstreamResponse.statusText,
-      virtual_user_id: virtualUser.id,
-      virtual_username: virtualUsername,
-    });
-    return withCors(Response.json({ error: message }, { status: upstreamResponse.status }), request, env, context);
-  }
-
-  if (payload?.access_token) {
+    const panelToken = randomHex(32);
+    const tokenHash = await hashValue(panelToken);
     const now = new Date().toISOString();
-    const expiresInMs = Number(payload.expires_in || 0) * 1000;
-    const expiresAt = expiresInMs ? new Date(Date.now() + expiresInMs).toISOString() : null;
+    const sessionTtlSeconds = getVirtualSessionTtlSeconds(env, Boolean(body.remember));
+    const expiresAt = getExpiresAtFromSeconds(sessionTtlSeconds);
     await env.PLACEHOLDER_DB.prepare(`
-      INSERT OR REPLACE INTO virtual_sessions (token_hash, virtual_user_id, expires_at, created_at)
-      VALUES (?, ?, ?, ?)
+      INSERT OR REPLACE INTO virtual_sessions (
+        token_hash, virtual_user_id, upstream_account_username,
+        remember, expires_at, created_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      await hashValue(payload.access_token),
+      tokenHash,
       virtualUser.id,
+      upstreamAccount.username,
+      Boolean(body.remember) ? 1 : 0,
       expiresAt,
       now,
+      now,
     ).run();
+
+    await markUpstreamAccountSelected(env.PLACEHOLDER_DB, upstreamAccount.username, now);
+
+    logWorker(env, 'info', 'auth.virtual_login.success', context, {
+      upstream_account_username: upstreamAccount.username,
+      upstream_token_reused: Boolean(upstreamAuthResult.reused),
+      virtual_user_id: virtualUser.id,
+      virtual_username: virtualUsername,
+    });
+
+    return withCors(Response.json({
+      access_token: panelToken,
+      expires_in: sessionTtlSeconds,
+      refresh_token: null,
+      token_type: 'Bearer',
+      upstream_account_username: upstreamAccount.username,
+      virtual_user: rowToVirtualUser(virtualUser),
+    }, { status: 200 }), request, env, context);
   }
 
-  logWorker(env, 'info', 'auth.virtual_login.success', context, {
-    duration_ms: Date.now() - startedAt,
-    upstream_status: upstreamResponse.status,
-    virtual_user_id: virtualUser.id,
-    virtual_username: virtualUsername,
-  });
-
-  return withCors(Response.json({
-    ...payload,
-    virtual_user: rowToVirtualUser(virtualUser),
-  }, { status: upstreamResponse.status }), request, env, context);
+  const message = lastLoginFailure?.message || 'Unable to sign in with any configured upstream account.';
+  return withCors(Response.json({ error: message }, { status: lastLoginFailure?.status || 502 }), request, env, context);
 }
 
 async function handleRegularLoginRequest(request, env, body, context = createRequestContext(request)) {
@@ -995,7 +1369,7 @@ async function findPlaceholderOverlap(db, payload, excludeId = '') {
   return (results || []).find((row) => row.id !== excludeId && placeholderRangesOverlap(payload, row));
 }
 
-async function findUpstreamBookingOverlap(request, env, payload) {
+async function findUpstreamBookingOverlap(request, env, payload, upstreamAuth = null) {
   if (!env.UPSTREAM_ORIGIN) return null;
 
   const upstreamOrigin = env.UPSTREAM_ORIGIN.replace(/\/$/, '');
@@ -1004,7 +1378,7 @@ async function findUpstreamBookingOverlap(request, env, payload) {
   upstreamUrl.searchParams.set('date', payload.date);
 
   const response = await fetch(upstreamUrl, {
-    headers: buildUpstreamHeaders(request, upstreamOrigin),
+    headers: buildUpstreamHeaders(request, upstreamOrigin, upstreamAuth),
     method: 'GET',
     redirect: 'manual',
   });
@@ -1256,9 +1630,15 @@ export default {
       const accessError = authorizeVirtualProxyRequest(request, virtualContext);
       if (accessError) return withCors(accessError, request, env, context);
 
+      const upstreamAuthResult = virtualContext?.user
+        ? await ensureVirtualUpstreamAuth(virtualContext, env, context)
+        : null;
+      if (upstreamAuthResult?.error) return withCors(upstreamAuthResult.error, request, env, context);
+
       return proxyApiRequest(request, env, {
         context,
         transformResponse: shouldMaskCalendarMoney(url.pathname, virtualContext) ? stripMoneyFields : null,
+        upstreamAuth: upstreamAuthResult?.auth,
       });
     } catch (error) {
       logWorker(env, 'error', 'worker.unhandled_exception', context, {

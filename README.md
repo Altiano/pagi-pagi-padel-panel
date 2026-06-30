@@ -57,13 +57,15 @@ VITE_BASE_PATH=/
 - `VITE_USE_LOCAL_PLACEHOLDERS`: optional escape hatch for browser-local placeholder storage. Leave unset for D1-backed testing.
 - `VITE_BASE_PATH`: base path for static deployments.
 - `UPSTREAM_ORIGIN`: Worker secret/var for the upstream API origin.
-- `MASTER_USERNAME`: Worker secret for the real upstream account used by virtual users.
-- `MASTER_PASSWORD`: Worker secret for the real upstream account used by virtual users.
+- `MASTER_USERNAME`: Worker secret for the real upstream account allowed to manage virtual users; also used as the single virtual-login upstream account when no account pool is configured.
+- `MASTER_PASSWORD`: Worker secret for the single-account virtual-login fallback when no account pool is configured.
+- `UPSTREAM_ACCOUNTS_JSON`: optional Worker secret containing a JSON array of upstream accounts for virtual-user sessions, for example `[{"username":"admin-a@example.com","password":"..."},{"username":"admin-b@example.com","password":"..."}]`.
+- `VIRTUAL_SESSION_TTL_SECONDS` / `VIRTUAL_SESSION_REMEMBER_TTL_SECONDS`: optional Worker vars for panel-token lifetime. Defaults are 12 hours and 30 days.
 - `WORKER_LOG_LEVEL`: optional Worker log threshold (`debug`, `info`, `warn`, `error`, or `silent`). Defaults to `info`.
 
 ## Worker And D1
 
-The Worker proxies ordinary `/api/*` requests to the configured upstream service. `/api/placeholder-bookings` and `/api/virtual-users` are handled locally by the Worker and stored in Cloudflare D1. Virtual users sign in with usernames like `_frontdesk`; the Worker validates that virtual user password, then signs into upstream using `MASTER_USERNAME` and `MASTER_PASSWORD`.
+The Worker proxies ordinary `/api/*` requests to the configured upstream service. `/api/placeholder-bookings` and `/api/virtual-users` are handled locally by the Worker and stored in Cloudflare D1. Virtual users sign in with usernames like `_frontdesk`; the Worker validates that virtual user password, selects the least-loaded configured upstream account, ensures that account has a fresh shared upstream token in D1, and returns only a Worker-issued panel session token to the browser. Virtual session rows store the assigned upstream username; the reusable upstream token itself lives in `upstream_account_tokens` and is swapped into proxied requests after permission checks.
 
 Virtual-user permissions are enforced in the Worker before upstream proxying. Screen permissions map to captured endpoint groups, `Calendar booking` controls real booking write actions, and `Calendar revenue` controls whether calendar money fields are returned. Real booking creation and placeholder conversion require `Calendar` plus `Calendar booking`, but do not require `Calendar revenue`; hidden or blank booking prices are submitted as zero. Placeholder booking audit names are server-stamped for virtual users, so they cannot submit another PIC name as creator/updater.
 
@@ -75,11 +77,12 @@ The current `wrangler.toml` is bound to the project D1 database. To create a new
 wrangler d1 create pagi-pagi-padel-placeholders
 ```
 
-Set the master upstream credentials as Worker secrets before enabling virtual login:
+Set the master upstream credentials as Worker secrets before enabling virtual login. To rotate virtual sessions across multiple upstream accounts, also set `UPSTREAM_ACCOUNTS_JSON`; otherwise virtual login falls back to `MASTER_USERNAME` and `MASTER_PASSWORD`.
 
 ```sh
 wrangler secret put MASTER_USERNAME
 wrangler secret put MASTER_PASSWORD
+wrangler secret put UPSTREAM_ACCOUNTS_JSON
 ```
 
 ## Repository Overview

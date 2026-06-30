@@ -128,9 +128,12 @@ export function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
           <dl>
             <div><dt>Login type</dt><dd>{auth.virtualUser ? 'Virtual account' : 'Regular upstream account'}</dd></div>
             <div><dt>Upstream</dt><dd>{meState.loading ? 'Checking...' : meState.error ? 'Needs attention' : 'Connected'}</dd></div>
+            {auth.upstreamAccountUsername ? (
+              <div><dt>Assigned account</dt><dd>{auth.upstreamAccountUsername}</dd></div>
+            ) : null}
             <div><dt>Virtual prefix</dt><dd>_username</dd></div>
           </dl>
-          <p>Virtual users authenticate with their own wrapper password. The Worker then signs into the upstream service with the configured master account.</p>
+          <p>Virtual users authenticate with their own wrapper password. The Worker keeps upstream tokens server-side and assigns an upstream account per session.</p>
         </aside>
       </section>
 
@@ -275,5 +278,4 @@ export function buildVirtualUserForm(user) {
     is_active: true,
   };
 }
-
 

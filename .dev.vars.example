@@ -1,3 +1,6 @@
 UPSTREAM_ORIGIN=https://api.example.com
 MASTER_USERNAME=admin@example.com
 MASTER_PASSWORD=change-me
+UPSTREAM_ACCOUNTS_JSON=[{"username":"admin-a@example.com","password":"change-me"},{"username":"admin-b@example.com","password":"change-me"}]
+VIRTUAL_SESSION_TTL_SECONDS=43200
+VIRTUAL_SESSION_REMEMBER_TTL_SECONDS=2592000

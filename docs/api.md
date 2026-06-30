@@ -39,7 +39,7 @@ Request body:
 }
 ```
 
-Expected response fields:
+Expected regular-login response fields:
 
 ```json
 {
@@ -57,10 +57,15 @@ The client stores this as `panel.auth` in localStorage and also writes Nuxt-comp
 - `auth._token_expiration.local`
 - `auth._refresh_token.local`
 
-If `username` starts with `_`, the Worker treats it as a virtual account login. It strips the underscore prefix, validates the virtual user and password against D1, then logs into the upstream API with `MASTER_USERNAME` and `MASTER_PASSWORD`. The response keeps the upstream token fields and adds:
+If `username` starts with `_`, the Worker treats it as a virtual account login. It strips the underscore prefix, validates the virtual user and password against D1, chooses a configured upstream account with the lowest active non-expired virtual-session count, ensures that account has a fresh shared upstream token in D1, and returns a Worker-issued panel session token:
 
 ```json
 {
+  "token_type": "Bearer",
+  "access_token": "panel-session-token",
+  "refresh_token": null,
+  "expires_in": 3600,
+  "upstream_account_username": "admin-a@example.com",
   "virtual_user": {
     "id": "virtual-user-id",
     "username": "frontdesk",
@@ -72,7 +77,7 @@ If `username` starts with `_`, the Worker treats it as a virtual account login. 
 }
 ```
 
-The master credentials must be configured on the Worker and must not be exposed as Vite variables.
+For virtual sessions, `access_token` is not an upstream token. It is a random panel token whose hash is stored in D1. `expires_in` is the panel-session lifetime, not the upstream token lifetime. The selected upstream username is returned only for debugging; upstream access and refresh tokens stay server-side in `upstream_account_tokens`, keyed by upstream username, and can be shared by multiple virtual sessions assigned to the same account. The account pool should be configured with the `UPSTREAM_ACCOUNTS_JSON` Worker secret. If it is unset, virtual login falls back to `MASTER_USERNAME` and `MASTER_PASSWORD`. These secrets must not be exposed as Vite variables.
 
 ### `GET /api/auth/me`
 
@@ -522,7 +527,7 @@ When calendar data is loaded, the frontend compares live upstream bookings and l
 
 ## Virtual Users
 
-Virtual users are stored by this wrapper and can only be managed by a real session for the configured `MASTER_USERNAME`. They provide wrapper-level login identities while all upstream calls still use the configured master upstream account.
+Virtual users are stored by this wrapper and can only be managed by a real session for the configured `MASTER_USERNAME`. They provide wrapper-level login identities while upstream calls use the upstream account assigned to that virtual session.
 
 The Worker handles these routes locally before proxying other `/api/*` requests upstream:
 
@@ -545,7 +550,7 @@ Create/update payload:
 
 For updates, omit or blank `password` to keep the current password. Passwords are stored as salted SHA-256 hashes in D1. Permissions control visible navigation in the wrapper UI and Worker authorization before virtual sessions reach proxied upstream endpoints.
 
-The Worker records virtual-issued access token hashes in D1 so `/api/virtual-users` can reject virtual sessions even though those sessions use a master upstream token underneath. Non-master upstream accounts are rejected after the Worker verifies `/api/auth/me` against `MASTER_USERNAME`.
+The Worker records virtual-issued panel token hashes in D1. Each virtual session row stores the assigned upstream account username. A dedicated `upstream_account_tokens` table stores one reusable upstream access/refresh token per configured upstream username. On proxy requests, the Worker maps the panel token back to the virtual user, enforces permissions, reuses or refreshes the assigned account token by re-login when it is near expiry, and only then sends the stored upstream token to the upstream API. Non-master upstream accounts are rejected from virtual-user management after the Worker verifies `/api/auth/me` against `MASTER_USERNAME`.
 
 Virtual endpoint authorization:
 
