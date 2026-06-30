@@ -1,6 +1,16 @@
 # Architecture
 
-Pagi Pagi Padel Panel is a React + Vite admin frontend. It is currently compact by design: most UI and calendar logic lives in `src/App.jsx`, with API helpers separated under `src/api/`.
+Pagi Pagi Padel Panel is a React + Vite admin frontend. The code is organized in
+layers with a strictly downward dependency direction (no import cycles):
+
+- `App.jsx` — composition root + panel shell.
+- `src/screens/` and `src/calendar/` — feature UI.
+- `src/api/` — network + cache boundary.
+- `src/lib/` — pure, framework-free helpers.
+- `src/constants.js`, `src/hooks.js` — shared constants and React hooks.
+
+See the Code Map in `AGENTS.md` for a one-line description of every file. The
+sections below describe how data flows through those layers.
 
 ## Runtime Flow
 
@@ -29,7 +39,7 @@ Virtual permissions are enforced twice:
 
 ## Calendar Flow
 
-`CalendarPage` owns calendar state:
+`CalendarPage` (`src/calendar/CalendarPage.jsx`) owns calendar state:
 
 - `view`: `day` or `week`.
 - `selectedDate`: `YYYY-MM-DD` date string.
@@ -39,7 +49,7 @@ Virtual permissions are enforced twice:
 
 When `mitraId`, `selectedDate`, or `refreshKey` changes, `CalendarPage` calls `loadCalendarData`.
 
-`loadCalendarData` fetches:
+`loadCalendarData` (`src/api/calendar.js`) fetches:
 
 - court list for the current `mitraId`
 - open hours for every date in the selected week
@@ -48,7 +58,7 @@ When `mitraId`, `selectedDate`, or `refreshKey` changes, `CalendarPage` calls `l
 
 Then it attaches court names to booking rows, maps placeholders into booking-like entries, and returns normalized calendar state.
 
-Calendar data uses a module-level in-memory cache with a 30-second TTL. Cache keys include the current auth/revenue visibility scope, `mitraId`, data type, and date so virtual-user revenue masking does not bleed across sessions. Selecting another already-cached day in the same week reuses cached open hours, schedule rows, and placeholders. The toolbar refresh button and placeholder create/update/delete increment `refreshKey` and bypass the cache; a browser reload also clears the cache because it is not persisted.
+Calendar data uses a module-level in-memory cache (in `src/api/calendar.js`) with a TTL set by `CALENDAR_DATA_CACHE_TTL_MS` in `src/constants.js`. Cache keys include the current auth/revenue visibility scope, `mitraId`, data type, and date so virtual-user revenue masking does not bleed across sessions. Selecting another already-cached day in the same week reuses cached open hours, schedule rows, and placeholders. The toolbar refresh button and placeholder create/update/delete increment `refreshKey` and bypass the cache; a browser reload also clears the cache because it is not persisted.
 
 Placeholder create mode can target multiple courts at once. The frontend fans that out into one `/api/placeholder-bookings` POST per selected court. Multiple placeholders can share the same court/time; the Calendar renders those as a placeholder stack. If a placeholder overlaps a live upstream booking, the frontend treats it as a waitlist hold and disables conversion until the live booking moves or is canceled. Edit mode updates a single placeholder row.
 
@@ -58,21 +68,18 @@ The Worker allows placeholder overlaps so staff can capture competing tentative 
 
 ## UI Structure
 
-Current component structure inside `src/App.jsx`:
+Components by file (`AGENTS.md` has the full Code Map):
 
-- `App`
-- `LoginScreen`
-- `PanelShell`
-- `VirtualUsersPage`
-- `PlaceholderPage`
-- `CalendarPage`
-- `DayCalendar`
-- `WeekCalendar`
-- `CalendarDetailPanel`
-- `PlaceholderBookingEditor`
-- booking write/action drawers for create, conversion, payment proof, reschedule, cancellation, and notes
+- `src/App.jsx` — `App`, `PanelShell`, `DesktopSidebar`, `MobileAppShell`, `PlaceholderPage`, `NoAccessPage`.
+- `src/screens/LoginScreen.jsx` — `LoginScreen`.
+- `src/screens/VirtualUsersPage.jsx` — `VirtualUsersPage`, `VirtualUserEditor`.
+- `src/calendar/CalendarPage.jsx` — `CalendarPage` (the controller that holds calendar state and write actions).
+- `src/calendar/CalendarViews.jsx` — `DayCalendar`, `WeekCalendar`, `WeekDayColumn`, `MobileDayAgenda`, `MobileWeekCalendar`, `CalendarBookingButton`, `CalendarCardTooltip`.
+- `src/calendar/CalendarDetailPanel.jsx` — `CalendarDetailPanel`.
+- `src/calendar/BookingDialogs.jsx` — `BookingWriteDialog` (create/convert), `PaymentProofDialog`, `RescheduleBookingDialog`, `CancelBookingDialog`, `BookingNotesDialog`, `SlotChoiceDialog`, `BookingActionSummary`.
+- `src/calendar/PlaceholderBookingEditor.jsx` — `PlaceholderBookingEditor`.
 
-The rest of the file contains date, time, booking, formatting, summary, and clipboard helpers.
+The former in-file helper functions now live in `src/lib/` (date/time, formatting, booking shapes, navigation), `src/calendar/forms.js` (form-state + payload builders), and `src/api/calendar.js` (data loading, cache, booking-action endpoints).
 
 ## Styling
 
@@ -82,24 +89,27 @@ If the UI grows, consider splitting styles by feature or moving repeated UI patt
 
 ## Refactoring Guidance
 
-The current single-file `App.jsx` is acceptable while the app is small. Future agents may split it when doing so makes implementation faster, safer, or easier to verify.
+`App.jsx` was originally one ~4,300-line file; it has been split into the layered
+modules described above. When extending the app, add code to the matching layer
+rather than growing one file back into a monolith:
 
-Good extraction targets:
+- Pure value logic → `src/lib/*` (and add tests there).
+- Network/cache code → `src/api/*`.
+- A new screen → `src/screens/*`, wired into `PanelShell` in `App.jsx`.
+- Calendar UI → a focused file under `src/calendar/`.
 
-- `src/screens/LoginScreen.jsx`
-- `src/screens/PanelShell.jsx`
-- `src/calendar/CalendarPage.jsx`
-- `src/calendar/DayCalendar.jsx`
-- `src/calendar/WeekCalendar.jsx`
-- `src/calendar/CalendarDetailPanel.jsx`
-- `src/calendar/api.js`
-- `src/calendar/utils.js`
+Keep the dependency direction downward: components may import from `api/`, `lib/`,
+`constants.js`, and `hooks.js`, but those lower layers must not import components.
+This is what keeps the graph cycle-free.
 
-If helpers move to `src/calendar/utils.js`, add tests around the pure functions first or in the same change.
+`vite build` verifies that named imports resolve, but it does **not** catch a
+helper that is referenced without being imported (it becomes a runtime
+`ReferenceError`). After moving code between files, confirm imports by grepping the
+symbol or by loading the page and watching the browser console.
 
 When refactoring, also update:
 
-- `AGENTS.md`
+- `AGENTS.md` (especially the Code Map)
 - `README.md`
 - this file
 - `docs/api.md` if API boundaries change
@@ -112,10 +122,11 @@ There are no automated tests yet. The current verification command is:
 pnpm build
 ```
 
-Recommended first tests:
+The pure helpers now live in `src/lib/` (and `src/calendar/forms.js`), which makes
+them straightforward to unit test in isolation. Recommended first targets:
 
-- date shifting and week generation
-- time parsing
-- booking start/end/duration helpers
-- day and week summary calculations
-- API URL construction
+- `src/lib/datetime.js` — date shifting, week generation, time parsing.
+- `src/lib/bookings.js` — booking start/end/duration, overlap, day/week summaries, placeholder normalize/annotate.
+- `src/lib/format.js` — currency/status formatting.
+- `src/calendar/forms.js` — form-state and `buildCourtBookingPayload` / `buildCancelBookingPayload`.
+- `src/api/config.js` — API URL construction.

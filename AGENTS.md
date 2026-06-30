@@ -25,15 +25,60 @@ When the user says "push it" or similar, treat that as a publish request: commit
 
 For publish requests with user-visible app changes, bump `package.json` version before committing. Use semver judgment: patch for small fixes and UI tweaks, minor for new feature surfaces or meaningful workflow changes, and major only for intentional breaking changes. Docs-only, comment-only, and internal maintenance changes do not need a version bump unless the user explicitly asks.
 
-## Important Files
+## Code Map (start here)
 
-- `src/App.jsx`: Main app, login flow, shell, calendar UI, calendar data loading, and calendar helper functions.
-- `src/api/auth.js`: Login, token persistence, and auth clearing.
-- `src/api/client.js`: Authenticated API request wrapper.
-- `src/api/config.js`: API URL builder using `VITE_API_BASE_URL`.
-- `src/api/placeholders.js`: Optional browser-local placeholder storage escape hatch.
-- `src/api/virtualUsers.js`: Worker-owned virtual user CRUD helpers.
-- `src/styles.css`: Global styles for the login screen, shell, and calendar.
+The app is organized in layers. Dependencies only point downward (leaves at the
+bottom), so there are no import cycles. To find something fast, match the task to
+a layer:
+
+```text
+src/
+  main.jsx                       React entrypoint; mounts <App/>.
+  App.jsx                        Composition root: login-vs-panel, panel shell
+                                 (sidebar / mobile chrome), /auth/me load, and
+                                 virtual-user nav/permission gating.
+  constants.js                   Shared constants: nav groups, permission lists,
+                                 cache TTL, placeholder statuses, durations.
+  hooks.js                       usePreferredMobileView, useEscapeKey.
+  styles.css                     All global styles (login, shell, calendar).
+
+  lib/            (pure, framework-free helpers — safe to unit test)
+    datetime.js                  Date / time / week / month parsing + formatting.
+    format.js                    Currency, status text, clipboard.
+    bookings.js                  Booking-shape helpers: derive times/labels/tone/
+                                 meta, overlap detection, placeholder normalize +
+                                 conflict annotation, day/week summaries.
+    navigation.js                Virtual-user nav visibility + permission checks.
+
+  api/            (network + persistence boundary)
+    config.js                    API URL builder using VITE_API_BASE_URL.
+    client.js                    apiRequest: authed fetch wrapper; clears auth on 401.
+    auth.js                      Login + localStorage auth persistence.
+    virtualUsers.js              Worker-owned virtual user CRUD.
+    placeholders.js              Optional browser-local placeholder escape hatch.
+    calendar.js                  Calendar data load + in-memory TTL cache +
+                                 captured booking-action endpoints (detail,
+                                 receipt upload, reschedule lookups, price check).
+
+  calendar/       (the Calendar feature)
+    CalendarPage.jsx             Controller: view/date/selection/editor state,
+                                 data loading, all booking + placeholder write
+                                 actions, and wiring of the pieces below.
+    CalendarViews.jsx            Day/Week/Mobile grid renderers + hover tooltip.
+    CalendarDetailPanel.jsx      Selected booking detail + day/week summary panel.
+    BookingDialogs.jsx           Real-booking write dialogs: create/convert,
+                                 payment proof, reschedule, cancel, notes, and the
+                                 placeholder-vs-real slot chooser.
+    PlaceholderBookingEditor.jsx Placeholder create/edit modal.
+    forms.js                     Pure form-state + upstream-payload builders.
+
+  screens/
+    LoginScreen.jsx              Credential login screen.
+    VirtualUsersPage.jsx         Settings: virtual user management (master-only).
+```
+
+Other key files:
+
 - `vite.config.js`: Vite config, base path, and local `/api` proxy.
 - `docs/architecture.md`: Higher-level architecture and data-flow notes.
 - `docs/api.md`: Backend endpoint assumptions and response-shape notes.
@@ -51,8 +96,8 @@ For publish requests with user-visible app changes, bump `package.json` version 
 
 ## Current Architecture Notes
 
-- `App.jsx` is intentionally still a single large file from the initial build. It is acceptable to split it when adding meaningful functionality or tests.
-- Calendar data is loaded in `loadCalendarData`, which fetches courts, open hours, one schedule response per weekday, and D1-backed placeholder bookings. Calendar fetches are cached in-memory per auth/revenue scope for 30 seconds per visible date; toolbar refresh, browser refresh, placeholder mutations, and real booking write actions force fresh data.
+- The UI is split into layered modules (see the Code Map above). `App.jsx` is now only the composition root and panel shell; feature code lives under `src/calendar/` and `src/screens/`, with reusable pure helpers under `src/lib/` and the network/cache boundary under `src/api/`.
+- Calendar data is loaded in `loadCalendarData` (in `src/api/calendar.js`), which fetches courts, open hours, one schedule response per weekday, and D1-backed placeholder bookings. Calendar fetches are cached in-memory per auth/revenue scope for the `CALENDAR_DATA_CACHE_TTL_MS` window (in `src/constants.js`) per visible date; toolbar refresh, browser refresh, placeholder mutations, and real booking write actions force fresh data.
 - Virtual account login uses an underscore-prefixed username, for example `_frontdesk`. The Worker validates the D1 virtual user, then logs into upstream with `MASTER_USERNAME` and `MASTER_PASSWORD`.
 - Virtual user management is master-only. The Worker rejects `/api/virtual-users` requests from virtual sessions and from real upstream accounts whose `/api/auth/me` identity does not match `MASTER_USERNAME`.
 - Virtual user permissions control wrapper navigation and Worker endpoint authorization. The Worker maps virtual sessions to D1 token hashes before proxying upstream routes, rejects endpoints outside the user's allowed screens, requires `Calendar booking` for real booking write actions, and masks calendar money fields unless `Calendar revenue` is granted.
@@ -65,10 +110,15 @@ For publish requests with user-visible app changes, bump `package.json` version 
 ## Change Guidance
 
 - Prefer small, behavior-focused changes with `pnpm build` verification.
-- When adding a new feature screen, consider extracting that screen from `App.jsx` instead of making the file larger.
-- When touching calendar logic, consider moving pure helpers into a calendar utility module and adding tests.
+- Put new code in the layer that matches it (see the Code Map):
+  - Pure value helpers (dates, money, booking shapes) → `src/lib/*`. These are framework-free and the best first target for unit tests.
+  - Anything that talks to the network or owns cached data → `src/api/*`.
+  - A new full screen → `src/screens/NewScreen.jsx`, wired into `App.jsx`'s `PanelShell` switch.
+  - Calendar UI → a focused file under `src/calendar/`; keep `CalendarPage.jsx` as the controller and avoid growing it back into a monolith.
+- Respect the dependency direction (`App` → `screens`/`calendar` → `api`/`lib` → `constants`). Do not import a component from `lib/` or `api/`; that would create a cycle.
 - Keep API field names aligned with the existing backend payloads. Do not rename backend-derived fields unless there is a mapping layer.
-- Keep docs in sync with code changes. If a future refactor changes the component layout, update this guide, `README.md`, and relevant files in `docs/`.
+- Keep docs in sync with code changes. If a refactor changes the module layout, update this guide's Code Map, `README.md`, and relevant files in `docs/`.
+- `vite build` does not catch a helper that is used but not imported (a free identifier silently becomes a runtime crash). After moving code between modules, double-check imports — grep the symbol, or load the page and watch the browser console.
 
 ## Visual And Mockup Guidance
 
@@ -84,10 +134,10 @@ Future AI agents may freely refactor this guide, the README, and the docs when t
 
 Good triggers for refactoring:
 
-- `src/App.jsx` becomes harder to scan or gains another full feature module.
-- Calendar helper functions need tests.
-- Multiple screens share shell, toolbar, or data-fetching patterns.
+- A single file (e.g. `CalendarPage.jsx` or `BookingDialogs.jsx`) becomes hard to scan or grows another distinct responsibility — split it the same way `App.jsx` was split.
+- A `src/lib/*` module accumulates enough logic to deserve its own tests.
+- Multiple screens share shell, toolbar, or data-fetching patterns worth lifting into a shared component or hook.
 - API assumptions move from guessed shapes to stable backend contracts.
 - Documentation no longer matches the fastest way to understand the repo.
 
-When refactoring, keep the repo AI-friendly by preserving a clear entrypoint, command list, architecture map, and API assumptions.
+When refactoring, keep the repo AI-friendly by preserving a clear entrypoint, command list, the Code Map, the downward dependency direction, and the API assumptions.

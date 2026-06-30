@@ -10,7 +10,7 @@ This app provides the browser UI for managing Pagi Pagi Padel admin workflows. I
 - Virtual account login with an underscore-prefixed username, backed by Worker-managed users.
 - Virtual account screen/action permissions, Worker endpoint authorization, and optional Calendar revenue visibility.
 - Authenticated session storage in the browser.
-- A wired Calendar screen with day/week views, 30-second in-memory date caching, court bookings, booking details, write actions, and summary metrics.
+- A wired Calendar screen with day/week views, short-lived in-memory date caching, court bookings, booking details, write actions, and summary metrics.
 - Real court booking create flows for offline customers and registered Courtside users, including bulk creation across selected dates, plus payment receipt upload, mark-paid, reschedule, notes, and cancellation actions from captured upstream APIs.
 - D1-backed placeholder bookings for tentative holds before payment or upstream confirmation, including multi-court create, same-slot placeholder stacks, waitlist holds behind live bookings, and conversion into real upstream bookings.
 - Placeholder screens for Dashboard, Court Prices, Event, Coach, Add On, Customers, and Setting.
@@ -79,13 +79,33 @@ wrangler secret put MASTER_PASSWORD
 
 ```text
 src/
-  api/
-    auth.js       Login, localStorage auth persistence, logout cleanup
-    client.js     Authenticated API request helper
-    config.js     API URL builder
-  App.jsx         Main React app, shell, Calendar screen, calendar helpers
-  main.jsx        React entrypoint
-  styles.css      Global app styles
+  main.jsx          React entrypoint
+  App.jsx           Composition root + panel shell (login vs panel, nav gating)
+  constants.js      Shared constants (nav, permissions, cache TTL, durations)
+  hooks.js          usePreferredMobileView, useEscapeKey
+  styles.css        Global app styles
+  lib/              Pure, framework-free helpers (unit-test friendly)
+    datetime.js     Date / time / week parsing + formatting
+    format.js       Currency / status / clipboard
+    bookings.js     Booking-shape helpers, overlaps, summaries
+    navigation.js   Virtual-user nav + permission gating
+  api/              Network + persistence boundary
+    config.js       API URL builder
+    client.js       Authenticated API request helper (apiRequest)
+    auth.js         Login, localStorage auth persistence, logout cleanup
+    virtualUsers.js Virtual user CRUD
+    placeholders.js Browser-local placeholder escape hatch
+    calendar.js     Calendar data load + cache + booking-action endpoints
+  calendar/         Calendar feature
+    CalendarPage.jsx            Controller (state + write actions)
+    CalendarViews.jsx           Day/Week/Mobile grid renderers + tooltip
+    CalendarDetailPanel.jsx     Booking detail + day/week summary
+    BookingDialogs.jsx          Real-booking write dialogs
+    PlaceholderBookingEditor.jsx Placeholder create/edit modal
+    forms.js                    Form-state + upstream-payload builders
+  screens/
+    LoginScreen.jsx       Credential login
+    VirtualUsersPage.jsx  Settings: virtual user management
 docs/
   architecture.md Architecture and data-flow notes
   api.md          Backend endpoint assumptions
@@ -93,19 +113,19 @@ docs/
                   Current screenshots and design-language guidance
   visual-reference/
                   Live app screenshots for mockup alignment
-AGENTS.md         AI-agent working guide
+AGENTS.md         AI-agent working guide (start here; has the full Code Map)
 ```
 
 ## Development Notes
 
-- `src/App.jsx` currently contains the main app, feature UI, data loading, and calendar helper functions in one file.
-- It is acceptable to split components, utilities, and API modules when that makes a requested change safer or faster.
-- When splitting code, update `AGENTS.md`, this README, and the relevant docs so the repo remains AI-friendly.
+- The code is split into layers: `App.jsx` (shell) → `src/screens` + `src/calendar` (feature UI) → `src/api` + `src/lib` (network + pure helpers) → `src/constants.js`. Add new code to the matching layer instead of growing one file. See the Code Map in `AGENTS.md`.
+- Keep the dependency direction downward (lower layers must not import components) so the module graph stays cycle-free.
+- When moving or splitting code, update `AGENTS.md`, this README, and the relevant docs so the repo remains AI-friendly.
 - Before generating UI mockups or design variants, review `docs/visual-reference.md` and the screenshots in `docs/visual-reference/`.
 - When the app's visual design changes materially, refresh the visual-reference screenshots so future mockups stay aligned with the real UI.
 - Keep backend response field names visible at the boundary. If fields need nicer frontend names, map them in one place instead of renaming them throughout the UI.
-- Calendar data is cached only in memory for 30 seconds per auth/revenue scope and visible date. The toolbar refresh button, browser reload, and placeholder mutations intentionally bypass or clear that cache.
-- There are no automated tests yet. If calendar logic changes, a useful first test target is extracting pure date/time/summary helpers from `App.jsx`.
+- Calendar data is cached only in memory for the `CALENDAR_DATA_CACHE_TTL_MS` window (`src/constants.js`, currently 2 minutes) per auth/revenue scope and visible date. The toolbar refresh button, browser reload, and placeholder mutations intentionally bypass or clear that cache.
+- There are no automated tests yet. The pure helpers in `src/lib/` (date/time, formatting, booking shapes, summaries) and `src/calendar/forms.js` are framework-free and make good first unit-test targets.
 
 ## GitHub Pages
 

@@ -76,7 +76,7 @@ The client looks for:
 - `name`
 - `data.mitra_id`, `mitra_id`, `data.mitraId`, or nested equivalents up to a limited depth
 
-If no `mitraId` is found, the current code falls back to a hard-coded mitra ID in `src/App.jsx`.
+If no `mitraId` is found, `PanelShell` (in `src/App.jsx`) falls back to the hard-coded `FALLBACK_MITRA_ID` defined in `src/constants.js`.
 
 ## Calendar
 
@@ -165,7 +165,7 @@ Important booking fields used by the UI:
 
 `loadCalendarData` attaches `court_name` to each booking by matching `court_id` to the court list.
 
-Calendar responses are cached in browser memory for 30 seconds per auth/revenue scope, `mitraId`, data type, and date. This cache is deliberately not persisted. The dashboard refresh button and placeholder mutations bypass the cache, and a browser reload naturally starts with an empty cache.
+Calendar responses are cached in browser memory for the `CALENDAR_DATA_CACHE_TTL_MS` window (`src/constants.js`, currently 2 minutes) per auth/revenue scope, `mitraId`, data type, and date. This cache is deliberately not persisted. The dashboard refresh button and placeholder mutations bypass the cache, and a browser reload naturally starts with an empty cache.
 
 The Calendar UI now uses the captured write endpoints below for direct real booking creation, placeholder-to-booking conversion, payment proof upload, mark-paid, reschedule, note edits, and cancellation. Each successful write refreshes calendar data so the visible schedule re-syncs from upstream and D1.
 
