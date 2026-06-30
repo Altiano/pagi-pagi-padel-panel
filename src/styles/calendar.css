@@ -1291,3 +1291,76 @@
 .detail-action-note.danger {
   color: var(--danger);
 }
+
+.week-court .week-booking-card.multi-selected {
+  border-color: var(--green);
+  box-shadow:
+    0 0 0 2px var(--green),
+    0 10px 22px rgba(23, 63, 43, 0.14);
+}
+
+.placeholder-multiselect-bar {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 8px 8px 16px;
+  background: var(--surface);
+  box-shadow: 0 12px 28px rgba(23, 33, 27, 0.16);
+  transform: translateX(-50%);
+}
+
+.placeholder-multiselect-count {
+  color: var(--ink, #1f3e2d);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.placeholder-multiselect-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: 999px;
+  padding: 7px 14px;
+  background: var(--danger);
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+  transition: filter 140ms ease;
+}
+
+.placeholder-multiselect-delete:hover:not(:disabled),
+.placeholder-multiselect-delete:focus-visible {
+  filter: brightness(0.94);
+}
+
+.placeholder-multiselect-delete:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.placeholder-multiselect-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 999px;
+  padding: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.placeholder-multiselect-clear:hover,
+.placeholder-multiselect-clear:focus-visible {
+  background: rgba(40, 99, 69, 0.1);
+}

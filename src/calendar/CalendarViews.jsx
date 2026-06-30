@@ -266,7 +266,7 @@ export function DayCalendar({ bookings, canViewRevenue = true, courts, openHour,
   );
 }
 
-export function WeekCalendar({ bookingsByDate, canViewRevenue = true, courts, openHour, selectedDate, weekDays, onSelectBooking, onSelectDate, onSelectFreeSlot, onSwitchDay }) {
+export function WeekCalendar({ bookingsByDate, canViewRevenue = true, courts, openHour, selectedDate, selectedPlaceholderIds, weekDays, onSelectBooking, onSelectDate, onSelectFreeSlot, onSwitchDay }) {
   return (
     <div className="week-calendar">
       {weekDays.map((date) => {
@@ -280,6 +280,7 @@ export function WeekCalendar({ bookingsByDate, canViewRevenue = true, courts, op
             isSelected={date === selectedDate}
             key={date}
             openHour={openHour}
+            selectedPlaceholderIds={selectedPlaceholderIds}
             onSelectBooking={onSelectBooking}
             onSelectDate={onSelectDate}
             onSelectFreeSlot={onSelectFreeSlot}
@@ -291,7 +292,7 @@ export function WeekCalendar({ bookingsByDate, canViewRevenue = true, courts, op
   );
 }
 
-export function WeekDayColumn({ bookings, canViewRevenue = true, courts, date, isSelected, openHour, onSelectBooking, onSelectDate, onSelectFreeSlot, onSwitchDay }) {
+export function WeekDayColumn({ bookings, canViewRevenue = true, courts, date, isSelected, openHour, selectedPlaceholderIds, onSelectBooking, onSelectDate, onSelectFreeSlot, onSwitchDay }) {
   const [hiddenCounts, setHiddenCounts] = useState({ above: 0, below: 0 });
   const courtListRef = useRef(null);
   const summary = summarizeDay(bookings, openHour, courts.length, canViewRevenue);
@@ -362,7 +363,7 @@ export function WeekDayColumn({ bookings, canViewRevenue = true, courts, date, i
                       <strong>{entry.label}</strong>
                     </button>
                   ) : (
-                    <CalendarBookingButton booking={entry.booking} canViewRevenue={canViewRevenue} className={`week-booking-card ${getBookingTone(entry.booking)}`} courtName={court.name} date={date} key={entry.booking.id} onClick={() => onSelectBooking(entry.booking)}>
+                    <CalendarBookingButton booking={entry.booking} canViewRevenue={canViewRevenue} className={`week-booking-card ${getBookingTone(entry.booking)} ${selectedPlaceholderIds?.includes(entry.booking.id) ? 'multi-selected' : ''}`} courtName={court.name} date={date} key={entry.booking.id} onClick={(event) => onSelectBooking(entry.booking, event)}>
                       <span>{getCompactStartLabel(entry.booking)}</span>
                       <strong>{getBookingTitle(entry.booking)}</strong>
                       {getBookingPillLabel(entry.booking) ? (

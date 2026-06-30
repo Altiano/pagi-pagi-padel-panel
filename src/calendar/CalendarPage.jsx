@@ -1,6 +1,6 @@
 // Calendar feature controller: owns visible wiring between calendar state,
 // write workflows, grid views, detail panels, and dialogs.
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   CalendarCheck,
   CheckCircle2,
@@ -11,6 +11,7 @@ import {
   LogOut,
   Plus,
   RefreshCw,
+  Trash2,
   X,
 } from 'lucide-react';
 import { useEscapeKey } from '../hooks.js';
@@ -62,6 +63,8 @@ export function CalendarPage({ cacheScope = 'session', canViewRevenue = true, ca
   const [bookingActionEditor, setBookingActionEditor] = useState({ mode: 'closed', booking: null, draft: null });
   const [slotChoice, setSlotChoice] = useState({ open: false, draft: null });
   const [placeholderStatus, setPlaceholderStatus] = useState({ state: 'idle', message: '' });
+  // Week-view multi-select: Ctrl/Cmd-click placeholder cards to batch-delete them.
+  const [selectedPlaceholders, setSelectedPlaceholders] = useState([]);
   const clearSelectedBooking = useCallback(() => setSelectedBooking(null), [setSelectedBooking]);
   const { calendarState: state, requestCalendarRefresh } = useCalendarData({
     cacheScope,
@@ -90,7 +93,7 @@ export function CalendarPage({ cacheScope = 'session', canViewRevenue = true, ca
   const isBookingActionEditorOpen = bookingActionEditor.mode !== 'closed';
   const isSlotChoiceOpen = slotChoice.open;
   const showCalendarFeedback = Boolean(state.error || (placeholderStatus.message && !isPlaceholderEditorOpen && !isBookingActionEditorOpen));
-  const { deletePlaceholder, savePlaceholder } = usePlaceholderActions({
+  const { deletePlaceholder, deletePlaceholders, savePlaceholder } = usePlaceholderActions({
     canViewRevenue,
     courts: state.courts,
     mitraId,
@@ -117,6 +120,35 @@ export function CalendarPage({ cacheScope = 'session', canViewRevenue = true, ca
     setSelectedBooking,
   });
 
+  const clearPlaceholderSelection = useCallback(() => setSelectedPlaceholders([]), []);
+
+  // Drop the multi-select whenever the visible scope changes (view switch or week change).
+  useEffect(() => {
+    setSelectedPlaceholders([]);
+  }, [view, selectedDate]);
+
+  const handleWeekSelectBooking = useCallback((booking, event) => {
+    if ((event?.ctrlKey || event?.metaKey) && booking?.is_placeholder) {
+      event.preventDefault();
+      setSelectedPlaceholders((current) => (
+        current.some((item) => item.id === booking.id)
+          ? current.filter((item) => item.id !== booking.id)
+          : [...current, booking]
+      ));
+      return;
+    }
+    setSelectedPlaceholders([]);
+    setSelectedBooking(booking);
+  }, [setSelectedBooking]);
+
+  const deleteSelectedPlaceholders = useCallback(async () => {
+    const toDelete = selectedPlaceholders;
+    setSelectedPlaceholders([]);
+    await deletePlaceholders(toDelete);
+  }, [deletePlaceholders, selectedPlaceholders]);
+
+  const selectedPlaceholderIds = useMemo(() => selectedPlaceholders.map((item) => item.id), [selectedPlaceholders]);
+
   function closePlaceholderEditor() {
     setPlaceholderEditor({ mode: 'closed', booking: null, draft: null });
   }
@@ -142,8 +174,12 @@ export function CalendarPage({ cacheScope = 'session', canViewRevenue = true, ca
       closePlaceholderEditor();
       return;
     }
+    if (selectedPlaceholders.length) {
+      setSelectedPlaceholders([]);
+      return;
+    }
     closeCalendarDetail();
-  }, isSlotChoiceOpen || isBookingActionEditorOpen || isPlaceholderEditorOpen || Boolean(selectedBooking) || showSummaryPanel);
+  }, isSlotChoiceOpen || isBookingActionEditorOpen || isPlaceholderEditorOpen || selectedPlaceholders.length > 0 || Boolean(selectedBooking) || showSummaryPanel);
 
   function openCreatePlaceholder(draft = null) {
     setPlaceholderStatus({ state: 'idle', message: '' });
@@ -402,8 +438,9 @@ export function CalendarPage({ cacheScope = 'session', canViewRevenue = true, ca
                 courts={state.courts}
                 openHour={state.openHour}
                 selectedDate={selectedDate}
+                selectedPlaceholderIds={selectedPlaceholderIds}
                 weekDays={weekDays}
-                onSelectBooking={setSelectedBooking}
+                onSelectBooking={handleWeekSelectBooking}
                 onSelectDate={setSelectedDate}
                 onSelectFreeSlot={openSlotChoice}
                 onSwitchDay={() => setView('day')}
@@ -420,6 +457,30 @@ export function CalendarPage({ cacheScope = 'session', canViewRevenue = true, ca
             <div className="scroll-more-indicator below">
               <span>{hiddenBelowCount} hidden below</span>
               <ChevronRight size={16} />
+            </div>
+          ) : null}
+          {!isMobileApp && view === 'week' && selectedPlaceholders.length > 0 ? (
+            <div className="placeholder-multiselect-bar" role="toolbar" aria-label="Selected placeholders">
+              <span className="placeholder-multiselect-count">
+                {selectedPlaceholders.length} placeholder{selectedPlaceholders.length === 1 ? '' : 's'} selected
+              </span>
+              <button
+                className="placeholder-multiselect-delete"
+                disabled={placeholderStatus.state === 'loading'}
+                onClick={deleteSelectedPlaceholders}
+                type="button"
+              >
+                <Trash2 size={15} />
+                Delete
+              </button>
+              <button
+                aria-label="Clear selection"
+                className="placeholder-multiselect-clear"
+                onClick={clearPlaceholderSelection}
+                type="button"
+              >
+                <X size={15} />
+              </button>
             </div>
           ) : null}
         </div>
