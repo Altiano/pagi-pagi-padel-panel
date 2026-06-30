@@ -3,6 +3,7 @@ import {
   annotatePlaceholderConflicts,
   bookingsOverlap,
   buildCalendarDisplayBookings,
+  canDeletePlaceholder,
   getBookingMeta,
   normalizePlaceholderBooking,
   summarizeDay,
@@ -92,6 +93,22 @@ describe('booking helpers', () => {
       'Newer hold',
       'Older hold',
     ]);
+  });
+
+  test('restricts placeholder delete to its creator for virtual users', () => {
+    const ownHold = { created_by_name: 'Front Desk' };
+    const otherHold = { created_by_name: 'Night Shift' };
+
+    // Master / regular operators can delete any hold regardless of creator.
+    expect(canDeletePlaceholder(otherHold, { isVirtualUser: false, displayName: 'Front Desk' })).toBe(true);
+
+    // Virtual users may delete only the placeholders they created.
+    expect(canDeletePlaceholder(ownHold, { isVirtualUser: true, displayName: 'Front Desk' })).toBe(true);
+    expect(canDeletePlaceholder(otherHold, { isVirtualUser: true, displayName: 'Front Desk' })).toBe(false);
+
+    // Unattributed or missing holds are not deletable by a virtual user.
+    expect(canDeletePlaceholder({}, { isVirtualUser: true, displayName: 'Front Desk' })).toBe(false);
+    expect(canDeletePlaceholder(null, { isVirtualUser: true, displayName: 'Front Desk' })).toBe(false);
   });
 
   test('summarizes occupancy and masks revenue when requested', () => {

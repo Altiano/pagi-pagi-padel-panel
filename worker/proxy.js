@@ -1578,6 +1578,16 @@ async function handlePlaceholderRequest(request, env, virtualContext = null) {
   }
 
   if (request.method === 'DELETE' && id) {
+    const existing = await env.PLACEHOLDER_DB.prepare('SELECT * FROM placeholder_bookings WHERE id = ? AND deleted_at IS NULL').bind(id).first();
+    if (!existing) return withCors(Response.json({ error: 'Placeholder booking not found.' }, { status: 404 }), request, env);
+
+    // Virtual users may only delete placeholders they created. Ownership follows the same
+    // display-name stamp the POST/PUT handlers write, so a virtual session can never remove
+    // another operator's hold. Master/regular sessions (no virtualDisplayName) are unrestricted.
+    if (virtualDisplayName && existing.created_by_name !== virtualDisplayName) {
+      return withCors(Response.json({ error: 'Virtual users can only delete placeholder bookings they created.' }, { status: 403 }), request, env);
+    }
+
     const now = new Date().toISOString();
     await env.PLACEHOLDER_DB.prepare('UPDATE placeholder_bookings SET deleted_at = ?, updated_at = ? WHERE id = ?').bind(now, now, id).run();
     return withCors(Response.json({ ok: true }), request, env);

@@ -77,11 +77,21 @@ export function annotatePlaceholderConflicts(upstreamBookings, localPlaceholders
 export function buildBookingConflictSummary(booking) {
   return {
     court: booking.court_name || booking.court_id || 'Court',
+    created_by_name: booking.created_by_name || '',
     id: booking.placeholder_id || booking.id || '',
     name: booking.booking_owner || booking.name || 'Booking',
     time: booking.time || `${getStartLabel(booking)}-${formatTimeInput(getBookingEndMinutes(booking))}`,
     type: booking.is_placeholder ? 'placeholder' : 'booking',
   };
+}
+
+// Placeholder deletes are owner-scoped for virtual users: the Worker only lets a
+// virtual session remove a placeholder whose created_by_name matches its display
+// name. Mirror that rule in the UI so virtual users never see a Delete button that
+// would 403. Master/regular operators (isVirtualUser=false) can delete any hold.
+export function canDeletePlaceholder(item, { isVirtualUser = false, displayName = '' } = {}) {
+  if (!isVirtualUser) return true;
+  return Boolean(item) && (item.created_by_name || '') === displayName;
 }
 
 

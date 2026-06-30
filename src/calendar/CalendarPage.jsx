@@ -428,6 +428,8 @@ export function CalendarPage({ cacheScope = 'session', canViewRevenue = true, ca
             booking={selectedBooking}
             canViewRevenue={canViewRevenue}
             canWriteBookings={canWriteBookings}
+            displayName={displayName}
+            isVirtualUser={isVirtualUser}
             selectedDate={selectedDate}
             selectedDaySummary={selectedDaySummary}
             view={view}
@@ -534,6 +536,8 @@ export function CalendarPage({ cacheScope = 'session', canViewRevenue = true, ca
               booking={selectedBooking}
               canViewRevenue={canViewRevenue}
               canWriteBookings={canWriteBookings}
+              displayName={displayName}
+              isVirtualUser={isVirtualUser}
               selectedDate={selectedDate}
               selectedDaySummary={selectedDaySummary}
               view={view}

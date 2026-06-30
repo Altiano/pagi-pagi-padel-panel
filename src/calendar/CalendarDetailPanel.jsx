@@ -4,6 +4,7 @@ import { CalendarDays, CheckCircle2, Copy, ExternalLink, Pencil, Plus, Trash2, U
 import { formatLongDate, formatWeekRange } from '../lib/datetime.js';
 import { copyText, formatMoney, formatStatus } from '../lib/format.js';
 import {
+  canDeletePlaceholder,
   getBookingConflictItems,
   getBookingTitle,
   getDurationMinutes,
@@ -17,6 +18,8 @@ export function CalendarDetailPanel({
   booking,
   canViewRevenue = true,
   canWriteBookings = true,
+  displayName = '',
+  isVirtualUser = false,
   selectedDate,
   selectedDaySummary,
   view,
@@ -33,6 +36,7 @@ export function CalendarDetailPanel({
   onRescheduleBooking,
   onUploadPaymentProof,
 }) {
+  const canDelete = (item) => canDeletePlaceholder(item, { displayName, isVirtualUser });
   if (booking) {
     const isPlaceholder = booking.is_placeholder;
     const conflictItems = getBookingConflictItems(booking);
@@ -67,7 +71,7 @@ export function CalendarDetailPanel({
             {waitlistItems.slice(0, 4).map((item) => (
               <div className="detail-conflict-row" key={`${item.type}-${item.id}-${item.time}`}>
                 <span>{item.name} · {item.time}</span>
-                {canWriteBookings ? (
+                {canWriteBookings && canDelete(item) ? (
                   <button className="danger-action" onClick={() => onDeletePlaceholder?.(item)} type="button"><Trash2 size={13} /> Delete</button>
                 ) : null}
               </div>
@@ -84,7 +88,9 @@ export function CalendarDetailPanel({
                   <small>{formatStatus(item.status)} · {item.customer_contact || 'No contact'}</small>
                 </span>
                 <button onClick={() => onEditPlaceholder?.(item)} type="button"><Pencil size={14} /> Edit</button>
-                <button className="danger-action" onClick={() => onDeletePlaceholder?.(item)} type="button"><Trash2 size={14} /> Delete</button>
+                {canDelete(item) ? (
+                  <button className="danger-action" onClick={() => onDeletePlaceholder?.(item)} type="button"><Trash2 size={14} /> Delete</button>
+                ) : null}
               </div>
             ))}
           </div>
@@ -117,7 +123,9 @@ export function CalendarDetailPanel({
             ) : null}
             <button onClick={() => onCreatePlaceholder?.(getSlotDraftFromBooking(booking, selectedDate))} type="button"><Plus size={15} /> Add another placeholder</button>
             <button onClick={() => onEditPlaceholder?.(booking)} type="button"><Pencil size={15} /> Edit placeholder</button>
-            <button className="danger-action" onClick={() => onDeletePlaceholder?.(booking)} type="button"><Trash2 size={15} /> Delete</button>
+            {canDelete(booking) ? (
+              <button className="danger-action" onClick={() => onDeletePlaceholder?.(booking)} type="button"><Trash2 size={15} /> Delete</button>
+            ) : null}
             {canWriteBookings && hasBookingConflict(booking) ? <p className="detail-action-note danger">A live booking already owns this slot. Move or cancel that booking before converting this placeholder.</p> : null}
           </div>
         ) : canWriteBookings ? (

@@ -102,10 +102,16 @@ export function usePlaceholderActions({
     const id = booking?.placeholder_id || booking?.id;
     if (!id) return;
     setPlaceholderStatus({ state: 'loading', message: 'Deleting placeholder...' });
-    await apiRequest(`/api/placeholder-bookings/${id}`, { method: 'DELETE' });
-    setPlaceholderStatus({ state: 'success', message: 'Placeholder deleted.' });
-    setSelectedBooking(null);
-    onRefresh();
+    try {
+      await apiRequest(`/api/placeholder-bookings/${id}`, { method: 'DELETE' });
+      setPlaceholderStatus({ state: 'success', message: 'Placeholder deleted.' });
+      setSelectedBooking(null);
+      onRefresh();
+    } catch (error) {
+      // Surface guardrail rejections (e.g. a virtual user trying to delete another
+      // operator's hold) instead of leaving the status stuck on "Deleting...".
+      setPlaceholderStatus({ state: 'error', message: error.message || 'Unable to delete placeholder.' });
+    }
   }, [onRefresh, setPlaceholderStatus, setSelectedBooking]);
 
   return {
