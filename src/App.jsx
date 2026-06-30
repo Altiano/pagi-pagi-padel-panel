@@ -438,6 +438,8 @@ function DesktopSidebar({ activeNav, navGroups: visibleNavGroups, onChangeNav })
 }
 
 function MobileAppShell({ activeNav, children, displayName, navItems, onChangeNav, onLogout, onUseDesktopView }) {
+  const buildTimestampLabel = formatBuildTimestamp(APP_BUILD_TIMESTAMP);
+
   return (
     <>
       <header className="mobile-app-header">
@@ -449,6 +451,10 @@ function MobileAppShell({ activeNav, children, displayName, navItems, onChangeNa
           </div>
         </div>
         <div className="mobile-header-actions">
+          <div className="mobile-build" title={`Build v${APP_VERSION}${buildTimestampLabel ? ` on ${buildTimestampLabel}` : ''}`}>
+            <span>v{APP_VERSION}</span>
+            {buildTimestampLabel ? <span>{buildTimestampLabel}</span> : null}
+          </div>
           <button onClick={onUseDesktopView} type="button">Desktop</button>
           <button aria-label="Logout" onClick={onLogout} type="button">
             <LogOut size={17} />

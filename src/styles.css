@@ -2683,8 +2683,25 @@ textarea:focus {
 
 .mobile-header-actions {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 8px;
+}
+
+.mobile-build {
+  display: grid;
+  max-width: 92px;
+  color: #9aa395;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: right;
+}
+
+.mobile-build span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mobile-header-actions button {
@@ -2705,6 +2722,13 @@ textarea:focus {
   width: 38px;
   padding: 0;
   color: var(--ink);
+}
+
+@media (max-width: 390px) {
+  .mobile-build {
+    max-width: 72px;
+    font-size: 8px;
+  }
 }
 
 .mobile-app-content {
