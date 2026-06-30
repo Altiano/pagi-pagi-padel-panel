@@ -81,6 +81,8 @@ const PLACEHOLDER_DURATION_OPTIONS = [
 const REGISTERED_PLAYER_SEARCH_MIN_LENGTH = 2;
 // The capture redacted this field; keep the guessed value centralized for upstream verification.
 const RECEIPT_ATTACHMENT_TYPE = 'payment_proof';
+// Upstream cancel validation requires an email even for offline bookings.
+const OFFLINE_CANCEL_EMAIL = 'a@a.com';
 const calendarDataCache = new Map();
 
 const mobileNavItems = [
@@ -3552,24 +3554,21 @@ function buildCourtBookingPayload({ form, mitraId }) {
 }
 
 function buildCancelBookingPayload({ booking, form, mitraId }) {
-  const email = getBookingEmail(booking);
-  const offlineName = getOfflineBookingName(booking);
-  const payload = {
+  const email = getBookingEmail(booking) || OFFLINE_CANCEL_EMAIL;
+  return {
     mitra_id: mitraId,
     id: booking.id,
     type: getCourtBookingWriteType(booking),
-    user_offline: !email && offlineName ? offlineName : null,
-    email_verified: Boolean(email),
+    user_offline: null,
+    email_verified: true,
     already_wd: false,
     use_package: Boolean(booking.use_package),
+    email,
     cancel_note: form.cancel_note || 'Cancel',
     is_recurring: false,
     start_date: null,
     end_date: null,
   };
-
-  if (email) payload.email = email;
-  return payload;
 }
 
 function getTimeRangeDurationMinutes(form) {
@@ -3703,24 +3702,6 @@ function getBookingEmail(booking) {
   ].map((value) => String(value || '').trim()).find(Boolean);
   if (explicit) return explicit;
   return findNestedBookingEmail(booking);
-}
-
-function getOfflineBookingName(booking) {
-  const hasRegisteredIdentity = Boolean(
-    booking?.user_id
-    || booking?.user?.id
-    || booking?.player_id
-    || (Array.isArray(booking?.players) && booking.players.length),
-  );
-
-  if (hasRegisteredIdentity) return '';
-  return String(
-    booking?.user_offline
-    || booking?.offline_user
-    || booking?.booking_owner
-    || booking?.name
-    || '',
-  ).trim();
 }
 
 function formatStatusText(value) {
