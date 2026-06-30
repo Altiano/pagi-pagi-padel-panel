@@ -114,7 +114,7 @@ export function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
                   <span>{user.login_username}</span>
                 </div>
                 <div className="virtual-user-permissions">
-                  {user.permissions.length ? user.permissions.map((permission) => (
+                  {user.permissions.length ? [...user.permissions].sort((a, b) => a.localeCompare(b)).map((permission) => (
                     <span key={permission}>{permission}</span>
                   )) : <span>No access</span>}
                 </div>
