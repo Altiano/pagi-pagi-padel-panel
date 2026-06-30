@@ -1075,10 +1075,12 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
     if (isPlaceholderConversion && !placeholderId) throw new Error('Placeholder booking ID is missing.');
 
     const bookingDates = isPlaceholderConversion ? [form.date].filter(Boolean) : getBookingFormDates(form);
-    const bulkCount = bookingDates.length;
+    const selectedCourtIds = isPlaceholderConversion ? [form.court_id].filter(Boolean) : getSelectedCourtIds(form);
+    const bulkCount = bookingDates.length * selectedCourtIds.length;
     const createdBookings = [];
     let currentDate = '';
     if (!bookingDates.length) throw new Error('Select at least one date.');
+    if (!selectedCourtIds.length) throw new Error('Select at least one court.');
 
     setPlaceholderStatus({
       state: 'loading',
@@ -1088,14 +1090,16 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
     try {
       for (const date of bookingDates) {
         currentDate = date;
-        const response = await apiRequest('/api/admin/court-booking', {
-          method: 'POST',
-          body: JSON.stringify(buildCourtBookingPayload({ form: { ...form, date }, mitraId })),
-        });
+        for (const courtId of selectedCourtIds) {
+          const response = await apiRequest('/api/admin/court-booking', {
+            method: 'POST',
+            body: JSON.stringify(buildCourtBookingPayload({ form: { ...form, court_id: courtId, date }, mitraId })),
+          });
 
-        const bookingId = response?.booking_id || response?.data?.booking_id || response?.id || '';
-        const transId = response?.trans_id || response?.data?.trans_id || '';
-        createdBookings.push({ bookingId, date, transId });
+          const bookingId = response?.booking_id || response?.data?.booking_id || response?.id || '';
+          const transId = response?.trans_id || response?.data?.trans_id || '';
+          createdBookings.push({ bookingId, courtId, date, transId });
+        }
       }
 
       const warnings = [];
@@ -1103,12 +1107,14 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
       if (form.receiptFile) {
         for (const createdBooking of createdBookings) {
           if (!createdBooking.transId) {
-            warnings.push(`Receipt was not uploaded for ${formatLongDate(createdBooking.date)} because the booking response did not include a transaction ID.`);
+            const court = state.courts.find((item) => item.id === createdBooking.courtId);
+            warnings.push(`Receipt was not uploaded for ${court?.name ? `${court.name} on ` : ''}${formatLongDate(createdBooking.date)} because the booking response did not include a transaction ID.`);
           } else {
             try {
               await uploadBookingReceipt({ attachmentType: form.attachmentType, file: form.receiptFile, transId: createdBooking.transId });
             } catch (uploadError) {
-              warnings.push(`Receipt upload failed for ${formatLongDate(createdBooking.date)}: ${uploadError.message}`);
+              const court = state.courts.find((item) => item.id === createdBooking.courtId);
+              warnings.push(`Receipt upload failed for ${court?.name ? `${court.name} on ` : ''}${formatLongDate(createdBooking.date)}: ${uploadError.message}`);
             }
           }
         }
@@ -1265,11 +1271,12 @@ function CalendarPage({ cacheScope = 'session', canViewRevenue = true, canWriteB
       time: `${form.start_time}-${form.end_time}`,
     };
     const sourceIds = new Set([sourceBooking?.id, sourceBooking?.placeholder_id].filter(Boolean));
+    const selectedCourtIds = new Set(getSelectedCourtIds(form));
     return getBookingFormDates(form).flatMap((date) => {
       const bookings = state.bookingsByDate[date] || [];
       return bookings.filter((booking) => {
         if (sourceIds.has(booking.id) || sourceIds.has(booking.placeholder_id)) return false;
-        return !booking.is_placeholder && booking.court_id === form.court_id && bookingsOverlap(candidate, booking);
+        return !booking.is_placeholder && selectedCourtIds.has(booking.court_id) && bookingsOverlap(candidate, booking);
       }).map((booking) => ({ ...booking, conflict_date: date }));
     });
   }
@@ -2183,11 +2190,16 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
   const isConversion = actionMode === 'convert-placeholder';
   const bookingDates = isConversion ? [form.date].filter(Boolean) : getBookingFormDates(form);
   const selectedDateSet = new Set(bookingDates);
+  const selectedCourtIds = isConversion ? [form.court_id].filter(Boolean) : getSelectedCourtIds(form);
+  const selectedCourtNames = selectedCourtIds
+    .map((courtId) => courts.find((court) => court.id === courtId)?.name || courtId)
+    .filter(Boolean);
+  const bookingTargetCount = bookingDates.length * selectedCourtIds.length;
   const monthCells = buildMonthMatrix(calendarMonth);
   const todayValue = toDateInputValue(new Date());
   const conflictList = conflicts(form, booking);
   const hasConflict = conflictList.length > 0;
-  const title = isConversion ? 'Create real booking' : bookingDates.length > 1 ? 'Create bookings' : 'Create booking';
+  const title = isConversion ? 'Create real booking' : bookingTargetCount > 1 ? 'Create bookings' : 'Create booking';
   const panelLabel = isConversion ? 'Convert placeholder' : 'New real booking';
 
   useEffect(() => {
@@ -2220,13 +2232,33 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
     setForm((current) => ({
       ...current,
       [field]: value,
-      ...(field === 'court_id' ? { court_name: courts.find((court) => court.id === value)?.name || '' } : null),
+      ...(field === 'court_id' ? { court_ids: value ? [value] : [], court_name: courts.find((court) => court.id === value)?.name || '' } : null),
       ...(field === 'date' ? { additional_dates: normalizeAdditionalBookingDates(current.additional_dates, value) } : null),
       ...(field === 'start_time' ? { end_time: shiftTime(value, getTimeRangeDurationMinutes(current)) } : null),
       ...(field === 'end_time' ? { duration_mode: inferPlaceholderDurationMode(current.start_time, value) } : null),
       ...(field === 'playerSearch' ? { selectedPlayer: null } : null),
       ...(field === 'customerMode' && value === 'offline' ? { selectedPlayer: null } : null),
     }));
+  }
+
+  function toggleCourt(courtId) {
+    if (isConversion) return;
+    setForm((current) => {
+      const courtIds = new Set(getSelectedCourtIds(current));
+      if (courtIds.has(courtId)) {
+        courtIds.delete(courtId);
+      } else {
+        courtIds.add(courtId);
+      }
+      const nextCourtIds = [...courtIds];
+      const firstCourt = courts.find((court) => court.id === nextCourtIds[0]);
+      return {
+        ...current,
+        court_id: nextCourtIds[0] || '',
+        court_ids: nextCourtIds,
+        court_name: firstCourt?.name || '',
+      };
+    });
   }
 
   function selectPlayer(player) {
@@ -2280,8 +2312,8 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
     setError('');
     const selectedDates = isConversion ? [form.date].filter(Boolean) : getBookingFormDates(form);
 
-    if (!form.court_id) {
-      setError('Select a court.');
+    if (!selectedCourtIds.length) {
+      setError('Select at least one court.');
       return;
     }
     if (!selectedDates.length) {
@@ -2328,12 +2360,6 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
         <h2>{title}</h2>
         <form onSubmit={handleSubmit}>
           <div className="placeholder-editor-fields">
-            <div className="conversion-summary">
-              <span>{form.court_name || form.court_id || 'Court'}</span>
-              <strong>{bookingDates.length > 1 ? `${bookingDates.length} dates` : form.date ? formatLongDate(form.date) : 'Select date'} · {form.start_time}-{form.end_time}</strong>
-              <small>{bookingDates.length > 1 ? `${formatDayNumber(bookingDates[0])} - ${formatDayNumber(bookingDates[bookingDates.length - 1])} · ` : ''}{getTimeRangeDurationMinutes(form)} min{canViewRevenue ? ` · ${formatMoney(form.price, canViewRevenue)}` : ''}</small>
-            </div>
-
             {hasConflict ? (
               <div className="detail-conflict-alert">
                 <strong>Booking conflict</strong>
@@ -2341,46 +2367,34 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
               </div>
             ) : null}
 
-            <label>
-              Court
-              <select onChange={(event) => updateField('court_id', event.target.value)} required value={form.court_id}>
-                <option value="">Select court</option>
-                {courts.map((court) => <option key={court.id} value={court.id}>{court.name}</option>)}
-              </select>
-            </label>
-
-            <div className="form-grid time-grid">
+            {isConversion ? (
               <label>
-                Start time
-                <input onChange={(event) => updateField('start_time', event.target.value)} required type="time" value={form.start_time} />
+                Court
+                <select onChange={(event) => updateField('court_id', event.target.value)} required value={form.court_id}>
+                  <option value="">Select court</option>
+                  {courts.map((court) => <option key={court.id} value={court.id}>{court.name}</option>)}
+                </select>
               </label>
-              <label>
-                End time
-                <input onChange={(event) => updateField('end_time', event.target.value)} required type="time" value={form.end_time} />
-              </label>
-              <div className="duration-control">
-                <span>Duration</span>
-                <div className="duration-options">
-                  {PLACEHOLDER_DURATION_OPTIONS.map((option) => (
-                    <button
-                      className={form.duration_mode === String(option.minutes) ? 'selected' : ''}
-                      key={option.minutes}
-                      onClick={() => setBookingWriteDuration(option.minutes)}
-                      type="button"
-                    >
-                      {option.label}
-                    </button>
+            ) : (
+              <div className="court-picker">
+                <span>Courts</span>
+                <div className="court-choice-grid">
+                  {courts.map((court) => (
+                    <label className={`court-choice ${selectedCourtIds.includes(court.id) ? 'selected' : ''}`} key={court.id}>
+                      <input
+                        checked={selectedCourtIds.includes(court.id)}
+                        onChange={() => toggleCourt(court.id)}
+                        type="checkbox"
+                      />
+                      {court.name}
+                    </label>
                   ))}
-                  <button
-                    className={form.duration_mode === 'custom' ? 'selected' : ''}
-                    onClick={() => updateField('duration_mode', 'custom')}
-                    type="button"
-                  >
-                    Custom
-                  </button>
                 </div>
+                {selectedCourtNames.length > 1 ? (
+                  <small>{selectedCourtNames.length} courts selected: {selectedCourtNames.join(', ')}</small>
+                ) : null}
               </div>
-            </div>
+            )}
 
             {isConversion || !multiDate ? (
               <div className="booking-date-single">
@@ -2401,7 +2415,7 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
                 <span>Booking dates</span>
                 <strong>{bookingDates.length} {bookingDates.length === 1 ? 'day' : 'days'}</strong>
               </div>
-              <p className="booking-calendar-hint">Tap days to book this court &amp; time on each.</p>
+              <p className="booking-calendar-hint">Tap days to book the selected courts at this time.</p>
               <div className="booking-calendar-nav">
                 <button aria-label="Previous month" onClick={() => shiftCalendarMonth(-1)} type="button">
                   <ChevronLeft size={16} />
@@ -2454,6 +2468,39 @@ function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, confli
               </button>
             </div>
             )}
+
+            <div className="form-grid time-grid">
+              <label>
+                Start time
+                <input onChange={(event) => updateField('start_time', event.target.value)} required type="time" value={form.start_time} />
+              </label>
+              <label>
+                End time
+                <input onChange={(event) => updateField('end_time', event.target.value)} required type="time" value={form.end_time} />
+              </label>
+              <div className="duration-control">
+                <span>Duration</span>
+                <div className="duration-options">
+                  {PLACEHOLDER_DURATION_OPTIONS.map((option) => (
+                    <button
+                      className={form.duration_mode === String(option.minutes) ? 'selected' : ''}
+                      key={option.minutes}
+                      onClick={() => setBookingWriteDuration(option.minutes)}
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                  <button
+                    className={form.duration_mode === 'custom' ? 'selected' : ''}
+                    onClick={() => updateField('duration_mode', 'custom')}
+                    type="button"
+                  >
+                    Custom
+                  </button>
+                </div>
+              </div>
+            </div>
 
             <div className="conversion-mode-control">
               <span>Customer</span>
@@ -3477,10 +3524,13 @@ function buildBookingWriteForm({ booking, courts, defaultDate, draft, openHour }
   const startTime = draft?.start_time || bookingStart || openHour?.open_hours || '06:00';
   const endTime = draft?.end_time || bookingEnd || shiftTime(startTime, 60);
   const court = courts.find((item) => item.id === (draft?.court_id || booking?.court_id)) || courts[0];
+  const initialCourtId = draft?.court_id || booking?.court_id || court?.id || '';
+  const courtIds = draft?.court_ids?.length ? draft.court_ids : initialCourtId ? [initialCourtId] : [];
   return {
     additional_dates: [],
     attachmentType: RECEIPT_ATTACHMENT_TYPE,
-    court_id: draft?.court_id || booking?.court_id || court?.id || '',
+    court_id: courtIds[0] || '',
+    court_ids: courtIds,
     court_name: draft?.court_name || booking?.court_name || court?.name || '',
     customerMode: 'offline',
     date: draft?.date || booking?.date || defaultDate,
