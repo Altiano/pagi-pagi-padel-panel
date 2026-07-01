@@ -4,8 +4,8 @@
   min-height: 100vh;
   padding: 32px;
   background:
-    radial-gradient(circle at 50% 0%, rgba(204, 225, 95, 0.22), transparent 34%),
-    linear-gradient(180deg, #f8faf4, var(--bg));
+    radial-gradient(circle at 50% 0%, light-dark(rgba(204, 225, 95, 0.22), rgba(141, 163, 31, 0.22)), transparent 34%),
+    linear-gradient(180deg, light-dark(#f8faf4, #252820), var(--bg));
 }
 
 .login-panel {

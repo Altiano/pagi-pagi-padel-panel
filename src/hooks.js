@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { MOBILE_MEDIA_QUERY, MOBILE_VIEW_STORAGE_KEY } from './constants.js';
+import { MOBILE_MEDIA_QUERY, MOBILE_VIEW_STORAGE_KEY, THEME_STORAGE_KEY } from './constants.js';
 
 export function usePreferredMobileView(isMobileRoute) {
   const [isSmallScreen, setIsSmallScreen] = useState(() => {
@@ -32,6 +32,48 @@ export function usePreferredMobileView(isMobileRoute) {
     preference,
     setPreference,
   };
+}
+
+// Browser-chrome colors matching the light/dark app header surfaces.
+const THEME_META_COLORS = { light: '#fbfcf8', dark: '#242520' };
+
+export function getStoredThemePreference() {
+  if (typeof window === 'undefined') return 'system';
+  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  return stored === 'light' || stored === 'dark' ? stored : 'system';
+}
+
+// Sets html[data-theme] (which flips color-scheme, and with it every
+// light-dark() color) and keeps the theme-color metas in sync so the browser
+// chrome / PWA status bar matches. 'system' removes the attribute so the
+// prefers-color-scheme media metas take over.
+export function applyThemePreference(preference) {
+  if (typeof document === 'undefined') return;
+  const root = document.documentElement;
+  if (preference === 'light' || preference === 'dark') {
+    root.dataset.theme = preference;
+  } else {
+    delete root.dataset.theme;
+  }
+  document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => {
+    const systemScheme = (meta.getAttribute('media') || '').includes('dark') ? 'dark' : 'light';
+    const effective = preference === 'system' ? systemScheme : preference;
+    meta.setAttribute('content', THEME_META_COLORS[effective]);
+  });
+}
+
+export function useThemePreference() {
+  const [preference, setPreferenceState] = useState(getStoredThemePreference);
+
+  function setPreference(nextPreference) {
+    setPreferenceState(nextPreference);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(THEME_STORAGE_KEY, nextPreference);
+    }
+    applyThemePreference(nextPreference);
+  }
+
+  return { preference, setPreference };
 }
 
 export function useEscapeKey(onEscape, enabled = true) {

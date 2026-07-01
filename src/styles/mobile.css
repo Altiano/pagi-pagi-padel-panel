@@ -9,7 +9,7 @@
   height: auto;
   overflow: visible;
   padding-bottom: calc(84px + env(safe-area-inset-bottom));
-  background: linear-gradient(180deg, #fbfcf8 0, var(--bg) 230px);
+  background: linear-gradient(180deg, light-dark(#fbfcf8, #242520) 0, var(--bg) 230px);
 }
 
 /* Native apps never show text-selection handles on chrome or controls. */
@@ -30,8 +30,8 @@
   justify-content: space-between;
   gap: 10px;
   padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
-  border-bottom: 1px solid rgba(223, 229, 216, 0.55);
-  background: rgba(251, 252, 248, 0.88);
+  border-bottom: 1px solid light-dark(rgba(223, 229, 216, 0.55), rgba(51, 60, 40, 0.55));
+  background: light-dark(rgba(251, 252, 248, 0.88), rgba(36, 37, 32, 0.88));
   -webkit-backdrop-filter: blur(20px) saturate(1.8);
   backdrop-filter: blur(20px) saturate(1.8);
 }
@@ -78,7 +78,7 @@
 .mobile-build {
   display: none;
   max-width: 116px;
-  color: #9aa395;
+  color: light-dark(#9aa395, #626b5d);
   font-size: 8px;
   font-weight: 600;
   line-height: 1.25;
@@ -98,7 +98,7 @@
   border: 0;
   border-radius: 999px;
   padding: 0 13px;
-  background: rgba(23, 33, 27, 0.055);
+  background: light-dark(rgba(23, 33, 27, 0.055), rgba(231, 236, 228, 0.08));
   color: var(--green);
   cursor: pointer;
   font-size: 12px;
@@ -113,7 +113,7 @@
 }
 
 .mobile-header-actions button:active {
-  background: rgba(23, 33, 27, 0.11);
+  background: light-dark(rgba(23, 33, 27, 0.11), rgba(231, 236, 228, 0.16));
   transform: scale(0.94);
 }
 
@@ -160,8 +160,8 @@
   justify-content: center;
   gap: 4px;
   padding: 7px 10px calc(7px + env(safe-area-inset-bottom));
-  border-top: 1px solid rgba(223, 229, 216, 0.55);
-  background: rgba(251, 252, 248, 0.88);
+  border-top: 1px solid light-dark(rgba(223, 229, 216, 0.55), rgba(51, 60, 40, 0.55));
+  background: light-dark(rgba(251, 252, 248, 0.88), rgba(36, 37, 32, 0.88));
   box-shadow: 0 -16px 40px rgba(23, 33, 27, 0.06);
   -webkit-backdrop-filter: blur(24px) saturate(1.8);
   backdrop-filter: blur(24px) saturate(1.8);
@@ -179,7 +179,7 @@
   border: 0;
   border-radius: 14px;
   background: transparent;
-  color: #75806f;
+  color: light-dark(#75806f, #828d7b);
   cursor: pointer;
   font-size: 10.5px;
   font-weight: 650;
@@ -293,18 +293,19 @@
   border: 0;
   border-radius: 13px;
   padding: 3px;
-  background: rgba(23, 33, 27, 0.06);
+  background: light-dark(rgba(23, 33, 27, 0.06), rgba(231, 236, 228, 0.08));
 }
 
 .mobile-calendar-page .segmented-control button {
   border-radius: 10px;
   padding: 0 8px;
-  color: #59645a;
+  color: light-dark(#59645a, #96a197);
   font-weight: 650;
 }
 
 .mobile-calendar-page .segmented-control button.selected {
-  background: #fff;
+  /* Raised thumb must sit above the track in both themes. */
+  background: light-dark(#fff, #3c443c);
   color: var(--ink);
   box-shadow:
     0 2px 7px rgba(23, 33, 27, 0.14),
@@ -400,7 +401,7 @@
 }
 
 .mobile-day-strip span {
-  color: #8a9387;
+  color: light-dark(#8a9387, #6e776b);
   font-size: 10px;
   font-weight: 750;
   letter-spacing: 0.05em;
@@ -541,7 +542,7 @@
 }
 
 .mobile-court-heading span {
-  color: #8a9387;
+  color: light-dark(#8a9387, #6e776b);
   font-size: 12px;
   font-weight: 650;
 }
@@ -550,7 +551,7 @@
   overflow: hidden;
   border: 0;
   border-radius: 16px;
-  background: #fbfcf8;
+  background: light-dark(#fbfcf8, #242520);
   box-shadow: 0 0 0 0.5px rgba(23, 33, 27, 0.07);
 }
 
@@ -563,7 +564,7 @@
   width: 100%;
   min-height: 64px;
   border: 0;
-  border-bottom: 1px solid rgba(223, 229, 216, 0.78);
+  border-bottom: 1px solid light-dark(rgba(223, 229, 216, 0.78), rgba(51, 60, 40, 0.78));
   padding: 11px 12px;
   background: var(--booking-bg, var(--surface));
   color: var(--ink);
@@ -633,7 +634,7 @@
 .mobile-payment-pill {
   border-radius: 999px;
   padding: 5px 8px;
-  background: var(--booking-pill, rgba(204, 225, 95, 0.45));
+  background: var(--booking-pill, light-dark(rgba(204, 225, 95, 0.45), rgba(141, 163, 31, 0.45)));
   color: var(--booking-ink, var(--green-deep));
   font-size: 11px;
   font-weight: 750;
@@ -641,7 +642,7 @@
 }
 
 .mobile-availability-row {
-  background: rgba(248, 250, 245, 0.7);
+  background: light-dark(rgba(248, 250, 245, 0.7), rgba(37, 39, 32, 0.7));
   cursor: pointer;
   transition: background 140ms ease;
 }
@@ -649,17 +650,17 @@
 @media (hover: hover) {
   .mobile-availability-row:hover,
   .mobile-availability-row:focus-visible {
-    background: rgba(240, 246, 232, 0.95);
+    background: light-dark(rgba(240, 246, 232, 0.95), rgba(42, 51, 29, 0.95));
   }
 }
 
 .mobile-availability-row:active {
-  background: rgba(232, 240, 220, 1);
+  background: light-dark(rgba(232, 240, 220, 1), #313f1b);
 }
 
 .mobile-availability-row strong {
   justify-self: end;
-  color: #788176;
+  color: light-dark(#788176, #7d867b);
   font-size: 13px;
 }
 
@@ -675,15 +676,15 @@
   overflow: hidden;
   border: 0;
   border-radius: 16px;
-  background: #fbfcf8;
+  background: light-dark(#fbfcf8, #242520);
   box-shadow: 0 0 0 0.5px rgba(23, 33, 27, 0.07);
   transition: box-shadow 180ms ease, background 180ms ease;
 }
 
 .mobile-week-row.selected {
-  background: #fff;
+  background: light-dark(#fff, #212121);
   box-shadow:
-    0 0 0 1.5px rgba(40, 99, 69, 0.34),
+    0 0 0 1.5px light-dark(rgba(40, 99, 69, 0.34), rgba(148, 212, 179, 0.34)),
     0 10px 24px rgba(23, 63, 43, 0.08);
 }
 
@@ -751,7 +752,7 @@
 }
 
 .mobile-week-court > span {
-  color: #778176;
+  color: light-dark(#778176, #7c867b);
   font-size: 12px;
   font-weight: 650;
 }
@@ -763,11 +764,11 @@
   gap: 8px;
   align-items: center;
   min-height: 42px;
-  border: 1px solid var(--booking-border, rgba(40, 99, 69, 0.14));
+  border: 1px solid var(--booking-border, light-dark(rgba(40, 99, 69, 0.14), rgba(148, 212, 179, 0.14)));
   border-radius: 12px;
   padding: 8px 10px;
-  background: var(--booking-bg, #eff6ea);
-  color: var(--booking-ink, #304433);
+  background: var(--booking-bg, light-dark(#eff6ea, #26311e));
+  color: var(--booking-ink, light-dark(#304433, #b4cab8));
   cursor: pointer;
   text-align: left;
   transition: filter 140ms ease, transform 140ms ease;
@@ -780,13 +781,13 @@
 
 .mobile-week-court .mobile-week-availability {
   border-style: dashed;
-  background: rgba(248, 250, 245, 0.7);
-  color: #8a9388;
+  background: light-dark(rgba(248, 250, 245, 0.7), rgba(37, 39, 32, 0.7));
+  color: light-dark(#8a9388, #6d766b);
 }
 
 .mobile-week-court .mobile-week-availability span {
   overflow: hidden;
-  color: #8a9388;
+  color: light-dark(#8a9388, #6d766b);
   font-size: 13px;
   font-weight: 650;
   text-overflow: ellipsis;
@@ -816,7 +817,7 @@
 .mobile-week-court small {
   display: block;
   border-style: dashed;
-  color: #8a9388;
+  color: light-dark(#8a9388, #6d766b);
   cursor: default;
   font-size: 12px;
 }
@@ -880,7 +881,7 @@
   width: 42px;
   height: 4px;
   border-radius: 999px;
-  background: rgba(138, 147, 135, 0.36);
+  background: light-dark(rgba(138, 147, 135, 0.36), rgba(110, 119, 107, 0.36));
   content: "";
   transform: translateX(-50%);
 }
