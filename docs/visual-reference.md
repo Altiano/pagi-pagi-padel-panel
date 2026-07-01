@@ -13,6 +13,18 @@ The goal is not to copy every pixel. The goal is to keep new mockups aligned wit
 - Avenir/Helvetica-style typography
 - booking/status color accents that stay muted and operational
 
+The mobile app view intentionally reads as a native app rather than a responsive web page (since v0.4.0):
+
+- installable PWA (standalone display, themed status bar, padel-ball app icon)
+- surfaces float on the background with soft shadows/hairlines instead of outlined cards
+- iOS-style segmented control (gray track, raised white thumb)
+- a 7-day tappable day strip under the toolbar in Day view (selected day = solid green chip)
+- Material-style bottom tab bar: active tab gets a pale green pill behind the icon only
+- bottom sheets (booking detail, editors, slot chooser) slide up with a grab handle
+- touch press states (scale/darken) everywhere; hover effects only on pointer devices
+
+The current mobile screenshots below predate this revamp; refresh them from an authenticated session when practical.
+
 ## Screenshots
 
 | State | Desktop | Mobile |

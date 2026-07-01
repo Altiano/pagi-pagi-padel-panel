@@ -17,6 +17,7 @@ import {
 import { useEscapeKey } from '../hooks.js';
 import {
   formatAvailabilityRange,
+  formatWeekday,
   parseTimeToMinutes,
   toDateInputValue,
 } from '../lib/datetime.js';
@@ -334,6 +335,25 @@ export function CalendarPage({ cacheScope = 'session', canViewRevenue = true, ca
             <RefreshCw size={15} />
           </button>
         </div>
+        {isMobileApp && view === 'day' ? (
+          <div aria-label="Days of this week" className="mobile-day-strip" role="group">
+            {weekDays.map((date) => {
+              const isToday = date === toDateInputValue(new Date());
+              return (
+                <button
+                  aria-pressed={date === selectedDate}
+                  className={`${date === selectedDate ? 'selected' : ''} ${isToday ? 'today' : ''}`}
+                  key={date}
+                  onClick={() => setSelectedDate(date)}
+                  type="button"
+                >
+                  <span>{formatWeekday(date)}</span>
+                  <strong>{Number(date.slice(8, 10))}</strong>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
         <div className="toolbar-actions">
           <div className="open-hours">
             <Clock size={14} />

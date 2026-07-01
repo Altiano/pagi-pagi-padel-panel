@@ -228,7 +228,9 @@ export function MobileAppShell({ activeNav, children, displayName, navItems, onC
         </div>
       </header>
 
-      <section className="mobile-app-content">
+      {/* Keyed by tab so switching tabs replays the content-enter animation,
+          giving navigation the transition feel of a native app. */}
+      <section className="mobile-app-content" key={activeNav}>
         {children}
       </section>
 

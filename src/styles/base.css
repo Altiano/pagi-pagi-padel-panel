@@ -15,12 +15,24 @@
 
 * {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
+}
+
+/* Keep the app shell from rubber-banding past the chrome like a web page. */
+html:has(.mobile-app),
+body:has(.mobile-app) {
+  overscroll-behavior-y: none;
 }
 
 html,
@@ -38,6 +50,7 @@ textarea {
 
 button {
   color: inherit;
+  touch-action: manipulation;
 }
 
 form {

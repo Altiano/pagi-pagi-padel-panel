@@ -98,11 +98,63 @@
   }
 
   .placeholder-editor {
+    position: relative;
     width: 100%;
     height: min(88dvh, 780px);
-    border-top-left-radius: 22px;
-    border-top-right-radius: 22px;
+    border-top-left-radius: 26px;
+    border-top-right-radius: 26px;
     border-left: 0;
+  }
+
+  .placeholder-editor::before {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    z-index: 3;
+    width: 42px;
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(138, 147, 135, 0.36);
+    content: "";
+    transform: translateX(-50%);
+  }
+
+  /* Slot chooser becomes a bottom action sheet instead of a centered dialog. */
+  .slot-choice-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .slot-choice-dialog {
+    position: relative;
+    width: 100%;
+    border: 0;
+    border-radius: 26px 26px 0 0;
+    padding: 26px 18px calc(20px + env(safe-area-inset-bottom));
+  }
+
+  .slot-choice-dialog::before {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    width: 42px;
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(138, 147, 135, 0.36);
+    content: "";
+    transform: translateX(-50%);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .placeholder-editor,
+    .slot-choice-dialog {
+      animation: mobile-sheet-in 360ms cubic-bezier(0.32, 0.72, 0, 1);
+    }
+
+    .placeholder-editor-backdrop,
+    .slot-choice-backdrop {
+      animation: mobile-dialog-backdrop-in 220ms ease;
+    }
   }
 
   .placeholder-editor,

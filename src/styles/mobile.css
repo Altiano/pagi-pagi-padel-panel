@@ -1,11 +1,25 @@
+/* Mobile shell + mobile calendar views, styled to feel like a native app:
+   surfaces use shadows instead of web-style outlined cards, controls have
+   touch press states, sheets slide up with spring-like easing, and hover
+   effects only apply on pointer devices. */
+
 .mobile-app.panel-shell {
   display: block;
   min-height: 100dvh;
   height: auto;
   overflow: visible;
-  padding-bottom: calc(78px + env(safe-area-inset-bottom));
+  padding-bottom: calc(84px + env(safe-area-inset-bottom));
   background: linear-gradient(180deg, #fbfcf8 0, var(--bg) 230px);
 }
+
+/* Native apps never show text-selection handles on chrome or controls. */
+.mobile-app button {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* ---- App header (nav bar) ---- */
 
 .mobile-app-header {
   position: sticky;
@@ -16,9 +30,10 @@
   justify-content: space-between;
   gap: 10px;
   padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
-  border-bottom: 1px solid rgba(223, 229, 216, 0.82);
-  background: rgba(251, 252, 248, 0.96);
-  backdrop-filter: blur(18px);
+  border-bottom: 1px solid rgba(223, 229, 216, 0.55);
+  background: rgba(251, 252, 248, 0.88);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  backdrop-filter: blur(20px) saturate(1.8);
 }
 
 .mobile-brand {
@@ -78,22 +93,28 @@
 
 .mobile-header-actions button {
   display: inline-grid;
-  min-height: 36px;
+  min-height: 34px;
   place-items: center;
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: 999px;
   padding: 0 13px;
-  background: var(--surface);
+  background: rgba(23, 33, 27, 0.055);
   color: var(--green);
   cursor: pointer;
   font-size: 12px;
   font-weight: 650;
+  transition: background 160ms ease, transform 160ms ease;
 }
 
 .mobile-header-actions button[aria-label] {
-  width: 36px;
+  width: 34px;
   padding: 0;
   color: var(--ink);
+}
+
+.mobile-header-actions button:active {
+  background: rgba(23, 33, 27, 0.11);
+  transform: scale(0.94);
 }
 
 @media (max-width: 390px) {
@@ -103,9 +124,31 @@
   }
 }
 
+/* ---- Content area ---- */
+
 .mobile-app-content {
   padding: 14px 14px 0;
 }
+
+@media (prefers-reduced-motion: no-preference) {
+  .mobile-app-content {
+    animation: mobile-content-in 260ms cubic-bezier(0.2, 0, 0, 1);
+  }
+}
+
+@keyframes mobile-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---- Bottom tab bar ---- */
 
 .mobile-bottom-nav {
   position: fixed;
@@ -115,12 +158,13 @@
   z-index: 35;
   display: flex;
   justify-content: center;
-  gap: 6px;
-  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
-  border-top: 1px solid rgba(223, 229, 216, 0.9);
-  background: rgba(251, 252, 248, 0.96);
-  box-shadow: 0 -16px 40px rgba(23, 33, 27, 0.08);
-  backdrop-filter: blur(18px);
+  gap: 4px;
+  padding: 7px 10px calc(7px + env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(223, 229, 216, 0.55);
+  background: rgba(251, 252, 248, 0.88);
+  box-shadow: 0 -16px 40px rgba(23, 33, 27, 0.06);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  backdrop-filter: blur(24px) saturate(1.8);
 }
 
 .mobile-bottom-nav button {
@@ -128,22 +172,45 @@
   flex: 1 1 72px;
   min-width: 0;
   max-width: 96px;
-  min-height: 52px;
+  min-height: 54px;
   place-items: center;
+  align-content: center;
   gap: 4px;
   border: 0;
-  border-radius: 13px;
+  border-radius: 14px;
   background: transparent;
-  color: #717b70;
+  color: #75806f;
   cursor: pointer;
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 650;
+  letter-spacing: 0.01em;
+  transition: color 180ms ease;
+}
+
+/* Tab icon sits in its own pill (Material 3 style) so the active state reads
+   like a native tab bar rather than a highlighted web button. */
+.mobile-bottom-nav button svg {
+  box-sizing: content-box;
+  padding: 4px 15px;
+  border-radius: 999px;
+  background: transparent;
+  transition: background 200ms ease, transform 160ms ease;
+}
+
+.mobile-bottom-nav button:active svg {
+  transform: scale(0.88);
 }
 
 .mobile-bottom-nav button.active {
+  color: var(--green-deep);
+}
+
+.mobile-bottom-nav button.active svg {
   background: var(--surface-strong);
   color: var(--green);
 }
+
+/* ---- Calendar screen ---- */
 
 .mobile-calendar-page {
   display: block;
@@ -152,7 +219,7 @@
 
 .mobile-calendar-page .calendar-topbar {
   display: block;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .mobile-calendar-page .calendar-topbar h1 {
@@ -169,15 +236,16 @@
   display: none;
 }
 
+/* Toolbar drops the outlined web card: controls float on the background as
+   individual surfaces, the way native toolbars do. */
 .mobile-calendar-page .calendar-toolbar {
   display: grid;
-  gap: 8px;
-  margin-bottom: 12px;
-  padding: 8px;
-  border-radius: 20px;
-  border-color: rgba(213, 223, 205, 0.9);
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 14px 30px rgba(23, 33, 27, 0.05);
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .mobile-calendar-page .toolbar-nav,
@@ -209,15 +277,53 @@
 .mobile-calendar-page .today-button,
 .mobile-calendar-page .toolbar-icon-button {
   min-height: 40px;
+  transition: transform 160ms ease, background 160ms ease;
+}
+
+.mobile-calendar-page .segmented-control button:active,
+.mobile-calendar-page .date-controls button:active,
+.mobile-calendar-page .today-button:active,
+.mobile-calendar-page .toolbar-icon-button:active {
+  transform: scale(0.95);
+}
+
+/* iOS-style segmented control: gray track, raised white thumb. */
+.mobile-calendar-page .segmented-control {
+  min-width: 0;
+  border: 0;
+  border-radius: 13px;
+  padding: 3px;
+  background: rgba(23, 33, 27, 0.06);
 }
 
 .mobile-calendar-page .segmented-control button {
+  border-radius: 10px;
   padding: 0 8px;
+  color: #59645a;
+  font-weight: 650;
 }
 
-.mobile-calendar-page .segmented-control,
+.mobile-calendar-page .segmented-control button.selected {
+  background: #fff;
+  color: var(--ink);
+  box-shadow:
+    0 2px 7px rgba(23, 33, 27, 0.14),
+    0 0 0 0.5px rgba(23, 33, 27, 0.04);
+}
+
 .mobile-calendar-page .date-controls {
   min-width: 0;
+  border: 0;
+  border-radius: 13px;
+  padding: 3px;
+  background: var(--surface);
+  box-shadow:
+    0 1px 3px rgba(23, 33, 27, 0.07),
+    0 0 0 0.5px rgba(23, 33, 27, 0.035);
+}
+
+.mobile-calendar-page .date-controls button {
+  color: var(--green);
 }
 
 .mobile-calendar-page .date-controls input {
@@ -232,12 +338,24 @@
 .mobile-calendar-page .today-button {
   grid-column: 1 / span 2;
   justify-content: center;
+  border: 0;
+  border-radius: 13px;
+  background: var(--surface);
+  box-shadow:
+    0 1px 3px rgba(23, 33, 27, 0.07),
+    0 0 0 0.5px rgba(23, 33, 27, 0.035);
 }
 
 .mobile-calendar-page .toolbar-icon-button {
   grid-column: 3;
   width: 42px;
   height: 40px;
+  border: 0;
+  border-radius: 13px;
+  background: var(--surface);
+  box-shadow:
+    0 1px 3px rgba(23, 33, 27, 0.07),
+    0 0 0 0.5px rgba(23, 33, 27, 0.035);
 }
 
 .mobile-calendar-page .placeholder-create-button,
@@ -245,10 +363,73 @@
   display: none;
 }
 
+/* Open hours becomes a quiet caption instead of an outlined pill. */
 .mobile-calendar-page .open-hours {
   justify-content: center;
-  min-height: 34px;
-  padding: 5px 10px;
+  min-height: 0;
+  border: 0;
+  padding: 0 10px 2px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Week strip: tappable day chips, the native calendar-app pattern. */
+.mobile-day-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.mobile-day-strip button {
+  display: grid;
+  gap: 3px;
+  align-content: center;
+  justify-items: center;
+  min-height: 56px;
+  border: 0;
+  border-radius: 16px;
+  padding: 8px 0;
+  background: transparent;
+  cursor: pointer;
+  transition: background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.mobile-day-strip button:active {
+  transform: scale(0.92);
+}
+
+.mobile-day-strip span {
+  color: #8a9387;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.mobile-day-strip strong {
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.mobile-day-strip button.today:not(.selected) span,
+.mobile-day-strip button.today:not(.selected) strong {
+  color: var(--green);
+}
+
+.mobile-day-strip button.selected {
+  background: var(--green);
+  box-shadow: 0 8px 18px rgba(23, 63, 43, 0.26);
+}
+
+.mobile-day-strip button.selected span {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.mobile-day-strip button.selected strong {
+  color: #fff;
 }
 
 .mobile-calendar-page .calendar-layout {
@@ -262,8 +443,12 @@
   min-height: 0;
   height: auto;
   overflow: visible;
-  border-radius: 20px;
-  box-shadow: 0 14px 32px rgba(23, 33, 27, 0.05);
+  border: 0;
+  border-radius: 22px;
+  box-shadow:
+    0 1px 3px rgba(23, 33, 27, 0.06),
+    0 10px 30px rgba(23, 33, 27, 0.05),
+    0 0 0 0.5px rgba(23, 33, 27, 0.03);
 }
 
 .mobile-calendar-page .calendar-main-panel::after,
@@ -284,22 +469,32 @@
   border-radius: 18px;
 }
 
+/* ---- Floating action button ---- */
+
 .mobile-placeholder-fab {
   position: fixed;
   right: 16px;
-  bottom: calc(86px + env(safe-area-inset-bottom));
+  bottom: calc(90px + env(safe-area-inset-bottom));
   z-index: 34;
   display: grid;
-  width: 52px;
-  height: 52px;
+  width: 56px;
+  height: 56px;
   place-items: center;
   border: 0;
-  border-radius: 17px;
+  border-radius: 18px;
   background: var(--green);
-  box-shadow: 0 16px 34px rgba(23, 63, 43, 0.24);
+  box-shadow: 0 16px 34px rgba(23, 63, 43, 0.28);
   color: white;
   cursor: pointer;
+  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1), box-shadow 180ms ease;
 }
+
+.mobile-placeholder-fab:active {
+  transform: scale(0.9);
+  box-shadow: 0 8px 18px rgba(23, 63, 43, 0.3);
+}
+
+/* ---- Day agenda ---- */
 
 .mobile-agenda {
   display: grid;
@@ -353,9 +548,10 @@
 
 .mobile-agenda-list {
   overflow: hidden;
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: 16px;
   background: #fbfcf8;
+  box-shadow: 0 0 0 0.5px rgba(23, 33, 27, 0.07);
 }
 
 .mobile-booking-row,
@@ -376,15 +572,19 @@
 
 .mobile-booking-row {
   cursor: pointer;
-  transition:
-    box-shadow 140ms ease,
-    transform 140ms ease;
+  transition: filter 140ms ease;
 }
 
-.mobile-booking-row:hover,
-.mobile-booking-row:focus-visible {
-  box-shadow: inset 3px 0 0 var(--booking-accent, var(--green));
-  transform: translateY(-1px);
+/* Touch press feedback: darken in place, like a native list row. */
+.mobile-booking-row:active {
+  filter: brightness(0.95);
+}
+
+@media (hover: hover) {
+  .mobile-booking-row:hover,
+  .mobile-booking-row:focus-visible {
+    box-shadow: inset 3px 0 0 var(--booking-accent, var(--green));
+  }
 }
 
 .mobile-booking-row.selected {
@@ -446,9 +646,11 @@
   transition: background 140ms ease;
 }
 
-.mobile-availability-row:hover,
-.mobile-availability-row:focus-visible {
-  background: rgba(240, 246, 232, 0.95);
+@media (hover: hover) {
+  .mobile-availability-row:hover,
+  .mobile-availability-row:focus-visible {
+    background: rgba(240, 246, 232, 0.95);
+  }
 }
 
 .mobile-availability-row:active {
@@ -461,6 +663,8 @@
   font-size: 13px;
 }
 
+/* ---- Week list ---- */
+
 .mobile-week-list {
   display: grid;
   gap: 10px;
@@ -469,14 +673,18 @@
 
 .mobile-week-row {
   overflow: hidden;
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: 16px;
   background: #fbfcf8;
+  box-shadow: 0 0 0 0.5px rgba(23, 33, 27, 0.07);
+  transition: box-shadow 180ms ease, background 180ms ease;
 }
 
 .mobile-week-row.selected {
-  border-color: rgba(40, 99, 69, 0.26);
   background: #fff;
+  box-shadow:
+    0 0 0 1.5px rgba(40, 99, 69, 0.34),
+    0 10px 24px rgba(23, 63, 43, 0.08);
 }
 
 .mobile-week-summary {
@@ -489,6 +697,11 @@
   background: transparent;
   cursor: pointer;
   text-align: left;
+  transition: filter 140ms ease;
+}
+
+.mobile-week-summary:active {
+  filter: brightness(0.96);
 }
 
 .mobile-week-summary > span:first-child {
@@ -557,9 +770,12 @@
   color: var(--booking-ink, #304433);
   cursor: pointer;
   text-align: left;
-  transition:
-    box-shadow 140ms ease,
-    transform 140ms ease;
+  transition: filter 140ms ease, transform 140ms ease;
+}
+
+.mobile-week-court button:active {
+  transform: scale(0.98);
+  filter: brightness(0.96);
 }
 
 .mobile-week-court .mobile-week-availability {
@@ -577,10 +793,11 @@
   white-space: nowrap;
 }
 
-.mobile-week-court button:hover,
-.mobile-week-court button:focus-visible {
-  box-shadow: 0 10px 22px rgba(23, 63, 43, 0.11);
-  transform: translateY(-1px);
+@media (hover: hover) {
+  .mobile-week-court button:hover,
+  .mobile-week-court button:focus-visible {
+    box-shadow: 0 10px 22px rgba(23, 63, 43, 0.11);
+  }
 }
 
 .mobile-week-court button strong {
@@ -604,6 +821,8 @@
   font-size: 12px;
 }
 
+/* ---- Booking detail bottom sheet ---- */
+
 .mobile-detail-backdrop {
   position: fixed;
   inset: 0;
@@ -612,7 +831,7 @@
   align-items: end;
   box-sizing: border-box;
   padding-top: 56px;
-  background: rgba(23, 33, 27, 0.28);
+  background: rgba(23, 33, 27, 0.32);
 }
 
 .mobile-detail-backdrop .calendar-detail {
@@ -621,10 +840,37 @@
   box-sizing: border-box;
   width: 100%;
   max-height: min(calc(100dvh - 56px), 720px);
-  border-radius: 24px 24px 0 0;
+  border: 0;
+  border-radius: 26px 26px 0 0;
   padding: 26px 18px calc(22px + env(safe-area-inset-bottom));
   overflow: auto;
   box-shadow: 0 -24px 60px rgba(23, 33, 27, 0.22);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mobile-detail-backdrop {
+    animation: mobile-dialog-backdrop-in 220ms ease;
+  }
+
+  .mobile-detail-backdrop .calendar-detail {
+    animation: mobile-sheet-in 360ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+}
+
+@keyframes mobile-dialog-backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes mobile-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+
+  to {
+    transform: none;
+  }
 }
 
 .mobile-detail-backdrop .calendar-detail::before {
@@ -645,7 +891,8 @@
 }
 
 .mobile-detail-backdrop .detail-actions button {
-  min-height: 44px;
+  min-height: 46px;
+  border-radius: 13px;
 }
 
 @media (max-width: 360px) {

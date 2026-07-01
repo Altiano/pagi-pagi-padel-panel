@@ -106,6 +106,8 @@ src/
 
 Other key files:
 
+- `index.html`: PWA/native-feel meta tags (viewport-fit, theme-color, manifest + icon links via `%BASE_URL%`).
+- `public/manifest.webmanifest` + `public/icons/`: installable-PWA manifest and generated padel-ball icons (standalone display makes the mobile view launch without browser chrome).
 - `vite.config.js`: Vite config, base path, and local `/api` proxy.
 - `docs/architecture.md`: Higher-level architecture and data-flow notes.
 - `docs/api.md`: Backend endpoint assumptions and response-shape notes.
