@@ -1,4 +1,5 @@
-import { buildApiUrl } from './config.js';
+import { buildApiUrl, shouldUseMockApi } from './config.js';
+import { mockLogin } from './mockApi.js';
 
 const AUTH_STORAGE_KEY = 'panel.auth';
 
@@ -51,6 +52,11 @@ export function clearStoredAuth() {
 }
 
 export async function login({ username, password, remember }) {
+  if (shouldUseMockApi()) {
+    const payload = await mockLogin({ username, password, remember });
+    return storeAuth(payload, username);
+  }
+
   const response = await fetch(buildApiUrl('/api/auth/login'), {
     method: 'POST',
     headers: {

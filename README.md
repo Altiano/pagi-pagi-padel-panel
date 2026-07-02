@@ -29,19 +29,42 @@ Open the Vite dev URL printed by the terminal, usually `http://localhost:5173`.
 
 For this workspace, `.env.local` points Vite at the deployed Worker so local testing uses the same D1-backed placeholder storage as production.
 
+For fast UI previewing without real credentials or Worker access, use the
+browser-local mock API:
+
+```sh
+pnpm dev:mock
+```
+
+Mock credentials:
+
+- Master/admin: `admin@example.com` / `password`
+- Virtual staff with booking + revenue access: `_frontdesk` / `password`
+- Virtual read-only staff with hidden revenue: `_readonly` / `password`
+
+The mock API seeds courts, weekly schedule rows, placeholder stacks, waitlist
+holds, player search results, virtual users, and mutable booking actions in this
+browser's `localStorage` under `panel.mockApiState.v1`. To reset the mock data,
+remove that key from DevTools and reload.
+
 ## Commands
 
 ```sh
+pnpm dev
+pnpm dev:mock
 pnpm lint
 pnpm test
 pnpm build
+pnpm build:mock
 pnpm preview
 ```
 
 - `pnpm dev`: start the Vite dev server.
+- `pnpm dev:mock`: start Vite with `VITE_USE_MOCK_API=true` from `.env.mock`.
 - `pnpm lint`: run ESLint import/undefined-name and React hook checks.
 - `pnpm test`: run focused Vitest unit tests for pure helpers.
 - `pnpm build`: create a production build. Use this as the default verification command.
+- `pnpm build:mock`: build the app with the browser-local mock API enabled.
 - `pnpm preview`: preview the production build locally.
 
 ## Environment
@@ -54,6 +77,8 @@ VITE_BASE_PATH=/
 ```
 
 - `VITE_API_BASE_URL`: Worker origin used by local and static deployments.
+- `VITE_USE_MOCK_API`: when set to `true`, browser requests are handled by the local mock API in `src/api/mockApi.js` instead of the Worker.
+- `VITE_MOCK_API_DELAY_MS`: optional artificial delay for mock API responses. Defaults to 80ms in `.env.mock`.
 - `PANEL_API_ORIGIN`: optional backend target used only when running through the Vite dev proxy.
 - `VITE_USE_LOCAL_PLACEHOLDERS`: optional escape hatch for browser-local placeholder storage. Leave unset for D1-backed testing.
 - `VITE_BASE_PATH`: base path for static deployments.
@@ -99,7 +124,7 @@ wrangler secret put UPSTREAM_ACCOUNTS_JSON
 src/
   main.jsx          React entrypoint
   App.jsx           Composition root + panel shell (login vs panel, nav gating)
-  api/              Network, auth, Worker-owned data, calendar cache/endpoints
+  api/              Network, auth, Worker/mock-owned data, calendar cache/endpoints
   calendar/         Calendar feature UI, state hooks, dialogs, and form builders
   lib/              Pure helpers and focused unit tests
   screens/          Login and virtual-user management screens
@@ -128,6 +153,7 @@ the high-level orientation for human readers.
 - Before generating UI mockups or design variants, review `docs/visual-reference.md` and the screenshots in `docs/visual-reference/`.
 - When the app's visual design changes materially, refresh the visual-reference screenshots so future mockups stay aligned with the real UI.
 - Keep backend response field names visible at the boundary. If fields need nicer frontend names, map them in one place instead of renaming them throughout the UI.
+- Use `pnpm dev:mock` for fast visual checks when live credentials or Worker data are unnecessary. Mock mode exercises the same frontend API functions and stores mutable preview data in `localStorage`.
 - Calendar data is cached only in memory for the `CALENDAR_DATA_CACHE_TTL_MS` window (`src/constants.js`, currently 2 minutes) per auth/revenue scope and visible date. The toolbar refresh button, browser reload, and placeholder mutations intentionally bypass or clear that cache.
 - Automated tests currently cover booking helpers, calendar form payload builders, and virtual-user navigation helpers. Keep new tests focused around pure helper behavior unless a UI workflow change needs broader coverage.
 

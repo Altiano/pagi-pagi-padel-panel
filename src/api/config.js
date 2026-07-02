@@ -1,5 +1,6 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const PLACEHOLDER_API_BASE_URL = import.meta.env.VITE_PLACEHOLDER_API_BASE_URL || '';
+const USE_MOCK_API = import.meta.env.VITE_USE_MOCK_API === 'true';
 const USE_LOCAL_PLACEHOLDERS = import.meta.env.VITE_USE_LOCAL_PLACEHOLDERS === 'true';
 
 export function buildApiUrl(path) {
@@ -18,4 +19,8 @@ export function hasPlaceholderApi() {
 
 export function shouldUseLocalPlaceholders() {
   return USE_LOCAL_PLACEHOLDERS;
+}
+
+export function shouldUseMockApi() {
+  return USE_MOCK_API;
 }

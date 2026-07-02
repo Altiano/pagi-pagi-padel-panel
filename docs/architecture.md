@@ -34,6 +34,7 @@ Virtual permissions are enforced twice:
 - `src/api/config.js` builds request URLs.
 - `src/api/client.js` wraps `fetch`, adds `Accept` and `Authorization` headers, reads JSON/text bodies, and clears auth on `401`.
 - `src/api/auth.js` handles login and localStorage persistence. For virtual users, the stored bearer token is the Worker-issued panel token rather than an upstream token.
+- `src/api/mockApi.js` provides the opt-in browser-local mock API used by `pnpm dev:mock`. When `VITE_USE_MOCK_API=true`, login and all later `apiRequest` calls stay in-browser, using seeded auth/calendar/virtual-user data and mutable `localStorage` state at `panel.mockApiState.v1`.
 - `src/api/virtualUsers.js` reads and mutates Worker-owned virtual users.
 - `src/api/version.js` reads the Worker-owned `/api/panel/version` deployment metadata endpoint for the Settings diagnostics section.
 - `vite.config.js` can proxy local `/api` requests to `PANEL_API_ORIGIN`, but the normal local setup uses `VITE_API_BASE_URL` to call the deployed Worker.

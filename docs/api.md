@@ -10,6 +10,15 @@ Local development:
 - The Worker proxies ordinary `/api/*` requests upstream.
 - The Worker stores `/api/placeholder-bookings` rows in Cloudflare D1.
 
+Browser-local mock development:
+
+- Run `pnpm dev:mock`, which loads `.env.mock` and sets `VITE_USE_MOCK_API=true`.
+- `src/api/auth.js` routes login through `mockLogin`; `src/api/client.js` routes all later API calls through `mockApiRequest`.
+- No Worker or upstream service is called. Mutable mock data is stored in `localStorage` under `panel.mockApiState.v1`.
+- Remove `panel.mockApiState.v1` in DevTools and reload to reset schedules, placeholders, virtual users, and sessions.
+- Seed credentials are `admin@example.com` / `password`, `_frontdesk` / `password`, and `_readonly` / `password`.
+- The mock API covers the currently wired frontend surface: auth/me, version diagnostics, virtual users/sessions, courts, open hours, schedule rows, placeholder CRUD, player search, booking create/detail/receipt/mark-paid/reschedule/notes/cancel actions, revenue masking, and virtual placeholder delete ownership.
+
 Static deployment:
 
 - Browser calls `VITE_API_BASE_URL` plus the request path.
@@ -30,6 +39,7 @@ Deployment metadata:
 - The Worker reads `WORKER_VERSION`, `WORKER_BUILD_COMMIT`, and `WORKER_BUILD_TIMESTAMP`.
 - The GitHub Actions deployment workflow fills those values from the resolved deploy commit and UTC build timestamp.
 - Settings shows the frontend values directly and reads backend values from `/api/panel/version`.
+- In mock mode, `/api/panel/version` returns local non-secret mock metadata with `runtime: "browser-local-mock"`.
 
 ### `GET /api/panel/version`
 

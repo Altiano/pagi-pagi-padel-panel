@@ -1,12 +1,9 @@
 import { clearStoredAuth, getStoredAuth } from './auth.js';
-import { buildApiUrl, buildPlaceholderApiUrl, hasPlaceholderApi, shouldUseLocalPlaceholders } from './config.js';
+import { buildApiUrl, buildPlaceholderApiUrl, hasPlaceholderApi, shouldUseLocalPlaceholders, shouldUseMockApi } from './config.js';
+import { mockApiRequest } from './mockApi.js';
 import { isPlaceholderRequest, localPlaceholderRequest } from './placeholders.js';
 
 export async function apiRequest(path, options = {}) {
-  if (isPlaceholderRequest(path) && shouldUseLocalPlaceholders()) {
-    return localPlaceholderRequest(path, options);
-  }
-
   const auth = getStoredAuth();
   const headers = new Headers(options.headers || {});
   headers.set('Accept', 'application/json, text/plain, */*');
@@ -22,6 +19,19 @@ export async function apiRequest(path, options = {}) {
   const isMultipartBody = typeof FormData !== 'undefined' && options.body instanceof FormData;
   if (options.body && !headers.has('Content-Type') && !isMultipartBody) {
     headers.set('Content-Type', 'application/json');
+  }
+
+  if (shouldUseMockApi()) {
+    try {
+      return await mockApiRequest(path, { ...options, headers });
+    } catch (error) {
+      if (error.status === 401) clearStoredAuth();
+      throw error;
+    }
+  }
+
+  if (isPlaceholderRequest(path) && shouldUseLocalPlaceholders()) {
+    return localPlaceholderRequest(path, { ...options, headers });
   }
 
   const requestUrl = isPlaceholderRequest(path) && hasPlaceholderApi() ? buildPlaceholderApiUrl(path) : buildApiUrl(path);

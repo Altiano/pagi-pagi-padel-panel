@@ -13,9 +13,11 @@ This repo is intended to be easy for AI agents and human maintainers to modify. 
 ```sh
 pnpm install
 pnpm dev
+pnpm dev:mock
 pnpm lint
 pnpm test
 pnpm build
+pnpm build:mock
 pnpm preview
 ```
 
@@ -76,6 +78,9 @@ src/
     virtualUsers.js              Worker-owned virtual user CRUD.
     version.js                   Worker deployment metadata endpoint reader.
     placeholders.js              Optional browser-local placeholder escape hatch.
+    mockApi.js                   Browser-local mock API for fast preview work
+                                 with seeded auth, calendar, placeholders,
+                                 virtual users, and booking actions.
     calendar.js                  Calendar data load + in-memory TTL cache +
                                  captured booking-action endpoints (detail,
                                  receipt upload, reschedule lookups, price check).
@@ -125,6 +130,8 @@ Other key files:
 ## Environment
 
 - `VITE_API_BASE_URL`: Worker origin for browser requests in local and built/static deployments.
+- `VITE_USE_MOCK_API`: Optional browser-local mock API switch. Use `pnpm dev:mock` to enable it from `.env.mock`.
+- `VITE_MOCK_API_DELAY_MS`: Optional mock API response delay in milliseconds. Defaults to 80ms in `.env.mock`.
 - `PANEL_API_ORIGIN`: Optional backend target for the local Vite proxy.
 - `MASTER_USERNAME`: Worker secret for the real upstream account allowed to manage virtual users; also used as the single virtual-login upstream account when no account pool is configured.
 - `MASTER_PASSWORD`: Worker secret for the single-account virtual-login fallback when no account pool is configured.
@@ -142,6 +149,7 @@ Other key files:
 ## Current Architecture Notes
 
 - The UI is split into layered modules (see the Code Map above). `App.jsx` is now only the composition root and panel shell; feature code lives under `src/calendar/` and `src/screens/`, with reusable pure helpers under `src/lib/`, workflow hooks under `src/calendar/use*.js`, and the network/cache boundary under `src/api/`.
+- `pnpm dev:mock` starts Vite in mock mode (`VITE_USE_MOCK_API=true`) so future preview/debug work can sign in without real credentials. Seed logins are `admin@example.com` / `password`, `_frontdesk` / `password`, and `_readonly` / `password`. Mock data persists in browser `localStorage` under `panel.mockApiState.v1`; delete that key to reset seeded schedules, placeholders, virtual users, and sessions.
 - Calendar data is loaded by `useCalendarData` through `loadCalendarData` (in `src/api/calendar.js`), which fetches courts, open hours, one schedule response per weekday, and D1-backed placeholder bookings. Calendar fetches are cached in-memory per auth/revenue scope for the `CALENDAR_DATA_CACHE_TTL_MS` window (in `src/constants.js`) per visible date; toolbar refresh, browser refresh, placeholder mutations, and real booking write actions force fresh data.
 - Virtual account login uses an underscore-prefixed username, for example `_frontdesk`. The Worker validates the D1 virtual user, chooses the least-loaded configured upstream account using active non-expired virtual-session counts, reuses or refreshes that account's shared upstream token in the D1 `upstream_account_tokens` table, and returns only a Worker-issued panel token to the browser. If `UPSTREAM_ACCOUNTS_JSON` is unset, virtual login falls back to `MASTER_USERNAME` and `MASTER_PASSWORD`.
 - Real logins also receive Worker-issued panel tokens. Multiple browser/device logins for the same real account create separate `real_sessions` rows, but all proxy through the single shared upstream token stored in `upstream_account_tokens`. Server-configured accounts can refresh that token with configured credentials. Unknown real accounts seed the shared token and a salted password hash after the first successful upstream login; later matching-password logins reuse the stored upstream token without creating another upstream login while the token is fresh.
