@@ -227,7 +227,7 @@ export function MobileAppShell({ activeNav, children, navItems, onChangeNav }) {
               onClick={() => onChangeNav(item.nav)}
               type="button"
             >
-              <Icon size={18} />
+              <Icon size={20} />
               <span>{item.label}</span>
             </button>
           );
