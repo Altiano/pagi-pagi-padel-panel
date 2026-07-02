@@ -117,10 +117,10 @@ screen.
 
 Every color in the stylesheets is written as `light-dark(lightValue, darkValue)`.
 The active side follows the `color-scheme` property, which `base.css` derives
-from the `html[data-theme]` attribute: `light` or `dark` forces a scheme, no
-attribute means follow the OS preference. When adding styles, never use a raw
-color literal — either use a token from `base.css` or wrap the literal in
-`light-dark()`.
+from the `html[data-theme]` attribute: no attribute (or `light`) means light —
+the default — `dark` forces dark, and `system` follows the OS preference. When
+adding styles, never use a raw color literal — either use a token from
+`base.css` or wrap the literal in `light-dark()`.
 
 The preference is stored in `localStorage` under `ppp-panel-theme`
 (`THEME_STORAGE_KEY` in `src/constants.js`) and is intentionally device-local:

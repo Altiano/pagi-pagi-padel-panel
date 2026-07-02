@@ -38,23 +38,18 @@ export function usePreferredMobileView(isMobileRoute) {
 const THEME_META_COLORS = { light: '#fbfcf8', dark: '#242520' };
 
 export function getStoredThemePreference() {
-  if (typeof window === 'undefined') return 'system';
+  if (typeof window === 'undefined') return 'light';
   const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  return stored === 'light' || stored === 'dark' ? stored : 'system';
+  return stored === 'dark' || stored === 'system' ? stored : 'light';
 }
 
 // Sets html[data-theme] (which flips color-scheme, and with it every
 // light-dark() color) and keeps the theme-color metas in sync so the browser
-// chrome / PWA status bar matches. 'system' removes the attribute so the
-// prefers-color-scheme media metas take over.
+// chrome / PWA status bar matches. No attribute (or 'light') means light —
+// the default; 'system' follows the OS preference.
 export function applyThemePreference(preference) {
   if (typeof document === 'undefined') return;
-  const root = document.documentElement;
-  if (preference === 'light' || preference === 'dark') {
-    root.dataset.theme = preference;
-  } else {
-    delete root.dataset.theme;
-  }
+  document.documentElement.dataset.theme = preference;
   document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => {
     const systemScheme = (meta.getAttribute('media') || '').includes('dark') ? 'dark' : 'light';
     const effective = preference === 'system' ? systemScheme : preference;

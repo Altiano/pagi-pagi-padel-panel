@@ -1,8 +1,8 @@
 /* Theme: every color is written as light-dark(light, dark). The active side
    follows color-scheme, driven by the html[data-theme] attribute that
-   useThemePreference (src/hooks.js) sets; no attribute means follow system. */
+   useThemePreference (src/hooks.js) sets; no attribute defaults to light. */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --bg: light-dark(#f4f6f1, #131711);
   --ink: light-dark(#17211b, #e7ece4);
   --muted: light-dark(#6d756e, #98a294);
@@ -17,12 +17,12 @@
   font-family: "Avenir Next", "Helvetica Neue", Helvetica, sans-serif;
 }
 
-:root[data-theme='light'] {
-  color-scheme: light;
-}
-
 :root[data-theme='dark'] {
   color-scheme: dark;
+}
+
+:root[data-theme='system'] {
+  color-scheme: light dark;
 }
 
 * {
