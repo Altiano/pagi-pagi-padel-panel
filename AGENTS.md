@@ -87,6 +87,9 @@ src/
     useRealBookingActions.js     Real booking create/convert, payment, reschedule,
                                  cancel, and notes workflows.
     CalendarViews.jsx            Day/Week/Mobile grid renderers + hover tooltip.
+    MobileCalendarChrome.jsx     Mobile-only calendar chrome: sticky header
+                                 (month title, day strip, court chips) plus the
+                                 date-picker and account bottom sheets.
     CalendarDetailPanel.jsx      Selected booking detail + day/week summary panel.
     BookingWriteDialog.jsx       Real-booking create/convert dialog.
     PaymentProofDialog.jsx       Receipt upload dialog.

@@ -45,7 +45,7 @@ export function CalendarDetailPanel({
     const hasPlaceholderStack = placeholderStack.length > 1;
     const canConvertPlaceholder = canWriteBookings && isPlaceholder && !hasBookingConflict(booking);
     return (
-      <aside className="calendar-detail">
+      <aside className="calendar-detail" data-sheet-scroll="">
         <div className="panel-label-row">
           <span className="panel-label">{isPlaceholder ? hasPlaceholderStack ? 'Placeholder stack' : 'Placeholder booking' : 'Booking detail'}</span>
           {onClose ? (

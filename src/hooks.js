@@ -34,6 +34,52 @@ export function usePreferredMobileView(isMobileRoute) {
   };
 }
 
+/* Swipe-down-to-dismiss for mobile bottom sheets. Spread `handlers` and
+   `style` onto the sheet element. If the sheet has a scrollable region, mark
+   it with `data-sheet-scroll`; dragging only starts while that region sits at
+   its scroll top, so list scrolling inside the sheet keeps working. */
+export function useSheetDrag(onDismiss) {
+  const [offset, setOffset] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const dragRef = useRef({ active: false, offset: 0, startY: 0 });
+
+  const applyOffset = (value) => {
+    dragRef.current.offset = value;
+    setOffset(value);
+  };
+
+  const handlers = {
+    onTouchStart(event) {
+      const scrollArea = event.currentTarget.querySelector('[data-sheet-scroll]') || event.currentTarget;
+      dragRef.current = { active: scrollArea.scrollTop <= 0, offset: 0, startY: event.touches[0].clientY };
+    },
+    onTouchMove(event) {
+      if (!dragRef.current.active) return;
+      const delta = event.touches[0].clientY - dragRef.current.startY;
+      if (delta > 0 && !dragging) setDragging(true);
+      applyOffset(Math.max(delta, 0));
+    },
+    onTouchEnd() {
+      if (!dragRef.current.active) return;
+      dragRef.current.active = false;
+      setDragging(false);
+      if (dragRef.current.offset > 110) {
+        onDismiss?.();
+        return;
+      }
+      applyOffset(0);
+    },
+  };
+
+  return {
+    handlers,
+    style: {
+      transform: offset ? `translateY(${offset}px)` : undefined,
+      transition: dragging ? 'none' : undefined,
+    },
+  };
+}
+
 export function useEscapeKey(onEscape, enabled = true) {
   const onEscapeRef = useRef(onEscape);
 
