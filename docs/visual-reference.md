@@ -12,6 +12,8 @@ The goal is not to copy every pixel. The goal is to keep new mockups aligned wit
 - clean card/panel surfaces with subtle borders
 - Avenir/Helvetica-style typography using the shared scale in `docs/typography.md`
 - booking/status color accents that stay muted and operational
+- login as a branded operations entry point: clear Pagi Pagi Padel identity,
+  compact credential card, and no marketing-style hero copy
 
 The mobile app view intentionally reads as a native app rather than a responsive web page (since v0.4.0):
 
