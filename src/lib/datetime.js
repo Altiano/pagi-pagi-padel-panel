@@ -99,6 +99,14 @@ export function buildMonthMatrix(dateValue) {
   });
 }
 
+export function shiftMonth(dateValue, months) {
+  const date = new Date(`${dateValue}T00:00:00`);
+  // Clamp to the 1st so e.g. Jan 31 + 1 month lands in February, not March.
+  date.setDate(1);
+  date.setMonth(date.getMonth() + months);
+  return toDateInputValue(date);
+}
+
 export function formatWeekRange(dateValue) {
   const days = getWeekDays(dateValue);
   return `${formatDayNumber(days[0])} - ${formatDayNumber(days[6])}`;

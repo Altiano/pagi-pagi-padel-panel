@@ -1,7 +1,10 @@
-/* Mobile shell + mobile calendar views, styled to feel like a native app:
-   surfaces use shadows instead of web-style outlined cards, controls have
-   touch press states, sheets slide up with spring-like easing, and hover
-   effects only apply on pointer devices. */
+/* Mobile shell + mobile calendar views, styled like a native app: no app-wide
+   header (each screen owns its top area), a sticky compact calendar header
+   with a swipeable day strip and court filter chips, an edge-to-edge agenda
+   list with hairline separators and a live "now" line, bottom sheets with
+   grabbers + swipe-to-dismiss, pull-to-refresh, and a bottom tab bar that
+   docks the create FAB in its center notch when there are two tabs.
+   Colors follow the app-wide theme convention: light-dark() pairs. */
 
 .mobile-app.panel-shell {
   display: block;
@@ -9,7 +12,7 @@
   height: auto;
   overflow: visible;
   padding-bottom: calc(84px + env(safe-area-inset-bottom));
-  background: linear-gradient(180deg, light-dark(#fbfcf8, #242520) 0, var(--bg) 230px);
+  background: var(--bg);
 }
 
 /* Native apps never show text-selection handles on chrome or controls. */
@@ -19,115 +22,16 @@
   -webkit-touch-callout: none;
 }
 
-/* ---- App header (nav bar) ---- */
-
-.mobile-app-header {
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
-  border-bottom: 1px solid light-dark(rgba(223, 229, 216, 0.55), rgba(51, 60, 40, 0.55));
-  background: light-dark(rgba(251, 252, 248, 0.88), rgba(36, 37, 32, 0.88));
-  -webkit-backdrop-filter: blur(20px) saturate(1.8);
-  backdrop-filter: blur(20px) saturate(1.8);
-}
-
-.mobile-brand {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 10px;
-}
-
-.mobile-brand .brand-mark {
-  flex: 0 0 auto;
-}
-
-.mobile-brand div {
-  display: grid;
-  min-width: 0;
-}
-
-.mobile-brand strong {
-  overflow: hidden;
-  font-size: 15px;
-  letter-spacing: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mobile-brand span:not(.brand-mark) {
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mobile-header-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 8px;
-}
-
-.mobile-build {
-  display: none;
-  max-width: 116px;
-  color: light-dark(#9aa395, #626b5d);
-  font-size: 8px;
-  font-weight: 600;
-  line-height: 1.25;
-  text-align: right;
-}
-
-.mobile-build span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mobile-header-actions button {
-  display: inline-grid;
-  min-height: 34px;
-  place-items: center;
-  border: 0;
-  border-radius: 999px;
-  padding: 0 13px;
-  background: light-dark(rgba(23, 33, 27, 0.055), rgba(231, 236, 228, 0.08));
-  color: var(--green);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 650;
-  transition: background 160ms ease, transform 160ms ease;
-}
-
-.mobile-header-actions button[aria-label] {
-  width: 34px;
-  padding: 0;
-  color: var(--ink);
-}
-
-.mobile-header-actions button:active {
-  background: light-dark(rgba(23, 33, 27, 0.11), rgba(231, 236, 228, 0.16));
-  transform: scale(0.94);
-}
-
-@media (max-width: 390px) {
-  .mobile-build {
-    max-width: 104px;
-    font-size: 8px;
-  }
-}
-
 /* ---- Content area ---- */
 
+/* Non-calendar screens keep comfortable gutters; the calendar goes edge to
+   edge and manages its own padding. */
 .mobile-app-content {
   padding: 14px 14px 0;
+}
+
+.mobile-app-content:has(.mobile-calendar-page) {
+  padding: 0;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -210,6 +114,55 @@
   color: var(--green);
 }
 
+/* With exactly two tabs, spread them apart so the create FAB can dock into
+   the center of the bar like a native bottom app bar. */
+.mobile-tabs-2 .mobile-bottom-nav {
+  justify-content: space-around;
+  gap: 0;
+}
+
+/* ---- Floating action button ---- */
+
+.mobile-placeholder-fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(90px + env(safe-area-inset-bottom));
+  z-index: 36;
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  border: 0;
+  border-radius: 18px;
+  background: var(--green);
+  box-shadow: 0 16px 34px rgba(23, 63, 43, 0.28);
+  color: white;
+  cursor: pointer;
+  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1), box-shadow 180ms ease;
+}
+
+.mobile-placeholder-fab:active {
+  transform: scale(0.9);
+  box-shadow: 0 8px 18px rgba(23, 63, 43, 0.3);
+}
+
+.mobile-tabs-2 .mobile-placeholder-fab {
+  right: auto;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  left: 50%;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  box-shadow:
+    0 10px 24px rgba(23, 63, 43, 0.34),
+    0 0 0 5px light-dark(rgba(244, 246, 241, 0.9), rgba(19, 23, 17, 0.9));
+  transform: translateX(-50%);
+}
+
+.mobile-tabs-2 .mobile-placeholder-fab:active {
+  transform: translateX(-50%) scale(0.9);
+}
+
 /* ---- Calendar screen ---- */
 
 .mobile-calendar-page {
@@ -217,169 +170,111 @@
   height: auto;
 }
 
-.mobile-calendar-page .calendar-topbar {
-  display: block;
-  margin-bottom: 12px;
-}
-
-.mobile-calendar-page .calendar-topbar h1 {
-  font-size: 32px;
-  line-height: 1.05;
-  letter-spacing: 0;
-}
-
-.mobile-calendar-page .calendar-topbar p {
-  display: none;
-}
-
-.mobile-calendar-page .topbar-actions {
-  display: none;
-}
-
-/* Toolbar drops the outlined web card: controls float on the background as
-   individual surfaces, the way native toolbars do. */
-.mobile-calendar-page .calendar-toolbar {
+/* Sticky native-style header: month title + today pill + avatar, day strip,
+   court chips. Content scrolls beneath the blur. */
+.mobile-cal-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
   display: grid;
   gap: 10px;
-  margin-bottom: 14px;
+  padding: calc(12px + env(safe-area-inset-top)) 14px 10px;
+  border-bottom: 1px solid light-dark(rgba(223, 229, 216, 0.5), rgba(51, 60, 40, 0.5));
+  background: light-dark(rgba(244, 246, 241, 0.86), rgba(19, 23, 17, 0.86));
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  backdrop-filter: blur(20px) saturate(1.8);
+}
+
+.mobile-cal-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mobile-month-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  border: 0;
   padding: 0;
-  border: 0;
   background: transparent;
-  box-shadow: none;
-}
-
-.mobile-calendar-page .toolbar-nav,
-.mobile-calendar-page .toolbar-actions {
-  display: grid;
-  width: 100%;
-  gap: 8px;
-  margin-left: 0;
-}
-
-.mobile-calendar-page .toolbar-nav {
-  grid-template-columns: 108px minmax(0, 1fr) 42px;
-}
-
-.mobile-calendar-page .segmented-control {
-  display: grid;
-  grid-column: 1;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.mobile-calendar-page .date-controls {
-  display: grid;
-  grid-column: 2 / span 2;
-  grid-template-columns: 40px minmax(0, 1fr) 40px;
-}
-
-.mobile-calendar-page .segmented-control button,
-.mobile-calendar-page .date-controls button,
-.mobile-calendar-page .today-button,
-.mobile-calendar-page .toolbar-icon-button {
-  min-height: 40px;
-  transition: transform 160ms ease, background 160ms ease;
-}
-
-.mobile-calendar-page .segmented-control button:active,
-.mobile-calendar-page .date-controls button:active,
-.mobile-calendar-page .today-button:active,
-.mobile-calendar-page .toolbar-icon-button:active {
-  transform: scale(0.95);
-}
-
-/* iOS-style segmented control: gray track, raised white thumb. */
-.mobile-calendar-page .segmented-control {
-  min-width: 0;
-  border: 0;
-  border-radius: 13px;
-  padding: 3px;
-  background: light-dark(rgba(23, 33, 27, 0.06), rgba(231, 236, 228, 0.08));
-}
-
-.mobile-calendar-page .segmented-control button {
-  border-radius: 10px;
-  padding: 0 8px;
-  color: light-dark(#59645a, #96a197);
-  font-weight: 650;
-}
-
-.mobile-calendar-page .segmented-control button.selected {
-  /* Raised thumb must sit above the track in both themes. */
-  background: light-dark(#fff, #3c443c);
   color: var(--ink);
-  box-shadow:
-    0 2px 7px rgba(23, 33, 27, 0.14),
-    0 0 0 0.5px rgba(23, 33, 27, 0.04);
+  cursor: pointer;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
 }
 
-.mobile-calendar-page .date-controls {
-  min-width: 0;
+.mobile-month-button svg {
+  flex: 0 0 auto;
+  margin-top: 3px;
+  color: light-dark(#8a9387, #6e776b);
+  transition: transform 160ms ease;
+}
+
+.mobile-month-button:active svg {
+  transform: translateY(2px);
+}
+
+.mobile-cal-titlebar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.mobile-today-pill {
+  min-height: 32px;
   border: 0;
-  border-radius: 13px;
-  padding: 3px;
+  border-radius: 999px;
+  padding: 0 13px;
   background: var(--surface);
-  box-shadow:
-    0 1px 3px rgba(23, 33, 27, 0.07),
-    0 0 0 0.5px rgba(23, 33, 27, 0.035);
+  box-shadow: 0 0 0 0.5px light-dark(rgba(23, 33, 27, 0.1), rgba(231, 236, 228, 0.14)), 0 1px 3px rgba(23, 33, 27, 0.06);
+  color: var(--green-deep);
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 700;
+  transition: transform 160ms ease;
 }
 
-.mobile-calendar-page .date-controls button {
-  color: var(--green);
+.mobile-today-pill:active {
+  transform: scale(0.94);
 }
 
-.mobile-calendar-page .date-controls input {
-  width: 100%;
-  min-width: 0;
-  padding: 0 4px;
-  font-size: 16px;
-  font-weight: 650;
-  text-align: center;
-}
-
-.mobile-calendar-page .today-button {
-  grid-column: 1 / span 2;
-  justify-content: center;
+.mobile-avatar-button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
   border: 0;
-  border-radius: 13px;
-  background: var(--surface);
-  box-shadow:
-    0 1px 3px rgba(23, 33, 27, 0.07),
-    0 0 0 0.5px rgba(23, 33, 27, 0.035);
+  border-radius: 50%;
+  background: light-dark(#286345, #2f7a53);
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  transition: transform 160ms ease;
 }
 
-.mobile-calendar-page .toolbar-icon-button {
-  grid-column: 3;
-  width: 42px;
-  height: 40px;
-  border: 0;
-  border-radius: 13px;
-  background: var(--surface);
-  box-shadow:
-    0 1px 3px rgba(23, 33, 27, 0.07),
-    0 0 0 0.5px rgba(23, 33, 27, 0.035);
+.mobile-avatar-button:active {
+  transform: scale(0.92);
 }
 
-.mobile-calendar-page .placeholder-create-button,
-.mobile-calendar-page .real-booking-create-button {
-  display: none;
+.mobile-avatar-button.large {
+  width: 44px;
+  height: 44px;
+  font-size: 17px;
 }
 
-/* Open hours becomes a quiet caption instead of an outlined pill. */
-.mobile-calendar-page .open-hours {
-  justify-content: center;
-  min-height: 0;
-  border: 0;
-  padding: 0 10px 2px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-/* Week strip: tappable day chips, the native calendar-app pattern. */
+/* Week strip: tappable day chips; swipe it sideways to change weeks. */
 .mobile-day-strip {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 5px;
+  gap: 4px;
+  touch-action: pan-x;
 }
 
 .mobile-day-strip button {
@@ -387,10 +282,10 @@
   gap: 3px;
   align-content: center;
   justify-items: center;
-  min-height: 56px;
+  min-height: 52px;
   border: 0;
-  border-radius: 16px;
-  padding: 8px 0;
+  border-radius: 15px;
+  padding: 7px 0;
   background: transparent;
   cursor: pointer;
   transition: background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
@@ -417,11 +312,11 @@
 
 .mobile-day-strip button.today:not(.selected) span,
 .mobile-day-strip button.today:not(.selected) strong {
-  color: var(--green);
+  color: var(--green-deep);
 }
 
 .mobile-day-strip button.selected {
-  background: var(--green);
+  background: light-dark(#286345, #2f7a53);
   box-shadow: 0 8px 18px rgba(23, 63, 43, 0.26);
 }
 
@@ -433,6 +328,79 @@
   color: #fff;
 }
 
+/* Court filter chips + booking count. */
+.mobile-court-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.mobile-court-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.mobile-court-chips button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 13px;
+  background: var(--surface);
+  box-shadow: 0 0 0 0.5px light-dark(rgba(23, 33, 27, 0.09), rgba(231, 236, 228, 0.12));
+  color: light-dark(#4c584c, #aab5ab);
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 650;
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.mobile-court-chips button:active {
+  transform: scale(0.95);
+}
+
+.mobile-court-chips button.selected {
+  background: light-dark(#173f2b, #2f7a53);
+  box-shadow: none;
+  color: #fff;
+}
+
+.mobile-chip-count {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: 8px;
+  color: light-dark(#8a9387, #6e776b);
+  font-size: 11.5px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+/* ---- Pull to refresh ---- */
+
+.mobile-pull-indicator {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--green-deep);
+}
+
+.mobile-pull-indicator.refreshing svg {
+  animation: mobile-spin 800ms linear infinite;
+}
+
+@keyframes mobile-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---- Calendar layout: drop the web card chrome, go edge to edge ---- */
+
+.mobile-calendar-page .calendar-feedback {
+  padding: 10px 14px 0;
+}
+
 .mobile-calendar-page .calendar-layout {
   display: grid;
   grid-template-columns: 1fr;
@@ -441,15 +409,13 @@
 }
 
 .mobile-calendar-page .calendar-main-panel {
-  min-height: 0;
+  min-height: 60dvh;
   height: auto;
   overflow: visible;
   border: 0;
-  border-radius: 22px;
-  box-shadow:
-    0 1px 3px rgba(23, 33, 27, 0.06),
-    0 10px 30px rgba(23, 33, 27, 0.05),
-    0 0 0 0.5px rgba(23, 33, 27, 0.03);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .mobile-calendar-page .calendar-main-panel::after,
@@ -463,133 +429,61 @@
   overflow: visible;
 }
 
-.mobile-calendar-page .calendar-detail {
-  position: static;
-  height: auto;
-  max-height: none;
-  border-radius: 18px;
-}
-
-/* ---- Floating action button ---- */
-
-.mobile-placeholder-fab {
-  position: fixed;
-  right: 16px;
-  bottom: calc(90px + env(safe-area-inset-bottom));
-  z-index: 34;
-  display: grid;
-  width: 56px;
-  height: 56px;
-  place-items: center;
+.mobile-calendar-page .calendar-loading {
   border: 0;
-  border-radius: 18px;
-  background: var(--green);
-  box-shadow: 0 16px 34px rgba(23, 63, 43, 0.28);
-  color: white;
-  cursor: pointer;
-  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1), box-shadow 180ms ease;
-}
-
-.mobile-placeholder-fab:active {
-  transform: scale(0.9);
-  box-shadow: 0 8px 18px rgba(23, 63, 43, 0.3);
+  background: transparent;
+  padding: 48px 14px;
+  text-align: center;
 }
 
 /* ---- Day agenda ---- */
 
 .mobile-agenda {
   display: grid;
-  gap: 12px;
-  padding: 12px;
-}
-
-.mobile-agenda-heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 14px;
-  padding-bottom: 4px;
-}
-
-.mobile-agenda-heading span {
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.35;
-}
-
-.mobile-agenda-heading strong {
-  color: var(--green);
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-.mobile-court-agenda {
-  display: grid;
-  gap: 8px;
+  gap: 4px;
+  padding: 2px 0 12px;
 }
 
 .mobile-court-heading {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 2px 0;
+  padding: 12px 16px 6px;
 }
 
 .mobile-court-heading strong {
-  font-size: 15px;
-  letter-spacing: -0.02em;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
 .mobile-court-heading span {
   color: light-dark(#8a9387, #6e776b);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: 11.5px;
+  font-weight: 600;
 }
 
 .mobile-agenda-list {
-  overflow: hidden;
-  border: 0;
-  border-radius: 16px;
-  background: light-dark(#fbfcf8, #242520);
-  box-shadow: 0 0 0 0.5px rgba(23, 33, 27, 0.07);
+  border-top: 1px solid light-dark(rgba(223, 229, 216, 0.7), rgba(51, 60, 40, 0.7));
+  border-bottom: 1px solid light-dark(rgba(223, 229, 216, 0.7), rgba(51, 60, 40, 0.7));
+  background: var(--surface);
 }
 
 .mobile-booking-row,
 .mobile-availability-row {
   display: grid;
-  grid-template-columns: 84px minmax(0, 1fr) auto;
+  grid-template-columns: 46px 3px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
+  gap: 11px;
   width: 100%;
-  min-height: 64px;
   border: 0;
-  border-bottom: 1px solid light-dark(rgba(223, 229, 216, 0.78), rgba(51, 60, 40, 0.78));
-  padding: 11px 12px;
-  background: var(--booking-bg, var(--surface));
+  border-bottom: 1px solid light-dark(rgba(223, 229, 216, 0.6), rgba(51, 60, 40, 0.6));
+  background: var(--surface);
   color: var(--ink);
   text-align: left;
-}
-
-.mobile-booking-row {
-  cursor: pointer;
-  transition: filter 140ms ease;
-}
-
-/* Touch press feedback: darken in place, like a native list row. */
-.mobile-booking-row:active {
-  filter: brightness(0.95);
-}
-
-@media (hover: hover) {
-  .mobile-booking-row:hover,
-  .mobile-booking-row:focus-visible {
-    box-shadow: inset 3px 0 0 var(--booking-accent, var(--green));
-  }
-}
-
-.mobile-booking-row.selected {
-  box-shadow: inset 3px 0 0 var(--green);
 }
 
 .mobile-booking-row:last-child,
@@ -597,71 +491,173 @@
   border-bottom: 0;
 }
 
-.mobile-booking-time,
-.mobile-availability-row span {
-  color: var(--booking-accent, var(--green));
-  font-size: 12px;
+.mobile-booking-row {
+  min-height: 58px;
+  padding: 9px 14px;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+/* Touch press feedback: darken in place, like a native list row. */
+.mobile-booking-row:active {
+  background: light-dark(#f1f4ec, #262e24);
+}
+
+.mobile-booking-row.selected {
+  background: light-dark(#f3f7ee, #252d23);
+}
+
+.mobile-booking-time {
+  display: grid;
+  gap: 2px;
+}
+
+.mobile-booking-time b {
+  color: var(--ink);
+  font-size: 13px;
   font-weight: 750;
-  line-height: 1.2;
+  line-height: 1.1;
   white-space: nowrap;
+}
+
+.mobile-booking-time small {
+  color: light-dark(#98a094, #6e776b);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+/* Status color lives in a slim accent bar, not a tinted row background. */
+.mobile-booking-accent {
+  align-self: stretch;
+  border-radius: 2px;
+  margin: 3px 0;
+  background: var(--booking-accent, var(--green));
+}
+
+.mobile-booking-accent.free {
+  background: transparent;
 }
 
 .mobile-booking-main {
   display: grid;
   min-width: 0;
-  gap: 3px;
+  gap: 2px;
 }
 
 .mobile-booking-main strong {
-  display: -webkit-box;
   overflow: hidden;
-  color: var(--booking-ink, var(--ink));
+  color: var(--ink);
   font-size: 14px;
   font-weight: 700;
-  line-height: 1.25;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mobile-booking-main small {
   overflow: hidden;
-  color: var(--booking-muted, var(--muted));
+  color: var(--muted);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.mobile-payment-pill {
+.mobile-booking-tag {
+  justify-self: end;
   border-radius: 999px;
-  padding: 5px 8px;
-  background: var(--booking-pill, light-dark(rgba(204, 225, 95, 0.45), rgba(141, 163, 31, 0.45)));
+  padding: 4px 9px;
+  background: var(--booking-pill, rgba(204, 225, 95, 0.45));
   color: var(--booking-ink, var(--green-deep));
   font-size: 11px;
   font-weight: 750;
   white-space: nowrap;
 }
 
+/* Unpaid needs to pop against paid rows regardless of the booking tone. */
+.mobile-booking-tag.unpaid {
+  background: light-dark(#fff1d2, #3d321a);
+  color: light-dark(#805513, #e3b866);
+}
+
 .mobile-availability-row {
-  background: light-dark(rgba(248, 250, 245, 0.7), rgba(37, 39, 32, 0.7));
+  min-height: 42px;
+  padding: 6px 14px;
+  background: light-dark(#f9fbf5, #191f18);
   cursor: pointer;
   transition: background 140ms ease;
 }
 
-@media (hover: hover) {
-  .mobile-availability-row:hover,
-  .mobile-availability-row:focus-visible {
-    background: light-dark(rgba(240, 246, 232, 0.95), rgba(42, 51, 29, 0.95));
-  }
-}
-
 .mobile-availability-row:active {
-  background: light-dark(rgba(232, 240, 220, 1), #313f1b);
+  background: light-dark(#eef4e5, #22291f);
 }
 
-.mobile-availability-row strong {
-  justify-self: end;
-  color: light-dark(#788176, #7d867b);
-  font-size: 13px;
+.mobile-availability-row .mobile-booking-time b {
+  color: light-dark(#98a094, #6e776b);
+  font-weight: 700;
+}
+
+.mobile-availability-main {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
+
+.mobile-availability-main strong {
+  color: light-dark(#788176, #8a948a);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.mobile-availability-main small {
+  overflow: hidden;
+  color: light-dark(#a3ac9e, #626b5d);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-availability-add {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px dashed light-dark(#c3ccba, #3a4436);
+  border-radius: 50%;
+  color: light-dark(#8a9387, #6e776b);
+}
+
+/* Live "now" marker, overlaid across the row boundary it falls on. */
+.mobile-now-line {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 18px;
+  margin: -9px 0;
+  padding: 0 10px 0 6px;
+  pointer-events: none;
+}
+
+.mobile-now-line span {
+  border-radius: 6px;
+  padding: 2px 5px;
+  background: light-dark(#d85a30, #e97a52);
+  color: light-dark(#fff, #2a1209);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.mobile-now-line::after {
+  content: "";
+  flex: 1;
+  height: 2px;
+  border-radius: 1px;
+  background: light-dark(#d85a30, #e97a52);
 }
 
 /* ---- Week list ---- */
@@ -669,7 +665,7 @@
 .mobile-week-list {
   display: grid;
   gap: 10px;
-  padding: 12px;
+  padding: 12px 14px;
 }
 
 .mobile-week-row {
@@ -677,14 +673,14 @@
   border: 0;
   border-radius: 16px;
   background: light-dark(#fbfcf8, #242520);
-  box-shadow: 0 0 0 0.5px rgba(23, 33, 27, 0.07);
+  box-shadow: 0 0 0 0.5px light-dark(rgba(23, 33, 27, 0.07), rgba(231, 236, 228, 0.09));
   transition: box-shadow 180ms ease, background 180ms ease;
 }
 
 .mobile-week-row.selected {
-  background: light-dark(#fff, #212121);
+  background: light-dark(#fff, #2b332a);
   box-shadow:
-    0 0 0 1.5px light-dark(rgba(40, 99, 69, 0.34), rgba(148, 212, 179, 0.34)),
+    0 0 0 1.5px rgba(40, 99, 69, 0.34),
     0 10px 24px rgba(23, 63, 43, 0.08);
 }
 
@@ -711,7 +707,7 @@
 }
 
 .mobile-week-summary > span:first-child strong {
-  color: var(--green);
+  color: var(--green-deep);
   font-size: 12px;
   text-transform: uppercase;
 }
@@ -752,7 +748,7 @@
 }
 
 .mobile-week-court > span {
-  color: light-dark(#778176, #7c867b);
+  color: light-dark(#778176, #8a948a);
   font-size: 12px;
   font-weight: 650;
 }
@@ -764,11 +760,11 @@
   gap: 8px;
   align-items: center;
   min-height: 42px;
-  border: 1px solid var(--booking-border, light-dark(rgba(40, 99, 69, 0.14), rgba(148, 212, 179, 0.14)));
+  border: 1px solid var(--booking-border, rgba(40, 99, 69, 0.14));
   border-radius: 12px;
   padding: 8px 10px;
-  background: var(--booking-bg, light-dark(#eff6ea, #26311e));
-  color: var(--booking-ink, light-dark(#304433, #b4cab8));
+  background: var(--booking-bg, light-dark(#eff6ea, #22291f));
+  color: var(--booking-ink, light-dark(#304433, #b6c1b8));
   cursor: pointer;
   text-align: left;
   transition: filter 140ms ease, transform 140ms ease;
@@ -781,24 +777,17 @@
 
 .mobile-week-court .mobile-week-availability {
   border-style: dashed;
-  background: light-dark(rgba(248, 250, 245, 0.7), rgba(37, 39, 32, 0.7));
-  color: light-dark(#8a9388, #6d766b);
+  background: light-dark(rgba(248, 250, 245, 0.7), rgba(25, 31, 24, 0.7));
+  color: light-dark(#8a9388, #6e776b);
 }
 
 .mobile-week-court .mobile-week-availability span {
   overflow: hidden;
-  color: light-dark(#8a9388, #6d766b);
+  color: light-dark(#8a9388, #6e776b);
   font-size: 13px;
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-@media (hover: hover) {
-  .mobile-week-court button:hover,
-  .mobile-week-court button:focus-visible {
-    box-shadow: 0 10px 22px rgba(23, 63, 43, 0.11);
-  }
 }
 
 .mobile-week-court button strong {
@@ -817,13 +806,14 @@
 .mobile-week-court small {
   display: block;
   border-style: dashed;
-  color: light-dark(#8a9388, #6d766b);
+  color: light-dark(#8a9388, #6e776b);
   cursor: default;
   font-size: 12px;
 }
 
-/* ---- Booking detail bottom sheet ---- */
+/* ---- Bottom sheets (shared) ---- */
 
+.mobile-sheet-backdrop,
 .mobile-detail-backdrop {
   position: fixed;
   inset: 0;
@@ -832,28 +822,46 @@
   align-items: end;
   box-sizing: border-box;
   padding-top: 56px;
-  background: rgba(23, 33, 27, 0.32);
+  background: light-dark(rgba(23, 33, 27, 0.32), rgba(0, 0, 0, 0.55));
 }
 
-.mobile-detail-backdrop .calendar-detail {
+.mobile-sheet,
+.mobile-detail-sheet {
   position: relative;
-  top: auto;
   box-sizing: border-box;
   width: 100%;
-  max-height: min(calc(100dvh - 56px), 720px);
-  border: 0;
   border-radius: 26px 26px 0 0;
-  padding: 26px 18px calc(22px + env(safe-area-inset-bottom));
-  overflow: auto;
-  box-shadow: 0 -24px 60px rgba(23, 33, 27, 0.22);
+  background: light-dark(#fbfcf8, #20261f);
+  box-shadow: 0 -24px 60px light-dark(rgba(23, 33, 27, 0.22), rgba(0, 0, 0, 0.5));
+  touch-action: pan-y;
+}
+
+.mobile-sheet {
+  padding: 30px 18px calc(20px + env(safe-area-inset-bottom));
+}
+
+.mobile-sheet::before,
+.mobile-detail-sheet::before {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 3;
+  width: 42px;
+  height: 4px;
+  border-radius: 999px;
+  background: light-dark(rgba(138, 147, 135, 0.36), rgba(152, 162, 148, 0.4));
+  content: "";
+  transform: translateX(-50%);
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  .mobile-sheet-backdrop,
   .mobile-detail-backdrop {
     animation: mobile-dialog-backdrop-in 220ms ease;
   }
 
-  .mobile-detail-backdrop .calendar-detail {
+  .mobile-sheet,
+  .mobile-detail-sheet {
     animation: mobile-sheet-in 360ms cubic-bezier(0.32, 0.72, 0, 1);
   }
 }
@@ -874,40 +882,314 @@
   }
 }
 
-.mobile-detail-backdrop .calendar-detail::before {
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  width: 42px;
-  height: 4px;
-  border-radius: 999px;
-  background: light-dark(rgba(138, 147, 135, 0.36), rgba(110, 119, 107, 0.36));
-  content: "";
-  transform: translateX(-50%);
+/* ---- Booking detail sheet ---- */
+
+.mobile-detail-sheet .calendar-detail {
+  position: static;
+  width: 100%;
+  height: auto;
+  max-height: min(calc(100dvh - 56px), 720px);
+  overflow: auto;
+  border: 0;
+  border-radius: 26px 26px 0 0;
+  padding: 28px 18px calc(22px + env(safe-area-inset-bottom));
+  background: transparent;
+  box-shadow: none;
+  overscroll-behavior: contain;
 }
 
-.mobile-detail-backdrop .calendar-detail h2 {
+.mobile-detail-sheet .calendar-detail h2 {
   font-size: 21px;
   letter-spacing: 0;
 }
 
-.mobile-detail-backdrop .detail-actions button {
-  min-height: 46px;
-  border-radius: 13px;
+/* Facts become a grouped card of label/value rows, like a native form. */
+.mobile-detail-sheet .calendar-detail dl {
+  display: grid;
+  margin: 0;
+  border-radius: 16px;
+  padding: 2px 14px;
+  background: var(--surface);
+  box-shadow: 0 0 0 0.5px light-dark(rgba(23, 33, 27, 0.08), rgba(231, 236, 228, 0.1));
 }
 
+.mobile-detail-sheet .calendar-detail dl div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid light-dark(rgba(223, 229, 216, 0.55), rgba(51, 60, 40, 0.55));
+  padding: 10px 0;
+}
+
+.mobile-detail-sheet .calendar-detail dl div:last-child {
+  border-bottom: 0;
+}
+
+.mobile-detail-sheet .calendar-detail dt {
+  flex: 0 0 auto;
+  color: light-dark(#7c877c, #8a948a);
+  font-size: 13px;
+}
+
+.mobile-detail-sheet .calendar-detail dd {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 650;
+  text-align: right;
+}
+
+/* Actions: primary fills the row, the rest pair up within thumb reach. */
+.mobile-detail-sheet .detail-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.mobile-detail-sheet .detail-actions button {
+  min-height: 46px;
+  border: 0;
+  border-radius: 14px;
+  padding: 0 10px;
+  background: var(--surface);
+  box-shadow: 0 0 0 0.5px light-dark(rgba(23, 33, 27, 0.1), rgba(231, 236, 228, 0.12));
+  font-size: 13px;
+  transition: transform 140ms ease, filter 140ms ease;
+}
+
+.mobile-detail-sheet .detail-actions button:active {
+  transform: scale(0.97);
+  filter: brightness(0.95);
+}
+
+.mobile-detail-sheet .detail-actions .primary-detail-action {
+  grid-column: 1 / -1;
+  min-height: 50px;
+  background: light-dark(#286345, #2f7a53);
+  box-shadow: none;
+  color: #fff;
+  font-size: 14px;
+}
+
+.mobile-detail-sheet .detail-actions .danger-action {
+  grid-column: 1 / -1;
+  background: light-dark(#fbeeeb, #392420);
+  box-shadow: none;
+  color: var(--danger);
+}
+
+.mobile-detail-sheet .detail-actions .detail-action-note {
+  grid-column: 1 / -1;
+}
+
+/* ---- Date sheet (month grid + view toggle) ---- */
+
+.mobile-view-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 16px;
+  border-radius: 13px;
+  padding: 3px;
+  background: light-dark(rgba(23, 33, 27, 0.06), rgba(231, 236, 228, 0.08));
+}
+
+.mobile-view-toggle button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: light-dark(#59645a, #96a197);
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.mobile-view-toggle button.selected {
+  /* Raised thumb must sit above the track in both themes. */
+  background: light-dark(#fff, #3c443c);
+  color: var(--ink);
+  box-shadow:
+    0 2px 7px rgba(23, 33, 27, 0.14),
+    0 0 0 0.5px rgba(23, 33, 27, 0.04);
+}
+
+.mobile-month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.mobile-month-nav strong {
+  font-size: 16px;
+  font-weight: 750;
+}
+
+.mobile-month-nav button {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 0 0 0.5px light-dark(rgba(23, 33, 27, 0.09), rgba(231, 236, 228, 0.12));
+  color: var(--green-deep);
+  cursor: pointer;
+  transition: transform 140ms ease;
+}
+
+.mobile-month-nav button:active {
+  transform: scale(0.92);
+}
+
+.mobile-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+}
+
+.mobile-month-grid > span {
+  padding: 6px 0;
+  color: light-dark(#8a9387, #6e776b);
+  font-size: 11px;
+  font-weight: 750;
+  text-align: center;
+}
+
+.mobile-month-grid button {
+  position: relative;
+  display: grid;
+  aspect-ratio: 1;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 140ms ease, transform 140ms ease;
+}
+
+.mobile-month-grid button:active {
+  transform: scale(0.9);
+}
+
+.mobile-month-grid button.outside {
+  color: light-dark(#b3bab0, #4f584c);
+}
+
+.mobile-month-grid button.today {
+  color: var(--green-deep);
+  font-weight: 800;
+}
+
+.mobile-month-grid button.has-bookings::after {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+  opacity: 0.55;
+  transform: translateX(-50%);
+}
+
+.mobile-month-grid button.selected {
+  background: light-dark(#286345, #2f7a53);
+  color: #fff;
+}
+
+/* ---- Account sheet ---- */
+
+.mobile-account-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.mobile-account-identity div {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.mobile-account-identity strong {
+  overflow: hidden;
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-account-identity span:not(.mobile-avatar-button) {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.mobile-account-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.mobile-account-actions button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 50px;
+  border: 0;
+  border-radius: 14px;
+  padding: 0 14px;
+  background: var(--surface);
+  box-shadow: 0 0 0 0.5px light-dark(rgba(23, 33, 27, 0.09), rgba(231, 236, 228, 0.12));
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 650;
+  text-align: left;
+  transition: transform 140ms ease, filter 140ms ease;
+}
+
+.mobile-account-actions button:active {
+  transform: scale(0.98);
+  filter: brightness(0.95);
+}
+
+.mobile-account-actions button svg {
+  color: var(--green-deep);
+}
+
+.mobile-account-actions button.danger {
+  background: light-dark(#fbeeeb, #392420);
+  box-shadow: none;
+  color: var(--danger);
+}
+
+.mobile-account-actions button.danger svg {
+  color: var(--danger);
+}
+
+.mobile-account-build {
+  margin: 14px 0 0;
+  color: light-dark(#9aa395, #626b5d);
+  font-size: 11px;
+  text-align: center;
+}
+
+/* ---- Small phones ---- */
+
 @media (max-width: 360px) {
-  .mobile-calendar-page .toolbar-nav {
-    grid-template-columns: 1fr 42px;
-  }
-
-  .mobile-calendar-page .segmented-control,
-  .mobile-calendar-page .date-controls {
-    grid-column: 1 / -1;
-  }
-
   .mobile-booking-row,
   .mobile-availability-row {
-    grid-template-columns: 76px minmax(0, 1fr) auto;
+    grid-template-columns: 42px 3px minmax(0, 1fr) auto;
+    gap: 9px;
+  }
+
+  .mobile-month-button {
+    font-size: 21px;
   }
 }

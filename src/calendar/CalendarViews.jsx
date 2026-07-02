@@ -2,17 +2,18 @@
 // hover tooltip. These are presentational: they receive bookings + callbacks.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Plus } from 'lucide-react';
 import {
   buildHours,
   buildSlotMinutes,
-  formatAvailabilityRange,
   formatCompactDate,
   formatCompactTime,
   formatDayNumber,
   formatLongDate,
   formatTimeInput,
   formatWeekday,
+  getCurrentMinutes,
+  isTodayDate,
   parseTimeToMinutes,
   shiftTime,
 } from '../lib/datetime.js';
@@ -35,84 +36,145 @@ import {
   summarizeDay,
 } from '../lib/bookings.js';
 
-export function MobileDayAgenda({ bookings, canViewRevenue = true, courts, openHour, selectedBooking, selectedDate, onSelectBooking, onSelectFreeSlot }) {
-  const courtBookings = courts.length ? courts.map((court) => ({
+export function MobileDayAgenda({ bookings, canViewRevenue = true, courtFilter = 'all', courts, openHour, selectedBooking, selectedDate, onSelectBooking, onSelectFreeSlot }) {
+  const isToday = isTodayDate(selectedDate);
+  const [nowMinutes, setNowMinutes] = useState(getCurrentMinutes);
+
+  // Keep the "now" line honest while the app sits open on today.
+  useEffect(() => {
+    if (!isToday) return undefined;
+    setNowMinutes(getCurrentMinutes());
+    const timer = setInterval(() => setNowMinutes(getCurrentMinutes()), 60 * 1000);
+    return () => clearInterval(timer);
+  }, [isToday]);
+
+  const visibleCourts = courts.filter((court) => courtFilter === 'all' || court.id === courtFilter);
+  const courtSections = (visibleCourts.length ? visibleCourts : [{ id: 'all', name: 'All courts' }]).map((court) => ({
     court,
-    entries: buildCourtTimelineEntries(buildCalendarDisplayBookings(bookings.filter((booking) => booking.court_id === court.id)), openHour),
-  })) : [{ court: { id: 'all', name: 'All courts' }, entries: buildCourtTimelineEntries(buildCalendarDisplayBookings(bookings), openHour) }];
+    entries: buildCourtTimelineEntries(
+      buildCalendarDisplayBookings(court.id === 'all' ? bookings : bookings.filter((booking) => booking.court_id === court.id)),
+      openHour,
+    ),
+  }));
+
+  const openMinutes = parseTimeToMinutes(openHour?.open_hours || '06:00');
+  const closeMinutes = parseTimeToMinutes(openHour?.close_hours || '24:00');
+  const showNowLine = isToday && nowMinutes >= openMinutes && nowMinutes <= closeMinutes;
 
   return (
     <div className="mobile-agenda">
-      <div className="mobile-agenda-heading">
-        <span>{formatLongDate(selectedDate)}</span>
-        <strong>{bookings.length} booking{bookings.length === 1 ? '' : 's'}</strong>
-      </div>
+      {courtSections.map(({ court, entries }) => {
+        const bookingCount = entries.filter((entry) => entry.type === 'booking').length;
+        const nowLineIndex = showNowLine && entries.length
+          ? (() => {
+            const index = entries.findIndex((entry) => getEntryStartMinutes(entry) > nowMinutes);
+            return index === -1 ? entries.length : index;
+          })()
+          : -1;
 
-      {courtBookings.map(({ court, entries }) => (
-        <section className="mobile-court-agenda" key={court.id}>
-          <div className="mobile-court-heading">
-            <strong>{court.name}</strong>
-            <span>{entries.filter((entry) => entry.type === 'booking').length} bookings</span>
-          </div>
+        return (
+          <section className="mobile-court-section" key={court.id}>
+            <header className="mobile-court-heading">
+              <strong>{court.name}</strong>
+              <span>{bookingCount ? `${bookingCount} booking${bookingCount === 1 ? '' : 's'}` : 'No bookings'}</span>
+            </header>
 
-          <div className="mobile-agenda-list">
-            {entries.length ? entries.map((entry) => (
-              entry.type === 'availability' ? (
+            <div className="mobile-agenda-list">
+              {entries.length ? entries.flatMap((entry, index) => {
+                const rows = [];
+                if (index === nowLineIndex) rows.push(<MobileNowLine key={`now-${court.id}`} nowMinutes={nowMinutes} />);
+                rows.push(entry.type === 'availability' ? (
+                  <button
+                    aria-label={`Create booking for ${court.name} at ${formatTimeInput(entry.startMinutes)}`}
+                    className="mobile-availability-row"
+                    key={entry.id}
+                    onClick={() => onSelectFreeSlot?.({
+                      court_id: court.id,
+                      court_name: court.name,
+                      date: selectedDate,
+                      start_time: formatTimeInput(entry.startMinutes),
+                      end_time: formatTimeInput(Math.min(entry.startMinutes + 60, entry.endMinutes)),
+                    })}
+                    type="button"
+                  >
+                    <span className="mobile-booking-time"><b>{formatTimeInput(entry.startMinutes)}</b></span>
+                    <span aria-hidden="true" className="mobile-booking-accent free" />
+                    <span className="mobile-availability-main">
+                      <strong>Available</strong>
+                      <small>until {formatCompactTime(entry.endMinutes)}</small>
+                    </span>
+                    <span aria-hidden="true" className="mobile-availability-add"><Plus size={15} /></span>
+                  </button>
+                ) : (
+                  <button
+                    className={`mobile-booking-row ${getBookingTone(entry.booking)} ${selectedBooking?.id === entry.booking.id ? 'selected' : ''}`}
+                    key={entry.booking.id}
+                    onClick={() => onSelectBooking(entry.booking)}
+                    type="button"
+                  >
+                    <span className="mobile-booking-time">
+                      <b>{getStartLabel(entry.booking)}</b>
+                      <small>{getMobileEndLabel(entry.booking)}</small>
+                    </span>
+                    <span aria-hidden="true" className="mobile-booking-accent" />
+                    <span className="mobile-booking-main">
+                      <strong>{getBookingTitle(entry.booking)}</strong>
+                      <small>{getBookingMeta(entry.booking, canViewRevenue)}</small>
+                    </span>
+                    <span className={`mobile-booking-tag ${!entry.booking.is_placeholder && !entry.booking.booking_paid ? 'unpaid' : ''}`}>
+                      {getBookingPillLabel(entry.booking) || (entry.booking.is_placeholder ? 'Hold' : entry.booking.booking_paid ? 'Paid' : 'Unpaid')}
+                    </span>
+                  </button>
+                ));
+                if (index === entries.length - 1 && nowLineIndex === entries.length) {
+                  rows.push(<MobileNowLine key={`now-${court.id}`} nowMinutes={nowMinutes} />);
+                }
+                return rows;
+              }) : (
                 <button
-                  aria-label={`Create booking for ${court.name} at ${formatTimeInput(entry.startMinutes)}`}
+                  aria-label={`Create booking for ${court.name}`}
                   className="mobile-availability-row"
-                  key={entry.id}
                   onClick={() => onSelectFreeSlot?.({
                     court_id: court.id,
                     court_name: court.name,
                     date: selectedDate,
-                    start_time: formatTimeInput(entry.startMinutes),
-                    end_time: formatTimeInput(Math.min(entry.startMinutes + 60, entry.endMinutes)),
+                    start_time: openHour?.open_hours || '06:00',
+                    end_time: shiftTime(openHour?.open_hours || '06:00', 60),
                   })}
                   type="button"
                 >
-                  <span>{entry.label}</span>
-                  <strong>Available</strong>
-                </button>
-              ) : (
-                <button
-                  className={`mobile-booking-row ${getBookingTone(entry.booking)} ${selectedBooking?.id === entry.booking.id ? 'selected' : ''}`}
-                  key={entry.booking.id}
-                  onClick={() => onSelectBooking(entry.booking)}
-                  type="button"
-                >
-                  <span className="mobile-booking-time">{entry.booking.time || getStartLabel(entry.booking)}</span>
-                  <span className="mobile-booking-main">
-                    <strong>{getBookingTitle(entry.booking)}</strong>
-                    <small>{getBookingMeta(entry.booking, canViewRevenue)}</small>
+                  <span className="mobile-booking-time"><b>{openHour?.open_hours || '06:00'}</b></span>
+                  <span aria-hidden="true" className="mobile-booking-accent free" />
+                  <span className="mobile-availability-main">
+                    <strong>All day available</strong>
+                    <small>until {formatCompactTime(closeMinutes)}</small>
                   </span>
-                  <span className="mobile-payment-pill">
-                    {getBookingPillLabel(entry.booking) || (entry.booking.is_placeholder ? '' : entry.booking.booking_paid ? 'Paid' : 'Unpaid')}
-                  </span>
+                  <span aria-hidden="true" className="mobile-availability-add"><Plus size={15} /></span>
                 </button>
-              )
-            )) : (
-              <button
-                aria-label={`Create booking for ${court.name}`}
-                className="mobile-availability-row"
-                onClick={() => onSelectFreeSlot?.({
-                  court_id: court.id,
-                  court_name: court.name,
-                  date: selectedDate,
-                  start_time: openHour?.open_hours || '06:00',
-                  end_time: shiftTime(openHour?.open_hours || '06:00', 60),
-                })}
-                type="button"
-              >
-                <span>{formatAvailabilityRange(parseTimeToMinutes(openHour?.open_hours || '06:00'), parseTimeToMinutes(openHour?.close_hours || '24:00'))}</span>
-                <strong>Available</strong>
-              </button>
-            )}
-          </div>
-        </section>
-      ))}
+              )}
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
+}
+
+function MobileNowLine({ nowMinutes }) {
+  return (
+    <div aria-hidden="true" className="mobile-now-line">
+      <span>{formatCompactTime(nowMinutes)}</span>
+    </div>
+  );
+}
+
+function getEntryStartMinutes(entry) {
+  return entry.type === 'availability' ? entry.startMinutes : getBookingStartMinutes(entry.booking);
+}
+
+function getMobileEndLabel(booking) {
+  const [, end] = String(booking?.time || '').split('-');
+  return end || formatTimeInput(getBookingEndMinutes(booking));
 }
 
 export function MobileWeekCalendar({ bookingsByDate, canViewRevenue = true, courts, openHour, selectedDate, weekDays, onSelectBooking, onSelectDate, onSelectFreeSlot, onSwitchDay }) {

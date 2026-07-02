@@ -102,7 +102,9 @@ export function PanelShell({ auth, isMobileRoute = false, onLogout }) {
   const displayName = auth.virtualUser?.display_name || meState.data?.data?.name || meState.data?.name || auth.username || 'Owner';
   const mitraId = findMitraId(meState.data) || FALLBACK_MITRA_ID;
   const calendarCacheScope = getCalendarCacheScope(auth, canViewCalendarRevenue);
-  const shellClassName = `panel-shell ${mobileView.isMobileApp ? 'mobile-app' : ''}`;
+  // Tab count picks the bottom-bar layout: with two tabs the create FAB docks
+  // into the center notch; with more tabs it floats bottom-right instead.
+  const shellClassName = `panel-shell ${mobileView.isMobileApp ? `mobile-app mobile-tabs-${visibleMobileNavItems.length}` : ''}`;
 
   const content = !currentNav ? (
     <NoAccessPage displayName={displayName} onLogout={onLogout} />
@@ -116,6 +118,7 @@ export function PanelShell({ auth, isMobileRoute = false, onLogout }) {
       isMobileApp={mobileView.isMobileApp}
       mitraId={mitraId}
       onLogout={onLogout}
+      onUseDesktopView={() => mobileView.setPreference('desktop')}
       onUseMobileView={() => mobileView.setPreference('mobile')}
     />
   ) : currentNav === 'Setting' ? (
@@ -139,11 +142,8 @@ export function PanelShell({ auth, isMobileRoute = false, onLogout }) {
       {mobileView.isMobileApp ? (
         <MobileAppShell
           activeNav={currentNav}
-          displayName={displayName}
           navItems={visibleMobileNavItems}
           onChangeNav={setActiveNav}
-          onLogout={onLogout}
-          onUseDesktopView={() => mobileView.setPreference('desktop')}
         >
           {content}
         </MobileAppShell>
@@ -204,30 +204,12 @@ export function DesktopSidebar({ activeNav, navGroups: visibleNavGroups, onChang
 }
 
 
-export function MobileAppShell({ activeNav, children, displayName, navItems, onChangeNav, onLogout, onUseDesktopView }) {
-  const buildVersion = formatBuildVersion(APP_BUILD_TIMESTAMP);
-
+/* No app-wide header: native apps let each screen own its top area. Account
+   actions (logout, desktop switch, build info) live in the Calendar screen's
+   avatar sheet; other screens keep their own topbars. */
+export function MobileAppShell({ activeNav, children, navItems, onChangeNav }) {
   return (
     <>
-      <header className="mobile-app-header">
-        <div className="mobile-brand">
-          <span className="brand-mark small">PP</span>
-          <div>
-            <strong>pagipagipadel</strong>
-            <span>{displayName}</span>
-          </div>
-        </div>
-        <div className="mobile-header-actions">
-          <div className="mobile-build" title={buildVersion ? `Build ${buildVersion}` : 'Build'}>
-            {buildVersion ? <span>{buildVersion}</span> : null}
-          </div>
-          <button onClick={onUseDesktopView} type="button">Desktop</button>
-          <button aria-label="Logout" onClick={onLogout} type="button">
-            <LogOut size={17} />
-          </button>
-        </div>
-      </header>
-
       {/* Keyed by tab so switching tabs replays the content-enter animation,
           giving navigation the transition feel of a native app. */}
       <section className="mobile-app-content" key={activeNav}>
