@@ -13,6 +13,7 @@ This app provides the browser UI for managing Pagi Pagi Padel admin workflows. I
 - A wired Calendar screen with day/week views, short-lived in-memory date caching, court bookings, booking details, write actions, and summary metrics.
 - Real court booking create flows for offline customers and registered Courtside users, including bulk creation across selected dates, plus payment receipt upload, mark-paid, reschedule, notes, and cancellation actions from captured upstream APIs.
 - D1-backed placeholder bookings for tentative holds before payment or upstream confirmation, including multi-court create, same-slot placeholder stacks, waitlist holds behind live bookings, and conversion into real upstream bookings.
+- Settings diagnostics for the deployed frontend/backend version, commit, and build time.
 - Placeholder screens for Dashboard, Court Prices, Event, Coach, Add On, Customers, and Setting.
 
 For AI-agent onboarding, start with `AGENTS.md`, then read `docs/architecture.md`, `docs/api.md`, and `docs/visual-reference.md`.
@@ -62,6 +63,8 @@ VITE_BASE_PATH=/
 - `UPSTREAM_ACCOUNTS_JSON`: optional Worker secret containing a JSON array of upstream accounts for virtual-user sessions, for example `[{"username":"admin-a@example.com","password":"..."},{"username":"admin-b@example.com","password":"..."}]`.
 - `VIRTUAL_SESSION_TTL_SECONDS` / `VIRTUAL_SESSION_REMEMBER_TTL_SECONDS`: optional Worker vars for panel-token lifetime. Defaults are 12 hours and 30 days.
 - `WORKER_LOG_LEVEL`: optional Worker log threshold (`debug`, `info`, `warn`, `error`, or `silent`). Defaults to `info`.
+- `VITE_APP_VERSION` / `VITE_BUILD_COMMIT` / `VITE_BUILD_TIMESTAMP`: optional frontend build metadata shown in Settings. The GitHub workflow fills these automatically.
+- `WORKER_VERSION` / `WORKER_BUILD_COMMIT` / `WORKER_BUILD_TIMESTAMP`: Worker vars shown by `/api/panel/version`. The GitHub workflow passes these to Wrangler automatically.
 - `PANEL_PROXY_ORIGIN`: GitHub repository secret used by the deployment workflow as the static bundle's `VITE_API_BASE_URL`.
 - `CLOUDFLARE_ACCOUNT_ID`: GitHub repository secret used by Wrangler in CI.
 - `CLOUDFLARE_API_TOKEN`: GitHub repository secret used by Wrangler in CI.
@@ -141,7 +144,7 @@ VITE_API_BASE_URL=<worker-origin>
 
 - Cloudflare Workers gets the `wrangler.toml` Worker deployed with `pnpm worker:deploy`.
 
-The static UI loads from GitHub Pages and calls the Worker origin configured in the `PANEL_PROXY_ORIGIN` repository secret. The Worker deployment requires `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` repository secrets.
+The static UI loads from GitHub Pages and calls the Worker origin configured in the `PANEL_PROXY_ORIGIN` repository secret. The Worker deployment requires `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` repository secrets. The workflow also injects the resolved commit SHA, package version, and UTC build timestamp into both the frontend bundle and Worker deployment so Settings can show the exact deployed state.
 
 For rollback, open the `Deploy App` workflow and either re-run a previous successful run or run the workflow manually from `main` with the `ref` input set to a commit SHA, branch, or tag. The workflow resolves that ref once, builds the frontend from it, and deploys the Worker from the same commit SHA. GitHub workflow re-runs are only available for a limited window, so use tags or commit SHAs with the manual `ref` input for older rollbacks.
 

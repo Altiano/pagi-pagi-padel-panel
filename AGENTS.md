@@ -74,6 +74,7 @@ src/
     client.js                    apiRequest: authed fetch wrapper; clears auth on 401.
     auth.js                      Login + localStorage auth persistence.
     virtualUsers.js              Worker-owned virtual user CRUD.
+    version.js                   Worker deployment metadata endpoint reader.
     placeholders.js              Optional browser-local placeholder escape hatch.
     calendar.js                  Calendar data load + in-memory TTL cache +
                                  captured booking-action endpoints (detail,
@@ -132,6 +133,8 @@ Other key files:
 - `WORKER_LOG_LEVEL`: Optional Worker log threshold (`debug`, `info`, `warn`, `error`, or `silent`). Defaults to `info`.
 - `VITE_USE_LOCAL_PLACEHOLDERS`: Optional browser-local placeholder storage escape hatch. Leave unset for D1-backed testing.
 - `VITE_BASE_PATH`: Vite base path for static deployments, for example `/pagi-pagi-padel-panel/`.
+- `VITE_APP_VERSION` / `VITE_BUILD_COMMIT` / `VITE_BUILD_TIMESTAMP`: Optional frontend build metadata shown in Settings. The GitHub workflow fills these automatically.
+- `WORKER_VERSION` / `WORKER_BUILD_COMMIT` / `WORKER_BUILD_TIMESTAMP`: Worker vars shown by `/api/panel/version`. The GitHub workflow passes these to Wrangler automatically.
 - `PANEL_PROXY_ORIGIN`: GitHub repository secret used by the deployment workflow as the static bundle's `VITE_API_BASE_URL`.
 - `CLOUDFLARE_ACCOUNT_ID`: GitHub repository secret used by Wrangler in CI.
 - `CLOUDFLARE_API_TOKEN`: GitHub repository secret used by Wrangler in CI.
@@ -146,6 +149,7 @@ Other key files:
 - Virtual user management is master-only. The Worker rejects `/api/virtual-users` requests from virtual sessions and from real upstream accounts whose `/api/auth/me` identity does not match `MASTER_USERNAME`.
 - Virtual user permissions control wrapper navigation and Worker endpoint authorization. The Worker maps virtual panel tokens to D1 session hashes before proxying upstream routes, rejects endpoints outside the user's allowed screens, swaps in the stored upstream token only after authorization, requires `Calendar booking` for real booking write actions, and masks calendar money fields unless `Calendar revenue` is granted.
 - Settings also reads the master-only `/api/virtual-users/sessions` endpoint to show active virtual sessions, the virtual username/display name, assigned upstream account username, panel session expiry, and shared upstream token expiry/status. This endpoint must never return token values or token hashes.
+- Settings shows deployment diagnostics at the bottom: frontend version/commit/build time from Vite metadata, and backend version/commit/build time from the Worker-owned `/api/panel/version` endpoint.
 - Placeholder create mode can select multiple courts; the frontend sends one D1 placeholder row per selected court. Multiple placeholders can share the same court/time as a stack, and placeholders that overlap a live booking are treated as waitlist holds. Editing remains one placeholder row at a time.
 - Real booking create mode can target multiple dates; the frontend sends one captured upstream `/api/admin/court-booking` request per selected date for offline or registered users. Placeholder conversion stays single-date. Virtual users need `Calendar booking` for these real booking writes, but not `Calendar revenue`; hidden or blank booking prices are submitted as zero. Existing booking actions call the captured payment proof, mark-paid, reschedule, notes, and cancel endpoints.
 - Virtual users can create and update placeholder bookings, but the Worker stamps `created_by_name`/`updated_by_name` from the virtual user's display name instead of trusting submitted PIC names. Deletes are owner-scoped: a virtual session may only delete a placeholder whose `created_by_name` matches its display name (the Worker returns `403` otherwise), and the calendar detail panel hides Delete on holds a virtual user does not own. Master/regular accounts can delete any placeholder.

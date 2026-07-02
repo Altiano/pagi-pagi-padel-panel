@@ -20,7 +20,7 @@ sections below describe how data flows through those layers.
 4. Login posts to `/api/auth/login`, stores auth in localStorage, then renders the panel.
 5. If the login username starts with `_`, the Worker validates a D1-backed virtual user, assigns the least-loaded configured upstream account, reuses or refreshes that account's shared upstream token in D1, and returns a Worker-issued panel token plus virtual-user metadata. Real logins also receive Worker-issued panel tokens backed by `real_sessions`, so repeated logins for the same account share one upstream token. Unknown real accounts seed that shared token and a salted password hash after the first successful upstream login.
 6. `PanelShell` loads `/api/auth/me`, derives the display name and `mitraId`, applies virtual-user navigation visibility, and renders the active screen.
-7. Calendar is the only fully wired screen today. Settings exposes virtual user management and active virtual-session upstream account mapping only when the Worker confirms the real master account is signed in. Other navigation items render placeholders.
+7. Calendar is the only fully wired screen today. Settings exposes virtual user management and active virtual-session upstream account mapping only when the Worker confirms the real master account is signed in, and shows frontend/backend deployment metadata at the bottom. Other navigation items render placeholders.
 
 Placeholder bookings, virtual users, and panel sessions are wrapper-owned data models. They are stored in Cloudflare D1 through the Worker. Placeholder bookings are merged into Calendar responses on the frontend; staff can later convert a placeholder into a real upstream court booking, optionally uploading a payment receipt, after which the local placeholder is deleted. Virtual users and real accounts receive Worker-issued panel tokens. Their session rows store the assigned upstream username, while reusable upstream tokens stay server-side in `upstream_account_tokens`, keyed by upstream account. Unknown real-account repeat login validation uses salted hashes in `real_account_credentials`; plaintext real-account passwords are not stored. Only a real `MASTER_USERNAME` session can manage virtual users.
 
@@ -35,6 +35,7 @@ Virtual permissions are enforced twice:
 - `src/api/client.js` wraps `fetch`, adds `Accept` and `Authorization` headers, reads JSON/text bodies, and clears auth on `401`.
 - `src/api/auth.js` handles login and localStorage persistence. For virtual users, the stored bearer token is the Worker-issued panel token rather than an upstream token.
 - `src/api/virtualUsers.js` reads and mutates Worker-owned virtual users.
+- `src/api/version.js` reads the Worker-owned `/api/panel/version` deployment metadata endpoint for the Settings diagnostics section.
 - `vite.config.js` can proxy local `/api` requests to `PANEL_API_ORIGIN`, but the normal local setup uses `VITE_API_BASE_URL` to call the deployed Worker.
 
 ## Calendar Flow
@@ -75,7 +76,7 @@ Components by file (`AGENTS.md` has the full Code Map):
 
 - `src/App.jsx` — `App`, `PanelShell`, `DesktopSidebar`, `MobileAppShell`, `PlaceholderPage`, `NoAccessPage`.
 - `src/screens/LoginScreen.jsx` — `LoginScreen`.
-- `src/screens/VirtualUsersPage.jsx` — `VirtualUsersPage`, `VirtualUserEditor`.
+- `src/screens/VirtualUsersPage.jsx` — `VirtualUsersPage`, `ThemePicker`, `VersionInfoSection`, `VirtualUserEditor`.
 - `src/calendar/CalendarPage.jsx` — `CalendarPage` (visible controller/wiring).
 - `src/calendar/useCalendarData.js` — calendar load/cache/refresh hook.
 - `src/calendar/useCalendarSelection.js` — calendar view/date/detail selection hook.

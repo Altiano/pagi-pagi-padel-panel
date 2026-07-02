@@ -45,6 +45,9 @@ export function formatStatus(value) {
 
 export function copyText(value) {
   if (!value) return;
-  navigator.clipboard?.writeText(value);
+  try {
+    navigator.clipboard?.writeText(value)?.catch(() => {});
+  } catch {
+    // Clipboard access can be blocked by browser permissions; the copy action is optional.
+  }
 }
-

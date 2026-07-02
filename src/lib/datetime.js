@@ -85,6 +85,27 @@ export function formatBuildVersion(timestampValue) {
   return `build.${parts.join('.')}`;
 }
 
+export function formatBuildDateTime(timestampValue) {
+  if (!timestampValue) return 'Not set';
+  const date = new Date(timestampValue);
+  if (Number.isNaN(date.getTime())) return timestampValue;
+  return new Intl.DateTimeFormat(undefined, {
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: 'short',
+    timeZoneName: 'short',
+    year: 'numeric',
+  }).format(date);
+}
+
+export function formatCommitHash(commitValue, length = 12) {
+  if (!commitValue) return 'Not set';
+  const normalized = String(commitValue).trim();
+  if (!normalized) return 'Not set';
+  return normalized.length > length ? normalized.slice(0, length) : normalized;
+}
+
 export function buildMonthMatrix(dateValue) {
   const base = new Date(`${dateValue}T00:00:00`);
   const year = base.getFullYear();
@@ -184,5 +205,4 @@ export function buildHours(openHour) {
   }
   return hours;
 }
-
 

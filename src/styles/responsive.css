@@ -21,6 +21,15 @@
     grid-template-columns: 1fr;
   }
 
+  .version-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .version-card + .version-card {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
   .virtual-user-actions {
     justify-content: flex-start;
   }

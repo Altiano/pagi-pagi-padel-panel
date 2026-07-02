@@ -8,6 +8,7 @@ const SAFE_REQUEST_HEADERS = new Set([
 
 const DEFAULT_ALLOWED_METHODS = 'GET,POST,PUT,PATCH,DELETE,OPTIONS';
 const DEFAULT_ALLOWED_HEADERS = 'authorization,content-type,x-requested-with,x-panel-virtual-user';
+const PANEL_VERSION_PATH = '/api/panel/version';
 const PLACEHOLDER_PREFIX = '/api/placeholder-bookings';
 const VIRTUAL_USERS_PREFIX = '/api/virtual-users';
 const VIRTUAL_LOGIN_PREFIX = '_';
@@ -194,6 +195,19 @@ function corsHeaders(request, env) {
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
   };
+}
+
+function handlePanelVersionRequest(request, env, context) {
+  return withCors(Response.json({
+    data: {
+      service: 'backend',
+      name: 'pagi-pagi-padel-api-proxy',
+      runtime: 'cloudflare-worker',
+      version: env.WORKER_VERSION || '',
+      commit: env.WORKER_BUILD_COMMIT || '',
+      built_at: env.WORKER_BUILD_TIMESTAMP || '',
+    },
+  }), request, env, context);
 }
 
 function buildUpstreamHeaders(request, upstreamOrigin, upstreamAuth = null) {
@@ -1926,6 +1940,10 @@ export default {
 
     try {
       const url = new URL(request.url);
+      if (url.pathname === PANEL_VERSION_PATH && request.method === 'GET') {
+        return handlePanelVersionRequest(request, env, context);
+      }
+
       if (url.pathname === '/api/auth/login' && request.method === 'POST') {
         return handleVirtualLoginRequest(request, env, context);
       }

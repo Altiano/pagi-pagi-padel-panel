@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Copy, LogOut, Moon, MonitorSmartphone, Pencil, Sun, Trash2, UserPlus, X } from 'lucide-react';
-import { CALENDAR_BOOKING_PERMISSION, virtualPermissionGroups } from '../constants.js';
+import {
+  APP_BUILD_COMMIT,
+  APP_BUILD_TIMESTAMP,
+  APP_VERSION,
+  CALENDAR_BOOKING_PERMISSION,
+  virtualPermissionGroups,
+} from '../constants.js';
 import {
   createVirtualUser,
   deleteVirtualUser,
@@ -8,6 +14,8 @@ import {
   listVirtualUsers,
   updateVirtualUser,
 } from '../api/virtualUsers.js';
+import { getBackendVersion } from '../api/version.js';
+import { formatBuildDateTime, formatCommitHash } from '../lib/datetime.js';
 import { copyText } from '../lib/format.js';
 import { useEscapeKey, useThemePreference } from '../hooks.js';
 
@@ -21,6 +29,7 @@ export function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
   const [users, setUsers] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [state, setState] = useState({ loading: true, error: '', status: '', canManage: false });
+  const [versionState, setVersionState] = useState({ loading: true, data: null, error: '' });
   const [editor, setEditor] = useState({ mode: 'closed', user: null });
 
   useEffect(() => {
@@ -36,6 +45,21 @@ export function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
       })
       .catch((error) => {
         if (active) setState({ loading: false, error: error.message, status: '', canManage: false });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    getBackendVersion()
+      .then((data) => {
+        if (active) setVersionState({ loading: false, data, error: '' });
+      })
+      .catch((error) => {
+        if (active) setVersionState({ loading: false, data: null, error: error.message });
       });
 
     return () => {
@@ -99,8 +123,8 @@ export function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
             </div>
             {state.canManage ? (
               <button className="primary-button compact-button" onClick={() => setEditor({ mode: 'create', user: null })} type="button">
-              <UserPlus size={16} />
-              Add user
+                <UserPlus size={16} />
+                Add user
               </button>
             ) : null}
           </div>
@@ -198,6 +222,8 @@ export function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
         </div>
       </section>
 
+      <VersionInfoSection backendState={versionState} />
+
       {editor.mode !== 'closed' ? (
         <VirtualUserEditor
           mode={editor.mode}
@@ -208,6 +234,90 @@ export function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
       ) : null}
     </>
   );
+}
+
+export function VersionInfoSection({ backendState }) {
+  const backend = backendState.data || {};
+  const backendLoadingValue = backendState.loading ? 'Checking...' : null;
+  const backendErrorValue = backendState.error ? 'Unavailable' : null;
+
+  return (
+    <section className="settings-panel version-panel">
+      <div className="settings-panel-heading compact-heading">
+        <div>
+          <span className="panel-label">Deployment</span>
+          <h2>Versions</h2>
+        </div>
+      </div>
+      <div className="version-grid">
+        <VersionDetailCard
+          builtAt={APP_BUILD_TIMESTAMP}
+          commit={APP_BUILD_COMMIT}
+          environment="GitHub Pages"
+          title="Frontend"
+          version={APP_VERSION}
+        />
+        <VersionDetailCard
+          builtAt={backendLoadingValue || backendErrorValue || backend.built_at}
+          commit={backendLoadingValue || backendErrorValue || backend.commit}
+          environment={backend.runtime === 'cloudflare-worker' ? 'Cloudflare Worker' : backend.runtime || 'Cloudflare Worker'}
+          error={backendState.error}
+          title="Backend"
+          version={backendLoadingValue || backendErrorValue || backend.version}
+        />
+      </div>
+    </section>
+  );
+}
+
+function VersionDetailCard({ builtAt, commit, environment, error = '', title, version }) {
+  const commitValue = isPlaceholderVersionValue(commit) ? commit : formatCommitHash(commit);
+  const builtAtValue = isPlaceholderVersionValue(builtAt) ? builtAt : formatBuildDateTime(builtAt);
+  const versionValue = isPlaceholderVersionValue(version) ? version : formatVersionNumber(version);
+
+  return (
+    <article className="version-card">
+      <div>
+        <span>{environment}</span>
+        <strong>{title}</strong>
+      </div>
+      <dl>
+        <VersionRow label="Version" value={versionValue} />
+        <VersionRow copyValue={commit} label="Commit" mono value={commitValue} />
+        <VersionRow label="Built" value={builtAtValue} />
+      </dl>
+      {error ? <p className="status-line error">Backend version unavailable: {error}</p> : null}
+    </article>
+  );
+}
+
+function VersionRow({ copyValue = '', label, mono = false, value }) {
+  const canCopy = copyValue && !isPlaceholderVersionValue(copyValue);
+
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd className={mono ? 'monospace-value' : ''} title={copyValue || value}>
+        <span>{value || 'Not set'}</span>
+        {canCopy ? (
+          <button aria-label={`Copy ${label.toLowerCase()}`} className="version-copy-button" onClick={() => copyText(copyValue)} type="button">
+            <Copy size={13} />
+          </button>
+        ) : null}
+      </dd>
+    </div>
+  );
+}
+
+function formatVersionNumber(value) {
+  if (!value) return 'Not set';
+  const normalized = String(value).trim();
+  if (!normalized) return 'Not set';
+  return normalized.startsWith('v') ? normalized : `v${normalized}`;
+}
+
+function isPlaceholderVersionValue(value) {
+  return value === 'Checking...' || value === 'Unavailable' || value === 'Not set';
 }
 
 export function ThemePicker() {

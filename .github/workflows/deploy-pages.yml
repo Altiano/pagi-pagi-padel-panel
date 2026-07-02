@@ -25,20 +25,27 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       deploy_sha: ${{ steps.resolve-ref.outputs.deploy_sha }}
+      build_timestamp: ${{ steps.resolve-ref.outputs.build_timestamp }}
+      app_version: ${{ steps.resolve-ref.outputs.app_version }}
     steps:
       - name: Checkout deploy ref
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
 
-      - name: Resolve deploy commit
-        id: resolve-ref
-        run: echo "deploy_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+
+      - name: Resolve deploy metadata
+        id: resolve-ref
+        run: |
+          {
+            echo "deploy_sha=$(git rev-parse HEAD)"
+            echo "build_timestamp=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "app_version=$(node -p 'require("./package.json").version')"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Enable pnpm
         run: corepack enable
@@ -49,6 +56,9 @@ jobs:
       - name: Build
         env:
           VITE_API_BASE_URL: ${{ secrets.PANEL_PROXY_ORIGIN }}
+          VITE_APP_VERSION: ${{ steps.resolve-ref.outputs.app_version }}
+          VITE_BUILD_COMMIT: ${{ steps.resolve-ref.outputs.deploy_sha }}
+          VITE_BUILD_TIMESTAMP: ${{ steps.resolve-ref.outputs.build_timestamp }}
           VITE_BASE_PATH: /pagi-pagi-padel-panel/
         run: pnpm build
 
@@ -120,4 +130,8 @@ jobs:
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: pnpm worker:deploy
+        run: >
+          pnpm worker:deploy
+          --var WORKER_BUILD_COMMIT:${{ needs.build.outputs.deploy_sha }}
+          --var WORKER_BUILD_TIMESTAMP:${{ needs.build.outputs.build_timestamp }}
+          --var WORKER_VERSION:${{ needs.build.outputs.app_version }}

@@ -9,6 +9,8 @@ import {
   Users,
 } from 'lucide-react';
 
+export const APP_VERSION = import.meta.env.VITE_APP_VERSION || '';
+export const APP_BUILD_COMMIT = import.meta.env.VITE_BUILD_COMMIT || '';
 export const APP_BUILD_TIMESTAMP = import.meta.env.VITE_BUILD_TIMESTAMP || '';
 export const navGroups = [
   {
@@ -79,4 +81,3 @@ export const virtualPermissionGroups = [
   { label: 'Calendar data', options: [CALENDAR_REVENUE_PERMISSION] },
 ];
 export const virtualPermissionOptions = virtualPermissionGroups.flatMap((group) => group.options);
-

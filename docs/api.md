@@ -24,6 +24,30 @@ Worker observability:
 - `WORKER_LOG_LEVEL` controls verbosity (`debug`, `info`, `warn`, `error`, or `silent`) and defaults to `info`.
 - Logs intentionally avoid request bodies, passwords, bearer tokens, and cookie values.
 
+Deployment metadata:
+
+- The frontend build reads `VITE_APP_VERSION`, `VITE_BUILD_COMMIT`, and `VITE_BUILD_TIMESTAMP`.
+- The Worker reads `WORKER_VERSION`, `WORKER_BUILD_COMMIT`, and `WORKER_BUILD_TIMESTAMP`.
+- The GitHub Actions deployment workflow fills those values from the resolved deploy commit and UTC build timestamp.
+- Settings shows the frontend values directly and reads backend values from `/api/panel/version`.
+
+### `GET /api/panel/version`
+
+Handled locally by the Worker before auth/proxy logic. It returns non-secret deployment metadata for support/debugging:
+
+```json
+{
+  "data": {
+    "service": "backend",
+    "name": "pagi-pagi-padel-api-proxy",
+    "runtime": "cloudflare-worker",
+    "version": "0.6.0",
+    "commit": "770735164f423b2f681c7c898518ad41921c0554",
+    "built_at": "2026-07-02T10:23:20Z"
+  }
+}
+```
+
 ## Authentication
 
 ### `POST /api/auth/login`
