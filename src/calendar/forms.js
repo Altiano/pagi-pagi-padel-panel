@@ -4,21 +4,38 @@ import {
   PLACEHOLDER_DURATION_OPTIONS,
   RECEIPT_ATTACHMENT_TYPE,
 } from '../constants.js';
-import { formatUpstreamTime, parseTimeToMinutes, shiftTime, toDateInputValue } from '../lib/datetime.js';
+import { formatTimeInput, formatUpstreamTime, parseTimeToMinutes, toDateInputValue } from '../lib/datetime.js';
 import { getBookingEmail, getCourtBookingWriteType, getDurationMinutes } from '../lib/bookings.js';
+
+const MAX_NATIVE_TIME_INPUT_MINUTES = 24 * 60 - 1;
+
+function formatNativeTimeInputMinutes(minutes) {
+  return formatTimeInput(Math.min(Math.max(Number(minutes) || 0, 0), MAX_NATIVE_TIME_INPUT_MINUTES));
+}
+
+export function toNativeTimeInputValue(value) {
+  if (value === undefined || value === null || value === '') return '';
+  return formatNativeTimeInputMinutes(parseTimeToMinutes(value));
+}
+
+export function shiftFormEndTime(startTime, minutesToAdd) {
+  return formatNativeTimeInputMinutes(parseTimeToMinutes(startTime) + Number(minutesToAdd || 0));
+}
 
 export function buildPlaceholderForm({ booking, courts, defaultDate, defaultName, draft, isVirtualUser = false, openHour }) {
   if (booking) {
     const [startTime, endTime] = String(booking.time || '').split('-');
     const courtId = booking.court_id || '';
+    const formStartTime = toNativeTimeInputValue(startTime || openHour?.open_hours || '06:00');
+    const formEndTime = toNativeTimeInputValue(endTime) || shiftFormEndTime(formStartTime, 60);
     return {
       court_id: courtId,
       court_ids: courtId ? [courtId] : [],
       court_name: booking.court_name || '',
       date: booking.date || defaultDate,
-      start_time: startTime || openHour?.open_hours || '06:00',
-      end_time: endTime || shiftTime(startTime || openHour?.open_hours || '06:00', 60),
-      duration_mode: inferPlaceholderDurationMode(startTime || openHour?.open_hours || '06:00', endTime || shiftTime(startTime || openHour?.open_hours || '06:00', 60)),
+      start_time: formStartTime,
+      end_time: formEndTime,
+      duration_mode: inferPlaceholderDurationMode(formStartTime, formEndTime),
       customer_name: booking.booking_owner || booking.name || '',
       customer_contact: booking.customer_contact || '',
       estimated_price: String(booking.price || 0),
@@ -29,9 +46,9 @@ export function buildPlaceholderForm({ booking, courts, defaultDate, defaultName
     };
   }
 
-  const startTime = draft?.start_time || openHour?.open_hours || '06:00';
+  const startTime = toNativeTimeInputValue(draft?.start_time || openHour?.open_hours || '06:00');
   const court = courts.find((item) => item.id === draft?.court_id) || courts[0];
-  const endTime = draft?.end_time || shiftTime(startTime, 60);
+  const endTime = toNativeTimeInputValue(draft?.end_time) || shiftFormEndTime(startTime, 60);
   const courtIds = draft?.court_ids?.length ? draft.court_ids : court?.id ? [court.id] : [];
   return {
     court_id: courtIds[0] || '',
@@ -53,8 +70,8 @@ export function buildPlaceholderForm({ booking, courts, defaultDate, defaultName
 
 export function buildBookingWriteForm({ booking, courts, defaultDate, draft, openHour }) {
   const [bookingStart, bookingEnd] = String(booking?.time || '').split('-');
-  const startTime = draft?.start_time || bookingStart || openHour?.open_hours || '06:00';
-  const endTime = draft?.end_time || bookingEnd || shiftTime(startTime, 60);
+  const startTime = toNativeTimeInputValue(draft?.start_time || bookingStart || openHour?.open_hours || '06:00');
+  const endTime = toNativeTimeInputValue(draft?.end_time || bookingEnd) || shiftFormEndTime(startTime, 60);
   const court = courts.find((item) => item.id === (draft?.court_id || booking?.court_id)) || courts[0];
   const initialCourtId = draft?.court_id || booking?.court_id || court?.id || '';
   const courtIds = draft?.court_ids?.length ? draft.court_ids : initialCourtId ? [initialCourtId] : [];
@@ -95,8 +112,8 @@ export function normalizeAdditionalBookingDates(dates, primaryDate) {
 export function buildRescheduleBookingForm({ booking, courts, openHour }) {
   const [bookingStart, bookingEnd] = String(booking?.time || '').split('-');
   const duration = getDurationMinutes(booking) || 60;
-  const startTime = bookingStart || openHour?.open_hours || '06:00';
-  const endTime = bookingEnd || shiftTime(startTime, duration);
+  const startTime = toNativeTimeInputValue(bookingStart || openHour?.open_hours || '06:00');
+  const endTime = toNativeTimeInputValue(bookingEnd) || shiftFormEndTime(startTime, duration);
   const court = courts.find((item) => item.id === booking?.court_id) || courts[0];
   return {
     court_id: booking?.court_id || court?.id || '',
@@ -153,6 +170,13 @@ export function buildCancelBookingPayload({ booking, form, mitraId }) {
 }
 
 export function getTimeRangeDurationMinutes(form) {
+  const presetMinutes = Number(form.duration_mode);
+  if (
+    presetMinutes > 0
+    && shiftFormEndTime(form.start_time, presetMinutes) === toNativeTimeInputValue(form.end_time)
+  ) {
+    return presetMinutes;
+  }
   const manualMinutes = parseTimeToMinutes(form.end_time) - parseTimeToMinutes(form.start_time);
   return manualMinutes > 0 ? manualMinutes : 0;
 }
@@ -165,7 +189,10 @@ export function getSelectedCourtIds(form) {
 
 export function inferPlaceholderDurationMode(startTime, endTime) {
   const duration = parseTimeToMinutes(endTime) - parseTimeToMinutes(startTime);
-  return PLACEHOLDER_DURATION_OPTIONS.some((option) => option.minutes === duration) ? String(duration) : 'custom';
+  if (PLACEHOLDER_DURATION_OPTIONS.some((option) => option.minutes === duration)) return String(duration);
+  const normalizedEndTime = toNativeTimeInputValue(endTime);
+  const cappedOption = PLACEHOLDER_DURATION_OPTIONS.find((option) => shiftFormEndTime(startTime, option.minutes) === normalizedEndTime);
+  return cappedOption ? String(cappedOption.minutes) : 'custom';
 }
 
 export function getPlaceholderDurationMinutes(form) {
@@ -185,5 +212,3 @@ export function formatConflictError(error) {
   const court = conflict.court_name || conflict.court_id || 'this court';
   return `This placeholder overlaps with ${name} on ${court}${time ? ` at ${time}` : ''}.`;
 }
-
-

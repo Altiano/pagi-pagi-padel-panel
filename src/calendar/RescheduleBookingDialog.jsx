@@ -3,11 +3,12 @@ import { X } from 'lucide-react';
 import { PLACEHOLDER_DURATION_OPTIONS } from '../constants.js';
 import { apiRequest } from '../api/client.js';
 import { buildReschedulePriceSummary, normalizeRescheduleSlots } from '../api/calendar.js';
-import { formatUpstreamTime, shiftTime } from '../lib/datetime.js';
+import { formatUpstreamTime } from '../lib/datetime.js';
 import {
   buildRescheduleBookingForm,
   getTimeRangeDurationMinutes,
   inferPlaceholderDurationMode,
+  shiftFormEndTime,
 } from './forms.js';
 import { BookingActionSummary } from './BookingActionSummary.jsx';
 
@@ -97,7 +98,7 @@ export function RescheduleBookingDialog({ booking, canViewRevenue = true, courts
         return { ...current, court_id: value, court_name: courts.find((court) => court.id === value)?.name || '' };
       }
       if (field === 'start_time') {
-        return { ...current, start_time: value, end_time: shiftTime(value, getTimeRangeDurationMinutes(current)) };
+        return { ...current, start_time: value, end_time: shiftFormEndTime(value, getTimeRangeDurationMinutes(current)) };
       }
       if (field === 'end_time') {
         return { ...current, end_time: value, duration_mode: inferPlaceholderDurationMode(current.start_time, value) };
@@ -110,7 +111,7 @@ export function RescheduleBookingDialog({ booking, canViewRevenue = true, courts
     setForm((current) => ({
       ...current,
       duration_mode: String(minutes),
-      end_time: shiftTime(current.start_time, minutes),
+      end_time: shiftFormEndTime(current.start_time, minutes),
     }));
   }
 
@@ -118,7 +119,7 @@ export function RescheduleBookingDialog({ booking, canViewRevenue = true, courts
     setForm((current) => ({
       ...current,
       start_time: time,
-      end_time: shiftTime(time, getTimeRangeDurationMinutes(current)),
+      end_time: shiftFormEndTime(time, getTimeRangeDurationMinutes(current)),
     }));
   }
 

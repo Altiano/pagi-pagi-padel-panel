@@ -17,7 +17,6 @@ import {
   formatLongDate,
   formatMonthLabel,
   parseTimeToMinutes,
-  shiftTime,
   toDateInputValue,
 } from '../lib/datetime.js';
 import { formatMoneyInput, parseMoneyInput } from '../lib/format.js';
@@ -28,6 +27,7 @@ import {
   getTimeRangeDurationMinutes,
   inferPlaceholderDurationMode,
   normalizeAdditionalBookingDates,
+  shiftFormEndTime,
 } from './forms.js';
 
 export function BookingWriteDialog({ actionMode, booking, canViewRevenue = true, conflicts, courts, defaultDate, draft, isSaving, openHour, onClose, onSave }) {
@@ -85,7 +85,7 @@ export function BookingWriteDialog({ actionMode, booking, canViewRevenue = true,
       [field]: value,
       ...(field === 'court_id' ? { court_ids: value ? [value] : [], court_name: courts.find((court) => court.id === value)?.name || '' } : null),
       ...(field === 'date' ? { additional_dates: normalizeAdditionalBookingDates(current.additional_dates, value) } : null),
-      ...(field === 'start_time' ? { end_time: shiftTime(value, getTimeRangeDurationMinutes(current)) } : null),
+      ...(field === 'start_time' ? { end_time: shiftFormEndTime(value, getTimeRangeDurationMinutes(current)) } : null),
       ...(field === 'end_time' ? { duration_mode: inferPlaceholderDurationMode(current.start_time, value) } : null),
       ...(field === 'playerSearch' ? { selectedPlayer: null } : null),
       ...(field === 'customerMode' && value === 'offline' ? { selectedPlayer: null } : null),
@@ -203,7 +203,7 @@ export function BookingWriteDialog({ actionMode, booking, canViewRevenue = true,
     setForm((current) => ({
       ...current,
       duration_mode: String(minutes),
-      end_time: shiftTime(current.start_time, minutes),
+      end_time: shiftFormEndTime(current.start_time, minutes),
     }));
   }
 

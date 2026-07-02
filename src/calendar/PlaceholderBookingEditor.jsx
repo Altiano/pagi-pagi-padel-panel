@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { PLACEHOLDER_DURATION_OPTIONS, PLACEHOLDER_STATUSES } from '../constants.js';
-import { parseTimeToMinutes, shiftTime } from '../lib/datetime.js';
+import { parseTimeToMinutes } from '../lib/datetime.js';
 import { formatMoneyInput, parseMoneyInput } from '../lib/format.js';
 import {
   buildPlaceholderForm,
@@ -9,6 +9,7 @@ import {
   getPlaceholderDurationMinutes,
   getSelectedCourtIds,
   inferPlaceholderDurationMode,
+  shiftFormEndTime,
 } from './forms.js';
 
 export function PlaceholderBookingEditor({ booking, canViewRevenue = true, conflicts, courts, defaultDate, defaultName, draft, isSaving, isVirtualUser = false, mode, openHour, onClose, onSave }) {
@@ -23,7 +24,7 @@ export function PlaceholderBookingEditor({ booking, canViewRevenue = true, confl
     setForm((current) => {
       if (field === 'start_time') {
         const durationMinutes = getPlaceholderDurationMinutes(current);
-        return { ...current, start_time: value, end_time: shiftTime(value, durationMinutes) };
+        return { ...current, start_time: value, end_time: shiftFormEndTime(value, durationMinutes) };
       }
       if (field === 'end_time') {
         return { ...current, end_time: value, duration_mode: inferPlaceholderDurationMode(current.start_time, value) };
@@ -56,7 +57,7 @@ export function PlaceholderBookingEditor({ booking, canViewRevenue = true, confl
     setForm((current) => ({
       ...current,
       duration_mode: String(minutes),
-      end_time: shiftTime(current.start_time, minutes),
+      end_time: shiftFormEndTime(current.start_time, minutes),
     }));
   }
 
@@ -226,5 +227,4 @@ export function PlaceholderBookingEditor({ booking, canViewRevenue = true, confl
     </div>
   );
 }
-
 
