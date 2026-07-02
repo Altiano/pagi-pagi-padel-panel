@@ -146,6 +146,8 @@ VITE_API_BASE_URL=<worker-origin>
 
 The static UI loads from GitHub Pages and calls the Worker origin configured in the `PANEL_PROXY_ORIGIN` repository secret. The Worker deployment requires `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` repository secrets. The workflow also injects the resolved commit SHA, package version, and UTC build timestamp into both the frontend bundle and Worker deployment so Settings can show the exact deployed state.
 
+After both production deployments finish, the same workflow run marks the deployed commit's `production/tested` status as pending and waits on the `production-tested` environment. Configure that GitHub environment with at least one required reviewer; approving the environment after checking production flips `production/tested` to success, while rejecting it leaves the run unconfirmed.
+
 For rollback, open the `Deploy App` workflow and either re-run a previous successful run or run the workflow manually from `main` with the `ref` input set to a commit SHA, branch, or tag. The workflow resolves that ref once, builds the frontend from it, and deploys the Worker from the same commit SHA. GitHub workflow re-runs are only available for a limited window, so use tags or commit SHAs with the manual `ref` input for older rollbacks.
 
 ## Troubleshooting

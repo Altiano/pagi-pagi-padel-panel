@@ -80,6 +80,8 @@ jobs:
       pages: write
       id-token: write
     runs-on: ubuntu-latest
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
@@ -135,3 +137,83 @@ jobs:
           --var WORKER_BUILD_COMMIT:${{ needs.build.outputs.deploy_sha }}
           --var WORKER_BUILD_TIMESTAMP:${{ needs.build.outputs.build_timestamp }}
           --var WORKER_VERSION:${{ needs.build.outputs.app_version }}
+
+  mark-production-test-pending:
+    name: Mark production test pending
+    needs:
+      - build
+      - deploy-pages
+      - deploy-worker
+    permissions:
+      contents: read
+      statuses: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark commit as awaiting production confirmation
+        env:
+          DEPLOY_SHA: ${{ needs.build.outputs.deploy_sha }}
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/statuses/${DEPLOY_SHA}" \
+            -f state=pending \
+            -f context="production/tested" \
+            -f description="Awaiting manual production confirmation." \
+            -f target_url="$RUN_URL"
+
+  confirm-production-tested:
+    name: Confirm production tested
+    needs:
+      - build
+      - deploy-pages
+      - deploy-worker
+      - mark-production-test-pending
+    permissions:
+      actions: read
+      contents: read
+      statuses: write
+    runs-on: ubuntu-latest
+    environment:
+      name: production-tested
+      url: ${{ needs.deploy-pages.outputs.page_url }}
+    steps:
+      - name: Require protected confirmation environment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          reviewer_count="$(
+            gh api "repos/${GITHUB_REPOSITORY}/environments/production-tested" \
+              --jq '[.protection_rules[]? | select(.type == "required_reviewers") | .reviewers[]?] | length'
+          )"
+
+          if [ "$reviewer_count" -lt 1 ]; then
+            echo "::error::Configure the production-tested environment with at least one required reviewer before using this confirmation gate."
+            exit 1
+          fi
+
+      - name: Mark commit as production tested
+        env:
+          DEPLOY_SHA: ${{ needs.build.outputs.deploy_sha }}
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/statuses/${DEPLOY_SHA}" \
+            -f state=success \
+            -f context="production/tested" \
+            -f description="Approved after production testing." \
+            -f target_url="$RUN_URL"
+
+      - name: Summarize production confirmation
+        run: |
+          {
+            echo "### Production tested"
+            echo ""
+            echo "- Commit: \`${{ needs.build.outputs.deploy_sha }}\`"
+            echo "- Frontend: ${{ needs.deploy-pages.outputs.page_url }}"
+            echo "- Worker: https://pagi-pagi-padel-api-proxy.altianogerung.workers.dev"
+            echo "- Status context: \`production/tested\`"
+          } >> "$GITHUB_STEP_SUMMARY"

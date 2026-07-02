@@ -23,7 +23,7 @@ Use `pnpm build` as the default verification command after code changes. Run
 `pnpm lint` after moving imports or splitting modules, and run `pnpm test` when
 changing pure helpers or calendar form payload builders.
 
-Pushing `main` to GitHub triggers the project auto-deployment for both the GitHub Pages frontend and the Cloudflare Worker backend. The `Deploy App` workflow can also be run manually with a `ref` input (branch, tag, or commit SHA) to redeploy both surfaces from the same commit. For publish requests, push the completed commit to `origin/main` unless the user explicitly asks for a PR or a separate branch.
+Pushing `main` to GitHub triggers the project auto-deployment for both the GitHub Pages frontend and the Cloudflare Worker backend. The `Deploy App` workflow can also be run manually with a `ref` input (branch, tag, or commit SHA) to redeploy both surfaces from the same commit. After both deployments finish, the workflow marks the deployed commit's `production/tested` status as pending and waits for the `production-tested` environment approval; configure that environment with at least one required reviewer so approval is the manual "tested in production" confirmation. For publish requests, push the completed commit to `origin/main` unless the user explicitly asks for a PR or a separate branch.
 
 When the user says "push it" or similar, treat that as a publish request: commit the completed work, merge it into the default publishing branch (`main` in this repo, even if the user casually says "master"), and push that branch to GitHub.
 
