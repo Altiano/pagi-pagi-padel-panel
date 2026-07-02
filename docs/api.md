@@ -14,6 +14,7 @@ Static deployment:
 
 - Browser calls `VITE_API_BASE_URL` plus the request path.
 - GitHub Pages uses the `PANEL_PROXY_ORIGIN` repository secret for `VITE_API_BASE_URL`.
+- The `Deploy App` GitHub Actions workflow deploys the GitHub Pages frontend and Cloudflare Worker from the same resolved commit SHA. For rollback, re-run a previous workflow run while GitHub still offers it, or run the workflow manually from `main` with the `ref` input set to a commit SHA, branch, or tag.
 
 Worker observability:
 
