@@ -23,7 +23,7 @@ Use `pnpm build` as the default verification command after code changes. Run
 `pnpm lint` after moving imports or splitting modules, and run `pnpm test` when
 changing pure helpers or calendar form payload builders.
 
-Pushing `main` to GitHub triggers the project auto-deployment. For publish requests, push the completed commit to `origin/main` unless the user explicitly asks for a PR or a separate branch.
+Pushing `main` to GitHub triggers the project auto-deployment for both the GitHub Pages frontend and the Cloudflare Worker backend. The `Deploy App` workflow can also be run manually with a `ref` input (branch, tag, or commit SHA) to redeploy both surfaces from the same commit. For publish requests, push the completed commit to `origin/main` unless the user explicitly asks for a PR or a separate branch.
 
 When the user says "push it" or similar, treat that as a publish request: commit the completed work, merge it into the default publishing branch (`main` in this repo, even if the user casually says "master"), and push that branch to GitHub.
 
@@ -129,6 +129,9 @@ Other key files:
 - `WORKER_LOG_LEVEL`: Optional Worker log threshold (`debug`, `info`, `warn`, `error`, or `silent`). Defaults to `info`.
 - `VITE_USE_LOCAL_PLACEHOLDERS`: Optional browser-local placeholder storage escape hatch. Leave unset for D1-backed testing.
 - `VITE_BASE_PATH`: Vite base path for static deployments, for example `/pagi-pagi-padel-panel/`.
+- `PANEL_PROXY_ORIGIN`: GitHub repository secret used by the deployment workflow as the static bundle's `VITE_API_BASE_URL`.
+- `CLOUDFLARE_ACCOUNT_ID`: GitHub repository secret used by Wrangler in CI.
+- `CLOUDFLARE_API_TOKEN`: GitHub repository secret used by Wrangler in CI.
 
 ## Current Architecture Notes
 

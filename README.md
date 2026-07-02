@@ -62,6 +62,9 @@ VITE_BASE_PATH=/
 - `UPSTREAM_ACCOUNTS_JSON`: optional Worker secret containing a JSON array of upstream accounts for virtual-user sessions, for example `[{"username":"admin-a@example.com","password":"..."},{"username":"admin-b@example.com","password":"..."}]`.
 - `VIRTUAL_SESSION_TTL_SECONDS` / `VIRTUAL_SESSION_REMEMBER_TTL_SECONDS`: optional Worker vars for panel-token lifetime. Defaults are 12 hours and 30 days.
 - `WORKER_LOG_LEVEL`: optional Worker log threshold (`debug`, `info`, `warn`, `error`, or `silent`). Defaults to `info`.
+- `PANEL_PROXY_ORIGIN`: GitHub repository secret used by the deployment workflow as the static bundle's `VITE_API_BASE_URL`.
+- `CLOUDFLARE_ACCOUNT_ID`: GitHub repository secret used by Wrangler in CI.
+- `CLOUDFLARE_API_TOKEN`: GitHub repository secret used by Wrangler in CI.
 
 ## Worker And D1
 
@@ -125,19 +128,26 @@ the high-level orientation for human readers.
 - Calendar data is cached only in memory for the `CALENDAR_DATA_CACHE_TTL_MS` window (`src/constants.js`, currently 2 minutes) per auth/revenue scope and visible date. The toolbar refresh button, browser reload, and placeholder mutations intentionally bypass or clear that cache.
 - Automated tests currently cover booking helpers, calendar form payload builders, and virtual-user navigation helpers. Keep new tests focused around pure helper behavior unless a UI workflow change needs broader coverage.
 
-## GitHub Pages
+## Production Deployment
 
-This app can be deployed as a static Vite bundle. The GitHub Actions workflow builds with:
+The GitHub Actions workflow in `.github/workflows/deploy-pages.yml` deploys both production surfaces on pushes to `main`/`master`:
+
+- GitHub Pages gets the static Vite bundle built with:
 
 ```sh
 VITE_BASE_PATH=/pagi-pagi-padel-panel/
 VITE_API_BASE_URL=<worker-origin>
 ```
 
-The static UI loads from GitHub Pages and calls the Worker origin configured in the `PANEL_PROXY_ORIGIN` repository secret.
+- Cloudflare Workers gets the `wrangler.toml` Worker deployed with `pnpm worker:deploy`.
+
+The static UI loads from GitHub Pages and calls the Worker origin configured in the `PANEL_PROXY_ORIGIN` repository secret. The Worker deployment requires `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` repository secrets.
+
+For rollback, open the `Deploy App` workflow and either re-run a previous successful run or run the workflow manually from `main` with the `ref` input set to a commit SHA, branch, or tag. The workflow resolves that ref once, builds the frontend from it, and deploys the Worker from the same commit SHA. GitHub workflow re-runs are only available for a limited window, so use tags or commit SHAs with the manual `ref` input for older rollbacks.
 
 ## Troubleshooting
 
 - If local login/API calls fail, check `.env.local` and confirm `VITE_API_BASE_URL` points at the deployed Worker.
-- If API calls fail after static deployment, check the `PANEL_PROXY_ORIGIN` GitHub secret and Worker deployment status.
+- If API calls fail after production deployment, check the `PANEL_PROXY_ORIGIN` GitHub secret and Worker deployment status.
+- If the Worker deploy job fails before Wrangler runs, confirm the `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` GitHub repository secrets exist.
 - If login succeeds but later requests fail with `401`, stored auth is cleared by `src/api/client.js` and the user should sign in again.
