@@ -27,7 +27,7 @@ Pushing `main` to GitHub triggers the project auto-deployment for both the GitHu
 
 When the user says "push it" or similar, treat that as a publish request: commit the completed work, merge it into the default publishing branch (`main` in this repo, even if the user casually says "master"), and push that branch to GitHub.
 
-For publish requests with user-visible app changes, bump `package.json` version before committing. Use semver judgment: patch for small fixes and UI tweaks, minor for new feature surfaces or meaningful workflow changes, and major only for intentional breaking changes. Docs-only, comment-only, and internal maintenance changes do not need a version bump unless the user explicitly asks.
+Do not increase `package.json` version numbers for publish requests. Keep the package version fixed unless the user explicitly asks to change it.
 
 ## Code Map (start here)
 
