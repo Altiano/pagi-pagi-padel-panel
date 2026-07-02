@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { MOBILE_MEDIA_QUERY, MOBILE_VIEW_STORAGE_KEY } from './constants.js';
+import { MOBILE_MEDIA_QUERY, MOBILE_VIEW_STORAGE_KEY, THEME_STORAGE_KEY } from './constants.js';
 
 export function usePreferredMobileView(isMobileRoute) {
   const [isSmallScreen, setIsSmallScreen] = useState(() => {
@@ -78,6 +78,44 @@ export function useSheetDrag(onDismiss) {
       transition: dragging ? 'none' : undefined,
     },
   };
+}
+
+// Browser-chrome colors matching the light/dark page background, which is
+// now the top surface on mobile (the sticky calendar header is a bg tint).
+const THEME_META_COLORS = { light: '#f4f6f1', dark: '#131711' };
+
+export function getStoredThemePreference() {
+  if (typeof window === 'undefined') return 'light';
+  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  return stored === 'dark' || stored === 'system' ? stored : 'light';
+}
+
+// Sets html[data-theme] (which flips color-scheme, and with it every
+// light-dark() color) and keeps the theme-color metas in sync so the browser
+// chrome / PWA status bar matches. No attribute (or 'light') means light —
+// the default; 'system' follows the OS preference.
+export function applyThemePreference(preference) {
+  if (typeof document === 'undefined') return;
+  document.documentElement.dataset.theme = preference;
+  document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => {
+    const systemScheme = (meta.getAttribute('media') || '').includes('dark') ? 'dark' : 'light';
+    const effective = preference === 'system' ? systemScheme : preference;
+    meta.setAttribute('content', THEME_META_COLORS[effective]);
+  });
+}
+
+export function useThemePreference() {
+  const [preference, setPreferenceState] = useState(getStoredThemePreference);
+
+  function setPreference(nextPreference) {
+    setPreferenceState(nextPreference);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(THEME_STORAGE_KEY, nextPreference);
+    }
+    applyThemePreference(nextPreference);
+  }
+
+  return { preference, setPreference };
 }
 
 export function useEscapeKey(onEscape, enabled = true) {

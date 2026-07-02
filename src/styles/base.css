@@ -1,16 +1,28 @@
+/* Theme: every color is written as light-dark(light, dark). The active side
+   follows color-scheme, driven by the html[data-theme] attribute that
+   useThemePreference (src/hooks.js) sets; no attribute defaults to light. */
 :root {
-  --bg: #f4f6f1;
-  --ink: #17211b;
-  --muted: #6d756e;
-  --line: #dfe5d8;
-  --surface: #ffffff;
-  --surface-strong: #eef3e7;
-  --green: #286345;
-  --green-deep: #173f2b;
-  --lime: #cce15f;
-  --danger: #a13232;
-  --shadow: 0 24px 70px rgba(23, 33, 27, 0.13);
+  color-scheme: light;
+  --bg: light-dark(#f4f6f1, #131711);
+  --ink: light-dark(#17211b, #e7ece4);
+  --muted: light-dark(#6d756e, #98a294);
+  --line: light-dark(#dfe5d8, #2e372b);
+  --surface: light-dark(#ffffff, #1c231b);
+  --surface-strong: light-dark(#eef3e7, #26301f);
+  --green: light-dark(#286345, #2f7a53);
+  --green-deep: light-dark(#173f2b, #a5d2b6);
+  --lime: light-dark(#cce15f, #cce15f);
+  --danger: light-dark(#a13232, #e5867b);
+  --shadow: 0 24px 70px light-dark(rgba(23, 33, 27, 0.13), rgba(0, 0, 0, 0.55));
   font-family: "Avenir Next", "Helvetica Neue", Helvetica, sans-serif;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+:root[data-theme='system'] {
+  color-scheme: light dark;
 }
 
 * {
@@ -61,7 +73,7 @@ form {
 label {
   display: grid;
   gap: 8px;
-  color: #39433b;
+  color: light-dark(#39433b, #b6c1b8);
   font-size: 13px;
   font-weight: 650;
 }
@@ -71,7 +83,7 @@ input {
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 14px 15px;
-  background: #fbfcf8;
+  background: light-dark(#fbfcf8, #242520);
   color: var(--ink);
   outline: none;
   font-weight: 500;
@@ -83,7 +95,7 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 14px 15px;
-  background: #fbfcf8;
+  background: light-dark(#fbfcf8, #242520);
   color: var(--ink);
   outline: none;
   font-weight: 500;
@@ -94,20 +106,20 @@ textarea {
 }
 
 input::placeholder {
-  color: #7d867e;
+  color: light-dark(#7d867e, #778078);
   font-weight: 500;
 }
 
 input:read-only {
-  color: #5a635b;
-  background: #eef3e8;
+  color: light-dark(#5a635b, #97a098);
+  background: light-dark(#eef3e8, #2a3220);
 }
 
 input:focus,
 select:focus,
 textarea:focus {
   border-color: var(--green);
-  box-shadow: 0 0 0 4px rgba(40, 99, 69, 0.12);
+  box-shadow: 0 0 0 4px light-dark(rgba(40, 99, 69, 0.12), rgba(148, 212, 179, 0.12));
 }
 
 .check-row {
@@ -156,11 +168,11 @@ textarea:focus {
 }
 
 .status-line.error {
-  background: #fae8e6;
+  background: light-dark(#fae8e6, #371b18);
   color: var(--danger);
 }
 
 .status-line.warning {
-  background: #fff4d5;
-  color: #805513;
+  background: light-dark(#fff4d5, #4e3c08);
+  color: light-dark(#805513, #ebbc75);
 }

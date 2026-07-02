@@ -13,7 +13,7 @@
   place-items: center;
   border: 2px solid currentColor;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.12);
+  background: light-dark(rgba(255, 255, 255, 0.12), rgba(33, 33, 33, 0.12));
 }
 
 .brand-mark {
@@ -44,7 +44,7 @@
   flex-direction: column;
   padding: 20px 16px;
   border-right: 1px solid var(--line);
-  background: #fbfcf8;
+  background: light-dark(#fbfcf8, #242520);
 }
 
 .sidebar-brand {
@@ -68,7 +68,7 @@
 }
 
 .nav-group p {
-  color: #99a093;
+  color: light-dark(#99a093, #666d60);
 }
 
 .nav-group button {
@@ -80,7 +80,7 @@
   border-radius: 10px;
   padding: 10px 12px;
   background: transparent;
-  color: #4d584f;
+  color: light-dark(#4d584f, #a1ada3);
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
@@ -107,7 +107,7 @@
   gap: 2px;
   margin-top: auto;
   padding: 16px 2px 2px;
-  color: #9aa395;
+  color: light-dark(#9aa395, #626b5d);
   font-size: 11px;
   font-weight: 550;
   line-height: 1.35;

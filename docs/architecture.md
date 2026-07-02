@@ -100,7 +100,7 @@ The former in-file helper functions now live in `src/lib/` (date/time, formattin
 `src/styles.css` is the CSS entrypoint and imports grouped global styles from
 `src/styles/`:
 
-- `base.css` — tokens, element defaults, shared form/button states.
+- `base.css` — theme tokens, element defaults, shared form/button states.
 - `shell.css` — panel shell, sidebar, and placeholder screens.
 - `login.css` — login screen.
 - `virtual-users.css` — virtual user management.
@@ -112,6 +112,26 @@ The former in-file helper functions now live in `src/lib/` (date/time, formattin
 Keep selectors grouped by feature when adding styles. Class names remain global
 for now, so avoid broad selectors that could unintentionally affect another
 screen.
+
+### Theming (light / dark / system)
+
+Every color in the stylesheets is written as `light-dark(lightValue, darkValue)`.
+The active side follows the `color-scheme` property, which `base.css` derives
+from the `html[data-theme]` attribute: no attribute (or `light`) means light —
+the default — `dark` forces dark, and `system` follows the OS preference. When
+adding styles, never use a raw color literal — either use a token from
+`base.css` or wrap the literal in `light-dark()`.
+
+The preference is stored in `localStorage` under `ppp-panel-theme`
+(`THEME_STORAGE_KEY` in `src/constants.js`) and is intentionally device-local:
+it is never synced to other devices or the backend. Three places cooperate:
+
+- an inline script in `index.html` applies the stored theme before first paint
+  to avoid a flash;
+- `applyThemePreference` in `src/hooks.js` sets `html[data-theme]` and keeps the
+  `theme-color` metas in sync with the browser chrome;
+- `useThemePreference` (also `src/hooks.js`) backs the theme picker on the
+  Settings screen (`ThemePicker` in `src/screens/VirtualUsersPage.jsx`).
 
 ## Refactoring Guidance
 

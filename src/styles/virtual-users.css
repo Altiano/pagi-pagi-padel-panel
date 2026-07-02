@@ -55,7 +55,7 @@
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 14px;
-  background: #fbfcf8;
+  background: light-dark(#fbfcf8, #242520);
 }
 
 .virtual-user-card strong,
@@ -90,7 +90,7 @@
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 12px;
-  background: #fbfcf8;
+  background: light-dark(#fbfcf8, #242520);
 }
 
 .virtual-user-permissions {
@@ -104,34 +104,34 @@
   border-radius: 999px;
   padding: 5px 9px;
   background: var(--surface-strong);
-  color: #526052;
+  color: light-dark(#526052, #99a899);
   font-size: 12px;
   font-weight: 650;
 }
 
 .state-pill.active {
-  background: #e4f2d7;
+  background: light-dark(#e4f2d7, #2d4517);
   color: var(--green-deep);
 }
 
 .state-pill.inactive {
-  background: #f4e4df;
+  background: light-dark(#f4e4df, #3d2219);
   color: var(--danger);
 }
 
 .state-pill.fresh {
-  background: #e4f2d7;
+  background: light-dark(#e4f2d7, #2d4517);
   color: var(--green-deep);
 }
 
 .state-pill.expiring {
-  background: #fff0ce;
-  color: #765b11;
+  background: light-dark(#fff0ce, #583e02);
+  color: light-dark(#765b11, #edcf7f);
 }
 
 .state-pill.expired,
 .state-pill.missing {
-  background: #f4e4df;
+  background: light-dark(#f4e4df, #3d2219);
   color: var(--danger);
 }
 
@@ -158,8 +158,49 @@
 }
 
 .virtual-user-actions .danger-action {
-  border-color: #f0c6c0;
+  border-color: light-dark(#f0c6c0, #571d15);
   color: var(--danger);
+}
+
+.settings-side {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.theme-picker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.theme-picker button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: light-dark(#fbfcf8, #242520);
+  color: light-dark(#526052, #99a899);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.theme-picker button.selected {
+  border-color: light-dark(rgba(40, 99, 69, 0.28), rgba(148, 212, 179, 0.28));
+  background: light-dark(#edf4e5, #2a361d);
+  color: var(--green);
+}
+
+.theme-picker-note {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .settings-info dl {
@@ -198,7 +239,7 @@
   border: 1px dashed var(--line);
   border-radius: 14px;
   padding: 18px;
-  background: #fbfcf8;
+  background: light-dark(#fbfcf8, #242520);
 }
 
 .virtual-user-editor {
@@ -216,7 +257,7 @@
 }
 
 .permission-section > span {
-  color: #39433b;
+  color: light-dark(#39433b, #b6c1b8);
   font-size: 13px;
   font-weight: 650;
 }
@@ -228,5 +269,5 @@
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 12px;
-  background: #fbfcf8;
+  background: light-dark(#fbfcf8, #242520);
 }

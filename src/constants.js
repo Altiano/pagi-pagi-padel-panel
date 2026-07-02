@@ -41,6 +41,9 @@ export const FALLBACK_MITRA_ID = 'a074e244-76c0-4587-9dff-0c7833f0bfa3';
 export const DAY_MS = 24 * 60 * 60 * 1000;
 export const MOBILE_VIEW_STORAGE_KEY = 'ppp-panel-view-mode';
 export const MOBILE_MEDIA_QUERY = '(max-width: 760px)';
+// Theme preference is device-local by design (no cross-device sync). The same
+// key is read by the pre-paint inline script in index.html.
+export const THEME_STORAGE_KEY = 'ppp-panel-theme';
 export const PLACEHOLDER_STATUSES = [
   { label: 'Negotiating', value: 'negotiating' },
   { label: 'Awaiting payment', value: 'awaiting_payment' },

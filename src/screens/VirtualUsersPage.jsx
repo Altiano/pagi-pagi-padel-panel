@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Copy, LogOut, Pencil, Trash2, UserPlus, X } from 'lucide-react';
+import { Copy, LogOut, Moon, MonitorSmartphone, Pencil, Sun, Trash2, UserPlus, X } from 'lucide-react';
 import { CALENDAR_BOOKING_PERMISSION, virtualPermissionGroups } from '../constants.js';
 import {
   createVirtualUser,
@@ -9,7 +9,13 @@ import {
   updateVirtualUser,
 } from '../api/virtualUsers.js';
 import { copyText } from '../lib/format.js';
-import { useEscapeKey } from '../hooks.js';
+import { useEscapeKey, useThemePreference } from '../hooks.js';
+
+const THEME_OPTIONS = [
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+  { value: 'system', label: 'System', icon: MonitorSmartphone },
+];
 
 export function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
   const [users, setUsers] = useState([]);
@@ -169,19 +175,27 @@ export function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
           ) : null}
         </article>
 
-        <aside className="settings-panel settings-info">
-          <span className="panel-label">Current session</span>
-          <h2>{displayName}</h2>
-          <dl>
-            <div><dt>Login type</dt><dd>{auth.virtualUser ? 'Virtual account' : 'Regular upstream account'}</dd></div>
-            <div><dt>Upstream</dt><dd>{meState.loading ? 'Checking...' : meState.error ? 'Needs attention' : 'Connected'}</dd></div>
-            {auth.upstreamAccountUsername ? (
-              <div><dt>Assigned account</dt><dd>{auth.upstreamAccountUsername}</dd></div>
-            ) : null}
-            <div><dt>Virtual prefix</dt><dd>_username</dd></div>
-          </dl>
-          <p>Virtual users authenticate with their own wrapper password. The Worker keeps upstream tokens server-side and assigns an upstream account per session.</p>
-        </aside>
+        <div className="settings-side">
+          <article className="settings-panel">
+            <span className="panel-label">Appearance</span>
+            <h2>Theme</h2>
+            <ThemePicker />
+          </article>
+
+          <aside className="settings-panel settings-info">
+            <span className="panel-label">Current session</span>
+            <h2>{displayName}</h2>
+            <dl>
+              <div><dt>Login type</dt><dd>{auth.virtualUser ? 'Virtual account' : 'Regular upstream account'}</dd></div>
+              <div><dt>Upstream</dt><dd>{meState.loading ? 'Checking...' : meState.error ? 'Needs attention' : 'Connected'}</dd></div>
+              {auth.upstreamAccountUsername ? (
+                <div><dt>Assigned account</dt><dd>{auth.upstreamAccountUsername}</dd></div>
+              ) : null}
+              <div><dt>Virtual prefix</dt><dd>_username</dd></div>
+            </dl>
+            <p>Virtual users authenticate with their own wrapper password. The Worker keeps upstream tokens server-side and assigns an upstream account per session.</p>
+          </aside>
+        </div>
       </section>
 
       {editor.mode !== 'closed' ? (
@@ -192,6 +206,30 @@ export function VirtualUsersPage({ auth, displayName, meState, onLogout }) {
           onSave={saveUser}
         />
       ) : null}
+    </>
+  );
+}
+
+export function ThemePicker() {
+  const { preference, setPreference } = useThemePreference();
+
+  return (
+    <>
+      <div aria-label="Theme" className="theme-picker" role="group">
+        {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
+          <button
+            aria-pressed={preference === value}
+            className={preference === value ? 'selected' : ''}
+            key={value}
+            onClick={() => setPreference(value)}
+            type="button"
+          >
+            <Icon size={16} />
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="theme-picker-note">System follows this device's appearance. Saved in this browser only.</p>
     </>
   );
 }

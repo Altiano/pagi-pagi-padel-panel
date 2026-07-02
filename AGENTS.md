@@ -43,10 +43,13 @@ src/
                                  virtual-user nav/permission gating.
   constants.js                   Shared constants: nav groups, permission lists,
                                  cache TTL, placeholder statuses, durations.
-  hooks.js                       usePreferredMobileView, useEscapeKey.
+  hooks.js                       usePreferredMobileView, useEscapeKey, and the
+                                 light/dark/system theme helpers
+                                 (useThemePreference, applyThemePreference).
   styles.css                     CSS entrypoint importing grouped global styles.
   styles/
-    base.css                     Tokens, element defaults, shared form/buttons.
+    base.css                     Theme tokens (light-dark), color-scheme switch,
+                                 element defaults, shared form/buttons.
     shell.css                    Panel shell, sidebar, placeholder screens.
     login.css                    Login screen.
     virtual-users.css            Virtual user management.
@@ -104,12 +107,13 @@ src/
 
   screens/
     LoginScreen.jsx              Credential login screen.
-    VirtualUsersPage.jsx         Settings: virtual user management (master-only).
+    VirtualUsersPage.jsx         Settings: virtual user management (master-only)
+                                 plus the theme picker (all users).
 ```
 
 Other key files:
 
-- `index.html`: PWA/native-feel meta tags (viewport-fit, theme-color, manifest + icon links via `%BASE_URL%`).
+- `index.html`: PWA/native-feel meta tags (viewport-fit, per-scheme theme-color metas, manifest + icon links via `%BASE_URL%`) and the pre-paint inline script that applies the stored theme.
 - `public/manifest.webmanifest` + `public/icons/`: installable-PWA manifest and generated padel-ball icons (standalone display makes the mobile view launch without browser chrome).
 - `vite.config.js`: Vite config, base path, and local `/api` proxy.
 - `docs/architecture.md`: Higher-level architecture and data-flow notes.
@@ -142,6 +146,7 @@ Other key files:
 - Placeholder create mode can select multiple courts; the frontend sends one D1 placeholder row per selected court. Multiple placeholders can share the same court/time as a stack, and placeholders that overlap a live booking are treated as waitlist holds. Editing remains one placeholder row at a time.
 - Real booking create mode can target multiple dates; the frontend sends one captured upstream `/api/admin/court-booking` request per selected date for offline or registered users. Placeholder conversion stays single-date. Virtual users need `Calendar booking` for these real booking writes, but not `Calendar revenue`; hidden or blank booking prices are submitted as zero. Existing booking actions call the captured payment proof, mark-paid, reschedule, notes, and cancel endpoints.
 - Virtual users can create and update placeholder bookings, but the Worker stamps `created_by_name`/`updated_by_name` from the virtual user's display name instead of trusting submitted PIC names. Deletes are owner-scoped: a virtual session may only delete a placeholder whose `created_by_name` matches its display name (the Worker returns `403` otherwise), and the calendar detail panel hides Delete on holds a virtual user does not own. Master/regular accounts can delete any placeholder.
+- The app supports light (default), dark, and follow-system themes. All stylesheet colors use `light-dark()`, switched by `color-scheme` via the `html[data-theme]` attribute; never add a raw color literal (see docs/architecture.md "Theming"). The preference lives in localStorage under `ppp-panel-theme` (device-local by design, no backend/device sync) and is changed from the Settings screen's Appearance panel.
 - Authentication is stored in localStorage under `panel.auth` plus Nuxt-compatible keys used for parity checks.
 - A `401` response clears stored auth in `apiRequest`.
 
@@ -163,7 +168,7 @@ Other key files:
 
 Before generating mockup images, redesign concepts, or UI variants, review `docs/visual-reference.md` and the screenshots in `docs/visual-reference/`.
 
-Mockups should stay close to the current app's design language unless the user explicitly asks for a larger redesign. Preserve the existing feel: off-white and pale green surfaces, deep green primary actions, compact admin density, restrained rounded controls, subtle borders, and muted operational status colors.
+Mockups should stay close to the current app's design language unless the user explicitly asks for a larger redesign. Preserve the existing feel: off-white and pale green surfaces, deep green primary actions, compact admin density, restrained rounded controls, subtle borders, and muted operational status colors. The app also ships a dark theme (green-tinted dark surfaces, same accent hues); default mockups to the light theme unless the request is about dark mode.
 
 When the web app's visual design changes materially, update the visual-reference screenshots and `docs/visual-reference.md` in the same change or as soon as practical. This keeps future AI-generated mockups aligned with the real product instead of drifting into unrelated styles.
 
