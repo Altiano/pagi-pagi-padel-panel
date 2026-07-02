@@ -40,9 +40,9 @@
 
 .form-heading h2 {
   margin: 0;
-  font-size: 32px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  font-size: var(--font-size-5xl);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-tight);
 }
 
 .form-heading p,

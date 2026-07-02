@@ -23,8 +23,8 @@
 
 .settings-panel h2 {
   margin: 4px 0 0;
-  font-size: 26px;
-  letter-spacing: -0.03em;
+  font-size: var(--font-size-3xl);
+  letter-spacing: var(--letter-spacing-tight);
 }
 
 .compact-button {
@@ -67,14 +67,14 @@
 
 .virtual-user-card strong,
 .virtual-session-row strong {
-  font-size: 15px;
+  font-size: var(--font-size-md);
 }
 
 .virtual-user-card > div:first-child span,
 .virtual-session-row span {
   margin-top: 4px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--font-size-xs);
 }
 
 .virtual-session-list {
@@ -105,8 +105,8 @@
   padding: 5px 9px;
   background: var(--surface-strong);
   color: light-dark(#526052, #99a899);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
 }
 
 .state-pill.active {
@@ -153,8 +153,8 @@
   padding: 0 10px;
   background: var(--surface);
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 650;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
 }
 
 .virtual-user-actions .danger-action {
@@ -200,12 +200,12 @@
 
 .version-card > div:first-child span {
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
 }
 
 .version-card > div:first-child strong {
-  font-size: 16px;
+  font-size: var(--font-size-base);
 }
 
 .version-card dl {
@@ -224,7 +224,7 @@
 .version-card dt {
   flex: 0 0 auto;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--font-size-xs);
 }
 
 .version-card dd {
@@ -235,8 +235,8 @@
   gap: 8px;
   margin: 0;
   color: light-dark(#39433b, #c1cbbf);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
   text-align: right;
 }
 
@@ -248,9 +248,9 @@
 }
 
 .version-card .monospace-value span {
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
-  letter-spacing: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  letter-spacing: var(--letter-spacing-tight);
 }
 
 .version-copy-button {
@@ -284,8 +284,8 @@
   background: light-dark(#fbfcf8, #242520);
   color: light-dark(#526052, #99a899);
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 650;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
 }
 
 .theme-picker button.selected {
@@ -297,7 +297,7 @@
 .theme-picker-note {
   margin: 12px 0 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-size-2xs);
   line-height: 1.45;
 }
 
@@ -317,12 +317,12 @@
 
 .settings-info dt {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--font-size-xs);
 }
 
 .settings-info dd {
   margin: 0;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   text-align: right;
 }
 
@@ -356,8 +356,8 @@
 
 .permission-section > span {
   color: light-dark(#39433b, #b6c1b8);
-  font-size: 13px;
-  font-weight: 650;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
 }
 
 .permission-section > div {

@@ -124,6 +124,8 @@ Other key files:
 - `vite.config.js`: Vite config, base path, and local `/api` proxy.
 - `docs/architecture.md`: Higher-level architecture and data-flow notes.
 - `docs/api.md`: Backend endpoint assumptions and response-shape notes.
+- `docs/typography.md`: Typography direction, shared font/size/weight tokens,
+  and rules for future UI text changes.
 - `docs/visual-reference.md`: Current screenshots and design-language guidance for mockups.
 - `docs/visual-reference/`: Live app screenshots for login and authenticated Calendar states.
 
@@ -183,7 +185,9 @@ Other key files:
 
 Before generating mockup images, redesign concepts, or UI variants, review `docs/visual-reference.md` and the screenshots in `docs/visual-reference/`.
 
-Mockups should stay close to the current app's design language unless the user explicitly asks for a larger redesign. Preserve the existing feel: off-white and pale green surfaces, deep green primary actions, compact admin density, restrained rounded controls, subtle borders, and muted operational status colors. The app also ships a dark theme (green-tinted dark surfaces, same accent hues); default mockups to the light theme unless the request is about dark mode.
+Mockups should stay close to the current app's design language unless the user explicitly asks for a larger redesign. Preserve the existing feel: off-white and pale green surfaces, deep green primary actions, compact admin density, restrained rounded controls, subtle borders, muted operational status colors, and the shared typography direction in `docs/typography.md`. The app also ships a dark theme (green-tinted dark surfaces, same accent hues); default mockups to the light theme unless the request is about dark mode.
+
+Typography changes should use the tokens in `src/styles/base.css` and follow `docs/typography.md`: Avenir/Helvetica-style sans, no screen-specific font families, no negative tracking, no viewport-scaled font sizes, and the shared `400`/`500`/`600`/`700` weight scale instead of numeric one-offs like `650`, `750`, or `800`.
 
 When the web app's visual design changes materially, update the visual-reference screenshots and `docs/visual-reference.md` in the same change or as soon as practical. This keeps future AI-generated mockups aligned with the real product instead of drifting into unrelated styles.
 

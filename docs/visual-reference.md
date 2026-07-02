@@ -10,7 +10,7 @@ The goal is not to copy every pixel. The goal is to keep new mockups aligned wit
 - rounded but restrained controls
 - left sidebar navigation on desktop
 - clean card/panel surfaces with subtle borders
-- Avenir/Helvetica-style typography
+- Avenir/Helvetica-style typography using the shared scale in `docs/typography.md`
 - booking/status color accents that stay muted and operational
 
 The mobile app view intentionally reads as a native app rather than a responsive web page (since v0.4.0):

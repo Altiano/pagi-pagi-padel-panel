@@ -16,7 +16,7 @@ This app provides the browser UI for managing Pagi Pagi Padel admin workflows. I
 - Settings diagnostics for the deployed frontend/backend version, commit, and build time.
 - Placeholder screens for Dashboard, Court Prices, Event, Coach, Add On, Customers, and Setting.
 
-For AI-agent onboarding, start with `AGENTS.md`, then read `docs/architecture.md`, `docs/api.md`, and `docs/visual-reference.md`.
+For AI-agent onboarding, start with `AGENTS.md`, then read `docs/architecture.md`, `docs/api.md`, `docs/visual-reference.md`, and `docs/typography.md`.
 
 ## Quick Start
 
@@ -133,6 +133,7 @@ src/
 docs/
   architecture.md Architecture and data-flow notes
   api.md          Backend endpoint assumptions
+  typography.md   Typography tokens, scale, weights, and usage rules
   visual-reference.md
                   Current screenshots and design-language guidance
   visual-reference/
@@ -151,6 +152,7 @@ the high-level orientation for human readers.
 - Use `pnpm lint` after moving imports or extracting modules. ESLint catches undefined free identifiers that `vite build` can miss.
 - Add focused `pnpm test` coverage when changing pure helpers in `src/lib/` or `src/calendar/forms.js`.
 - Before generating UI mockups or design variants, review `docs/visual-reference.md` and the screenshots in `docs/visual-reference/`.
+- Before changing app typography, use the tokens and rules in `docs/typography.md`; avoid ad hoc font sizes, in-between weights, negative tracking, or viewport-scaled type.
 - When the app's visual design changes materially, refresh the visual-reference screenshots so future mockups stay aligned with the real UI.
 - Keep backend response field names visible at the boundary. If fields need nicer frontend names, map them in one place instead of renaming them throughout the UI.
 - Use `pnpm dev:mock` for fast visual checks when live credentials or Worker data are unnecessary. Mock mode exercises the same frontend API functions and stores mutable preview data in `localStorage`.

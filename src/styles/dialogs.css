@@ -27,8 +27,8 @@
 
 .placeholder-editor h2 {
   margin: 0;
-  font-size: 28px;
-  letter-spacing: -0.03em;
+  font-size: var(--font-size-4xl);
+  letter-spacing: var(--letter-spacing-tight);
 }
 
 .conversion-editor {
@@ -63,14 +63,14 @@
 
 .slot-choice-dialog h2 {
   margin: 0;
-  font-size: 22px;
-  letter-spacing: -0.02em;
+  font-size: var(--font-size-xl);
+  letter-spacing: var(--letter-spacing-tight);
 }
 
 .slot-choice-context {
   margin: -6px 0 2px;
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--font-size-sm);
 }
 
 .slot-choice-options {
@@ -113,13 +113,13 @@
 }
 
 .slot-choice-option strong {
-  font-size: 15px;
-  letter-spacing: -0.01em;
+  font-size: var(--font-size-md);
+  letter-spacing: var(--letter-spacing-tight);
 }
 
 .slot-choice-option small {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--font-size-xs);
   line-height: 1.35;
 }
 
@@ -161,21 +161,21 @@
 
 .conversion-summary span {
   color: var(--green);
-  font-size: 12px;
-  font-weight: 750;
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-bold);
   text-transform: uppercase;
 }
 
 .conversion-summary strong {
   color: var(--ink);
-  font-size: 15px;
+  font-size: var(--font-size-md);
   line-height: 1.25;
 }
 
 .conversion-summary small {
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
 }
 
 .conversion-warning {
@@ -187,8 +187,8 @@
   padding: 11px 12px;
   background: light-dark(#fff7df, #41350f);
   color: light-dark(#805513, #ebbc75);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-bold);
 }
 
 .conversion-warning.danger {
@@ -210,22 +210,22 @@
 .price-check-card > span,
 .reschedule-slot-list > span {
   color: light-dark(#39433b, #b6c1b8);
-  font-size: 12px;
-  font-weight: 750;
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-bold);
   text-transform: uppercase;
 }
 
 .price-check-card strong {
   color: var(--ink);
-  font-size: 15px;
+  font-size: var(--font-size-md);
 }
 
 .price-check-card small,
 .reschedule-slot-list p {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
   line-height: 1.4;
 }
 
@@ -247,8 +247,8 @@
   background: var(--surface);
   color: light-dark(#526052, #99a899);
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 750;
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-bold);
 }
 
 .reschedule-slot-list button.selected {
@@ -269,8 +269,8 @@
 
 .conversion-mode-control > span {
   color: light-dark(#39433b, #b6c1b8);
-  font-size: 13px;
-  font-weight: 650;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
 }
 
 .conversion-mode-control > div {
@@ -286,7 +286,7 @@
   background: light-dark(#fbfcf8, #242520);
   color: light-dark(#526052, #99a899);
   cursor: pointer;
-  font-weight: 750;
+  font-weight: var(--font-weight-bold);
 }
 
 .conversion-mode-control button.selected {
@@ -347,7 +347,7 @@
   display: block;
   overflow: hidden;
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--font-size-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -357,7 +357,7 @@
   display: block;
   overflow: hidden;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-size-2xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -369,8 +369,8 @@
   background: light-dark(#edf4e5, #2a361d);
   color: var(--green);
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 750;
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-bold);
 }
 
 .player-results {
@@ -396,8 +396,8 @@
 .player-results > span {
   padding: 10px 11px;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
 }
 
 .player-results > span.error {
@@ -429,7 +429,7 @@
 .receipt-upload-control > span {
   overflow: hidden;
   color: light-dark(#526052, #99a899);
-  font-size: 12px;
+  font-size: var(--font-size-2xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -438,8 +438,8 @@
   display: grid;
   gap: 8px;
   color: light-dark(#39433b, #b6c1b8);
-  font-size: 13px;
-  font-weight: 650;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
 }
 
 .court-choice-grid {
@@ -459,7 +459,7 @@
   background: light-dark(#fbfcf8, #242520);
   color: light-dark(#526052, #99a899);
   cursor: pointer;
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
 }
 
 .court-choice.selected {
@@ -481,8 +481,8 @@
   padding: 14px;
   background: light-dark(#fbfcf8, #242520);
   color: light-dark(#39433b, #b6c1b8);
-  font-size: 13px;
-  font-weight: 650;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
 }
 
 .booking-calendar-heading {
@@ -497,14 +497,14 @@
   padding: 3px 10px;
   background: light-dark(#edf4e5, #2a361d);
   color: var(--green);
-  font-size: 12px;
+  font-size: var(--font-size-2xs);
 }
 
 .booking-calendar-hint {
   margin: -4px 0 0;
   color: light-dark(#6b776c, #849085);
-  font-size: 12px;
-  font-weight: 550;
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-medium);
 }
 
 .booking-calendar-nav {
@@ -516,7 +516,7 @@
 
 .booking-calendar-nav strong {
   color: var(--green);
-  font-size: 14px;
+  font-size: var(--font-size-sm);
 }
 
 .booking-calendar-nav button {
@@ -546,8 +546,8 @@
 .booking-calendar-dow {
   padding-bottom: 2px;
   color: light-dark(#97a298, #5e695f);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-bold);
   text-align: center;
   text-transform: uppercase;
 }
@@ -563,8 +563,8 @@
   background: light-dark(#fff, #212121);
   color: light-dark(#39433b, #b6c1b8);
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 650;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
 }
 
 .booking-calendar-day:hover {
@@ -608,7 +608,7 @@
   padding: 4px 6px 4px 11px;
   background: light-dark(#edf4e5, #2a361d);
   color: var(--green);
-  font-size: 12px;
+  font-size: var(--font-size-2xs);
 }
 
 .booking-calendar-chips button {
@@ -640,8 +640,8 @@
   background: transparent;
   color: var(--green);
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
 }
 
 .booking-date-advanced-toggle:hover {
@@ -656,8 +656,8 @@
   background: transparent;
   color: light-dark(#6b776c, #849085);
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
 }
 
 .booking-calendar-collapse:hover {
@@ -687,8 +687,8 @@
   display: grid;
   gap: 8px;
   color: light-dark(#39433b, #b6c1b8);
-  font-size: 13px;
-  font-weight: 650;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
 }
 
 .duration-options {
@@ -706,8 +706,8 @@
   background: light-dark(#fbfcf8, #242520);
   color: light-dark(#526052, #99a899);
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 750;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
   white-space: nowrap;
 }
 

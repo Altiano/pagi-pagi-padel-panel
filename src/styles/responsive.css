@@ -69,14 +69,14 @@
   }
 
   .week-mode .week-day-header strong {
-    font-size: 16px;
+    font-size: var(--font-size-base);
   }
 
   .week-mode .week-day-metrics,
   .week-mode .week-court p,
   .week-mode .week-court .week-booking-card strong,
   .week-mode .empty-slot {
-    font-size: 11px;
+    font-size: var(--font-size-2xs);
   }
 }
 
@@ -177,7 +177,7 @@
   .placeholder-editor input,
   .placeholder-editor select,
   .placeholder-editor textarea {
-    font-size: 16px;
+    font-size: var(--font-size-base);
   }
 
   .form-grid.two,
