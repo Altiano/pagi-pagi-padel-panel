@@ -287,12 +287,28 @@
   font-size: 1.0625rem;
 }
 
-/* Week strip: tappable day chips; swipe it sideways to change weeks. */
+/* Week strip: native horizontal scroll with page snapping. */
 .mobile-day-strip {
+  display: flex;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mobile-day-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.mobile-day-strip-page {
   display: grid;
+  flex: 0 0 100%;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 4px;
-  touch-action: pan-x;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
 }
 
 .mobile-day-strip button {

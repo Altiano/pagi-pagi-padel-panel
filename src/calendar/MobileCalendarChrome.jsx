@@ -2,13 +2,14 @@
 // header (month title, today pill, avatar) with the week day strip and court
 // filter chips, plus the bottom sheets it opens (month-grid date picker with
 // the day/week toggle, and the account sheet holding logout / desktop switch).
-import { useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight, LogOut, Monitor, RefreshCw } from 'lucide-react';
 import { useSheetDrag } from '../hooks.js';
 import {
   buildMonthMatrix,
   formatMonthLabel,
   formatWeekday,
+  shiftDate,
   shiftMonth,
   toDateInputValue,
 } from '../lib/datetime.js';
@@ -28,21 +29,51 @@ export function MobileCalendarHeader({
   view,
   weekDays,
 }) {
-  // Horizontal swipe on the day strip pages to the previous / next week, so
-  // the chevron buttons the desktop toolbar needs can stay hidden here.
-  const swipeRef = useRef({ startX: 0, startY: 0 });
+  const dayStripRef = useRef(null);
+  const dayStripScrollTimerRef = useRef(null);
+  const resettingDayStripRef = useRef(false);
   const today = toDateInputValue(new Date());
   const showTodayPill = view === 'day' ? selectedDate !== today : !weekDays.includes(today);
+  const visibleWeekStart = weekDays[0];
+  const weekPages = useMemo(() => [-1, 0, 1].map((weekOffset) => ({
+    days: weekDays.map((date) => shiftDate(date, weekOffset * 7)),
+    weekOffset,
+  })), [weekDays]);
 
-  function handleStripTouchStart(event) {
-    swipeRef.current = { startX: event.touches[0].clientX, startY: event.touches[0].clientY };
-  }
+  useLayoutEffect(() => {
+    const strip = dayStripRef.current;
+    if (!strip || view !== 'day') return;
 
-  function handleStripTouchEnd(event) {
-    const deltaX = event.changedTouches[0].clientX - swipeRef.current.startX;
-    const deltaY = event.changedTouches[0].clientY - swipeRef.current.startY;
-    if (Math.abs(deltaX) < 48 || Math.abs(deltaX) < Math.abs(deltaY) * 1.4) return;
-    onMoveWeek(deltaX < 0 ? 1 : -1);
+    resettingDayStripRef.current = true;
+    strip.scrollLeft = strip.clientWidth;
+    requestAnimationFrame(() => {
+      resettingDayStripRef.current = false;
+    });
+  }, [view, visibleWeekStart]);
+
+  useEffect(() => () => {
+    window.clearTimeout(dayStripScrollTimerRef.current);
+  }, []);
+
+  function handleDayStripScroll() {
+    if (resettingDayStripRef.current) return;
+
+    window.clearTimeout(dayStripScrollTimerRef.current);
+    dayStripScrollTimerRef.current = window.setTimeout(() => {
+      const strip = dayStripRef.current;
+      if (!strip) return;
+
+      const pageWidth = strip.clientWidth;
+      if (!pageWidth) return;
+
+      const offsetFromCurrentWeek = strip.scrollLeft - pageWidth;
+      if (Math.abs(offsetFromCurrentWeek) < pageWidth * 0.45) {
+        strip.scrollTo({ behavior: 'smooth', left: pageWidth });
+        return;
+      }
+
+      onMoveWeek(offsetFromCurrentWeek > 0 ? 1 : -1);
+    }, 120);
   }
 
   return (
@@ -69,23 +100,28 @@ export function MobileCalendarHeader({
 
       {view === 'day' ? (
         <div
-          aria-label="Days of this week"
+          aria-label="Scrollable days"
           className="mobile-day-strip"
-          onTouchEnd={handleStripTouchEnd}
-          onTouchStart={handleStripTouchStart}
+          onScroll={handleDayStripScroll}
+          ref={dayStripRef}
           role="group"
         >
-          {weekDays.map((date) => (
-            <button
-              aria-pressed={date === selectedDate}
-              className={`${date === selectedDate ? 'selected' : ''} ${date === today ? 'today' : ''}`}
-              key={date}
-              onClick={() => onSelectDate(date)}
-              type="button"
-            >
-              <span>{formatWeekday(date)}</span>
-              <strong>{Number(date.slice(8, 10))}</strong>
-            </button>
+          {weekPages.map(({ days, weekOffset }) => (
+            <div className="mobile-day-strip-page" key={weekOffset}>
+              {days.map((date) => (
+                <button
+                  aria-pressed={date === selectedDate}
+                  className={`${date === selectedDate ? 'selected' : ''} ${date === today ? 'today' : ''}`}
+                  key={date}
+                  onClick={() => onSelectDate(date)}
+                  tabIndex={weekOffset === 0 ? 0 : -1}
+                  type="button"
+                >
+                  <span>{formatWeekday(date)}</span>
+                  <strong>{Number(date.slice(8, 10))}</strong>
+                </button>
+              ))}
+            </div>
           ))}
         </div>
       ) : null}
